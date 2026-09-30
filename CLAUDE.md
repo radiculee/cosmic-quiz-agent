@@ -1,0 +1,101 @@
+# CLAUDE.md
+
+Persistent context for Claude Code. Read this, then `docs/DESIGN.md`, at the start of every session.
+
+---
+
+## What this project is
+
+**Cosmic Quiz Agent** (working name) by **Vedant Gaikwad**, a Dublin-based Data Analyst and Full-Stack
+Developer. An autonomous astronomy and space AI agent, surfaced as a Learn / Quiz web game.
+
+- **v1:** a Speedrun-style game with `[EASY|MEDIUM|HARD]`, `[LEARN|QUIZ]`, a topic input, `[Random topic]` and `[GO]`. LEARN gives a plain-language explanation with cited sources. QUIZ gives one 4-option MCQ; after it's answered, the game shows the explanation and cited sources.
+- **v2:** an astronomy newsletter (email via Resend, then WhatsApp) produced by the same agent.
+
+It is a standalone project with its own repo and domain, hosted on Vercel. It is **not** part of the
+portfolio repo (`c:\Users\vedan\Modernpersonalportfoliowebsite`), which is used only as a reference for
+patterns and design tokens. Recruiters will read this code, so code quality is part of the deliverable.
+
+The full decision record, repo layout, milestones and verification plan live in `docs/DESIGN.md`. Do not
+reopen a locked decision without flagging it to Vedant first.
+
+---
+
+## Architecture in one paragraph
+
+A daily **Curator** agent runs in GitHub Actions as a plain Python script (`python -m curator`). It scans
+free astronomy sources, researches topics, writes MCQs at three difficulties, verifies each against the
+sources it fetched, and publishes passing items to a Supabase Postgres question bank. The Vite + React UI on
+Vercel serves from that bank. A typed custom topic runs the same Python agent core on demand through a
+Vercel Python function (`api/research.py`), behind guardrails, with steps streamed to the UI.
+
+---
+
+## Stack
+
+- **Agent core:** Python, a hand-rolled tool-calling loop (about 150 lines) using the `openai` SDK pointed at OpenRouter, with Pydantic for every model output. No agent frameworks (no LangChain, LangGraph or PydanticAI).
+- **Models:** OpenRouter free-tier open-weights models. The model is config, never hard-coded in logic.
+- **Frontend:** Vite + React + TypeScript (strict) + Tailwind CSS, with pnpm.
+- **Serverless:** Vercel Hobby. Python functions for the agent, and TS or Python functions for reading the bank.
+- **Database:** Supabase free-tier Postgres.
+- **Scheduler:** a GitHub Actions cron plus `workflow_dispatch`.
+- **No Docker.** Vedant explicitly ruled it out.
+
+---
+
+## Hard rules
+
+1. **Zero running cost.** Every service stays on a free tier; the domain is the only paid item. Before adding any service, dependency or API, confirm it has a usable free tier and say so.
+2. **Citation rule.** A source may only be a URL actually fetched during that run. This is enforced in code (`agent/verify.py`), never trusted to the prompt. Drop any other URL.
+3. **Publish gate.**
+   - A separate verifier pass must quote a source passage that supports the correct answer and confirm each distractor is wrong.
+   - Pass: `published`. Borderline: `review`. Fail: discard and log.
+4. **Guardrails on on-demand runs:** an on-topic check, a per-IP limit (salted-hash IPs only, for GDPR), a global cap equal to the free quota, and fallback to the bank.
+5. **Secrets** live only in env vars (Vercel, GitHub Actions secrets, a local `.env` that is never committed). The Supabase service-role key never reaches the browser.
+
+---
+
+## Working protocol
+
+- **One milestone at a time** (see `docs/DESIGN.md`). Build, let Vedant verify, then move on.
+- **Milestone 1 is a spike:** prove the risky parts (Vercel Python streaming and max duration; free-model tool-calling reliability) before building on them.
+- **Explain before large changes.** If a change touches several modules or shared state, describe what and why first.
+- **Vedant often wants a plan-only session first.** Plan before big changes.
+
+---
+
+## Conventions (apply always)
+
+- **No emojis** anywhere in code, comments, commit messages or console output.
+- **Complete, production-ready files.** No placeholders or stripped-down versions.
+- **TypeScript strict,** with no `any` unless unavoidable and commented. **Python fully type-hinted,** with Pydantic models at every boundary.
+- **Commits:** small and focused with clear messages and honest `Co-Authored-By` trailers. Commit only when Vedant asks.
+- **Package managers:** always pnpm for Node (never npm or yarn). A Python virtualenv, with dependencies pinned in `requirements.txt` and kept light, because of the Vercel Python bundle size limit.
+
+---
+
+## Design tokens (shared with the portfolio)
+
+```
+--bg-void        #05050A   page background
+--surface        #0D1117   cards, panels
+--accent-teal    #4ECDC4   primary accent (replaces the lime in the Speedrun mock)
+--accent-rust    #C1440E   secondary accent
+--accent-gold    #F5E6C8   star highlights, sparing use
+--muted-lavender #7B6B8A   midtones
+--text-primary   #F0EDE8   near-white, warm
+--text-secondary #8B9BAA   slate grey body
+```
+
+Fonts (Google Fonts):
+- Headings: **Space Grotesk** Bold.
+- Body: **Inter** Regular / Medium.
+- Pixel accents ONLY: **Press Start 2P** at 8-11px, for segmented-control labels, tags and small labels. Never for body text or headings.
+
+Pixel accents are subtle texture: pixel-dashed borders (4px on / 4px off), 4x4px square bullets. No sprites or scanlines.
+
+---
+
+## Reference code (portfolio repo, copy patterns only)
+
+- `Modernpersonalportfoliowebsite/api/contact.ts`: Vercel function style (web-standard Request/Response), env-secret handling, the Resend REST call and the branded dark HTML email template. Reuse it for v2.
