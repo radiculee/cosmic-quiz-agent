@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Persistent context for Claude Code. Read this, then `docs/DESIGN.md`, at the start of every session.
+Persistent context for Claude Code. Read this, then `docs/DESIGN.md` and `docs/PLAN.md`, at the start of every session.
 
 ---
 
@@ -10,7 +10,7 @@ Persistent context for Claude Code. Read this, then `docs/DESIGN.md`, at the sta
 Developer. An autonomous astronomy and space AI agent, surfaced as a Learn / Quiz web game.
 
 - **v1:** a Speedrun-style game with `[EASY|MEDIUM|HARD]`, `[LEARN|QUIZ]`, a topic input, `[Random topic]` and `[GO]`. LEARN gives a plain-language explanation with cited sources. QUIZ gives one 4-option MCQ; after it's answered, the game shows the explanation and cited sources.
-- **v2:** an astronomy newsletter (email via Resend, then WhatsApp) produced by the same agent.
+- **v2:** an astronomy newsletter (email via Resend, then WhatsApp) produced by the same agent, and an analytics page of the agent's measured statistics by mode and difficulty.
 
 It is a standalone project with its own repo and domain, hosted on Vercel. It is **not** part of the
 portfolio repo (`c:\Users\vedan\Modernpersonalportfoliowebsite`), which is used only as a reference for
@@ -33,8 +33,10 @@ Vercel Python function (`api/research.py`), behind guardrails, with steps stream
 
 ## Stack
 
-- **Agent core:** Python, a hand-rolled tool-calling loop (about 150 lines) using the `openai` SDK pointed at OpenRouter, with Pydantic for every model output. No agent frameworks (no LangChain, LangGraph or PydanticAI).
-- **Models:** OpenRouter free-tier open-weights models. The model is config, never hard-coded in logic.
+- **Agent core:** Python, a hand-rolled tool-calling loop (about 150 lines) behind a small provider interface in `agent/llm.py`. The current implementation uses the `anthropic` SDK, with Pydantic for every model output. No agent frameworks (no LangChain, LangGraph or PydanticAI).
+- **Models:** `claude-haiku-4-5` for every step (research, writing, verifying). The model is config, never hard-coded in logic. An OpenRouter implementation can be added later behind the same interface. (Changed 2026-10-01, see `docs/PLAN.md`.)
+- **Second-opinion verifier:** TypeSafe Jev via `typesafe-sdk`. It answers typed questions with a confidence (supports / contradicts / says nothing) and never writes text. It cannot check numbers reliably, so numbers are checked in code. (Added 2026-10-01, see `docs/SPIKE.md`.)
+- **Python tooling:** Python 3.12 virtualenv, pip with a pinned `requirements.txt`, and `ruff` plus `mypy --strict` as dev-only tools.
 - **Frontend:** Vite + React + TypeScript (strict) + Tailwind CSS, with pnpm.
 - **Serverless:** Vercel Hobby. Python functions for the agent, and TS or Python functions for reading the bank.
 - **Database:** Supabase free-tier Postgres.
@@ -45,20 +47,20 @@ Vercel Python function (`api/research.py`), behind guardrails, with steps stream
 
 ## Hard rules
 
-1. **Zero running cost.** Every service stays on a free tier; the domain is the only paid item. Before adding any service, dependency or API, confirm it has a usable free tier and say so.
+1. **Capped running cost.** Anthropic API usage is capped at $10 a month by a Console spend limit. TypeSafe (Jev, the second-opinion verifier) runs on a prepaid balance (EUR 5 for evals at 2026-10-01) at $0.042 per million input tokens. Every other service stays on a free tier, and the domain is the only other paid item. Log tokens and cost for every model run. Before adding any service, dependency or API, state its free tier or price. (Changed 2026-10-01, see `docs/PLAN.md`.)
 2. **Citation rule.** A source may only be a URL actually fetched during that run. This is enforced in code (`agent/verify.py`), never trusted to the prompt. Drop any other URL.
 3. **Publish gate.**
    - A separate verifier pass must quote a source passage that supports the correct answer and confirm each distractor is wrong.
    - Pass: `published`. Borderline: `review`. Fail: discard and log.
-4. **Guardrails on on-demand runs:** an on-topic check, a per-IP limit (salted-hash IPs only, for GDPR), a global cap equal to the free quota, and fallback to the bank.
+4. **Guardrails on on-demand runs:** an on-topic check, a per-IP limit (salted-hash IPs only, for GDPR), a daily global cap in runs and dollars that stays under the $10 limit, and fallback to the bank.
 5. **Secrets** live only in env vars (Vercel, GitHub Actions secrets, a local `.env` that is never committed). The Supabase service-role key never reaches the browser.
 
 ---
 
 ## Working protocol
 
-- **One milestone at a time** (see `docs/DESIGN.md`). Build, let Vedant verify, then move on.
-- **Milestone 1 is a spike:** prove the risky parts (Vercel Python streaming and max duration; free-model tool-calling reliability) before building on them.
+- **One session at a time** (see `docs/PLAN.md`). Build, let Vedant verify, then move on.
+- **Build local first.** Session 1 is a spike that proves the search, fetch and cite loop on Haiku 4.5 and measures cost per run. Vercel and GitHub Actions come in Session 7.
 - **Explain before large changes.** If a change touches several modules or shared state, describe what and why first.
 - **Vedant often wants a plan-only session first.** Plan before big changes.
 

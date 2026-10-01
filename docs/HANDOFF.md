@@ -1,5 +1,9 @@
 # Handoff
 
+> **Superseded on 2026-10-01.** This was the starting point for the first session in this repo. The plan
+> has since changed (Claude Haiku 4.5 instead of OpenRouter, local first, TypeSafe Jev as a second-opinion
+> verifier). The current plan is `docs/PLAN.md`; Session 1 results are in `docs/SPIKE.md`. Kept for the record.
+
 Session moved here from the portfolio repo on 2026-10-01.
 
 ## Where things stand
