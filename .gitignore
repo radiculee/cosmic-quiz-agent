@@ -31,3 +31,6 @@ Thumbs.db
 
 # Eval outputs
 evals/results/
+
+# Agent run logs (local spike and CLI output)
+runs/
