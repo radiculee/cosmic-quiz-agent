@@ -36,6 +36,10 @@ PRICES: dict[str, ModelPrice] = {
 DEFAULT_MODEL = "claude-haiku-4-5"
 
 
+def _default_path_prefixes() -> dict[str, tuple[str, ...]]:
+    return {"arxiv.org": ("/abs/",)}
+
+
 class Settings(BaseModel):
     """Configuration for one agent run."""
 
@@ -51,8 +55,35 @@ class Settings(BaseModel):
 
     # Tool behaviour.
     max_page_chars: int = Field(default=12_000, gt=0)  # about 3,000 tokens
-    allowed_domains: tuple[str, ...] = ("wikipedia.org", "nasa.gov", "esa.int")
+    # Domains fetch_page may read (subdomains included), approved in Session 2.
+    allowed_domains: tuple[str, ...] = (
+        # Encyclopedia
+        "wikipedia.org",
+        # Space agencies and telescope institutes
+        "nasa.gov",
+        "esa.int",
+        "esahubble.org",
+        "esawebb.org",
+        "stsci.edu",
+        "webbtelescope.org",
+        "hubblesite.org",
+        # Research and observatories
+        "arxiv.org",
+        "eso.org",
+        "noirlab.edu",
+        "iau.org",
+        # Popular science (lowest preference in the prompt)
+        "space.com",
+        "skyandtelescope.org",
+        # britannica.com was removed in Session 2: it returns HTTP 403 to the agent.
+    )
+    # Domains where only some paths may be read: arXiv abstract pages, never PDFs or listings.
+    allowed_path_prefixes: dict[str, tuple[str, ...]] = Field(
+        default_factory=_default_path_prefixes
+    )
     http_timeout_seconds: float = Field(default=15.0, gt=0)
+    http_retries: int = Field(default=2, ge=0)
+    http_retry_backoff_seconds: float = Field(default=1.0, ge=0)
     user_agent: str = "CosmicQuizAgent/0.1 (+https://github.com/radiculee/cosmic-quiz-agent)"
 
     runs_dir: str = "runs"

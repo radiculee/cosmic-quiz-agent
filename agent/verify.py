@@ -10,25 +10,9 @@ import re
 from collections.abc import Mapping
 from urllib.parse import unquote, urlsplit, urlunsplit
 
-from pydantic import BaseModel, ConfigDict
-
-from agent.schemas import Citation
+from agent.schemas import Citation, CitationCheck
 
 _WHITESPACE = re.compile(r"\s+")
-
-
-class CitationCheck(BaseModel):
-    """Which citations survived the fetched-URL rule, and how many quotes appear verbatim."""
-
-    model_config = ConfigDict(frozen=True)
-
-    kept: tuple[Citation, ...]
-    dropped: tuple[Citation, ...]
-    quotes_found: int
-
-    @property
-    def passed(self) -> bool:
-        return len(self.kept) > 0
 
 
 def normalize_url(url: str) -> str:

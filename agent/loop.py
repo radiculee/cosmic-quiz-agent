@@ -9,9 +9,10 @@ from __future__ import annotations
 import json
 import time
 from collections.abc import Callable
-from typing import Literal
+from contextlib import ExitStack
 
-from pydantic import BaseModel, ConfigDict, ValidationError
+import httpx2
+from pydantic import ValidationError
 
 from agent.config import Settings
 from agent.llm import (
@@ -24,8 +25,14 @@ from agent.llm import (
     Usage,
     UserMessage,
 )
-from agent.prompts.learn import NUDGE, SYSTEM_PROMPT, user_prompt
-from agent.schemas import Difficulty, Explanation
+from agent.prompts.learn import (
+    NUDGE,
+    SYSTEM_PROMPT,
+    WORD_LIMITS,
+    length_correction,
+    user_prompt,
+)
+from agent.schemas import CitationCheck, Difficulty, Explanation, Outcome, RunResult, Step
 from agent.tools import (
     RESEARCH_TOOLS,
     SUBMIT_ANSWER,
@@ -34,49 +41,19 @@ from agent.tools import (
     ToolError,
     make_http_client,
 )
-from agent.verify import CitationCheck, check_citations
-
-Outcome = Literal[
-    "passed",  # answer submitted and at least one citation was fetched in this run
-    "failed_citations",  # answer submitted but every citation was dropped
-    "no_answer",  # the model kept replying without calling submit_answer
-    "budget_exceeded",  # step, time or token budget ran out
-    "llm_error",  # a model call failed after retries
-]
+from agent.verify import check_citations
 
 MAX_NUDGES = 2
+# One chance to fix the length; after that a good answer is accepted with a note rather than lost.
+MAX_LENGTH_CORRECTIONS = 1
+LENGTH_TOLERANCE = 0.1
 _MAX_ARGUMENT_PREVIEW = 80
 
 
-class Step(BaseModel):
-    """One entry in the run log: a model call or a tool call."""
-
-    model_config = ConfigDict(frozen=True)
-
-    index: int
-    kind: Literal["model", "tool"]
-    summary: str
-    seconds: float
-    usage: Usage | None = None
-    is_error: bool = False
-
-
-class RunResult(BaseModel):
-    model_config = ConfigDict(frozen=True)
-
-    topic: str
-    difficulty: Difficulty
-    model: str
-    outcome: Outcome
-    detail: str = ""
-    answer: Explanation | None = None
-    citation_check: CitationCheck | None = None
-    fetched_urls: tuple[str, ...] = ()
-    steps: tuple[Step, ...] = ()
-    model_calls: int = 0
-    usage: Usage = Usage()
-    cost_usd: float = 0.0
-    seconds: float = 0.0
+def length_ok(words: int, difficulty: Difficulty) -> bool:
+    """Within the difficulty's word range, give or take 10%."""
+    low, high = WORD_LIMITS[difficulty]
+    return low * (1 - LENGTH_TOLERANCE) <= words <= high * (1 + LENGTH_TOLERANCE)
 
 
 StepCallback = Callable[[Step], None]
@@ -124,15 +101,22 @@ def run_learn(
     llm: LLMProvider,
     settings: Settings,
     on_step: StepCallback | None = None,
+    http_client: httpx2.Client | None = None,
 ) -> RunResult:
-    """Research a topic and return a LEARN explanation, with the full run log and its cost."""
+    """Research a topic and return a LEARN explanation, with the full run log and its cost.
+
+    Tools share one HTTP client per run. Pass `http_client` to supply your own (the caller then
+    owns closing it); otherwise one is created and closed here.
+    """
     run = _Run(settings, on_step)
     tools = {tool.spec.name: tool for tool in RESEARCH_TOOLS}
     tool_specs = [tool.spec for tool in RESEARCH_TOOLS] + [SUBMIT_ANSWER]
     messages: list[Message] = [UserMessage(text=user_prompt(topic, difficulty))]
     nudges = 0
+    length_corrections = 0
 
-    with make_http_client(settings) as http:
+    with ExitStack() as stack:
+        http = http_client or stack.enter_context(make_http_client(settings))
         ctx = ToolContext(settings=settings, http=http)
 
         def finish(
@@ -142,6 +126,7 @@ def run_learn(
             check: CitationCheck | None = None,
         ) -> RunResult:
             return RunResult(
+                mode="learn",
                 topic=topic,
                 difficulty=difficulty,
                 model=llm.model,
@@ -194,9 +179,20 @@ def run_learn(
 
             results: list[ToolResult] = []
             answer: Explanation | None = None
+            length_note = ""
             for call in calls:
                 if call.name == SUBMIT_ANSWER.name:
                     result, answer = _accept_answer(call)
+                    if answer is not None:
+                        words = len(answer.explanation.split())
+                        if not length_ok(words, difficulty):
+                            if length_corrections < MAX_LENGTH_CORRECTIONS:
+                                length_corrections += 1
+                                message = length_correction(words, difficulty)
+                                result = ToolResult(call_id=call.id, content=message, is_error=True)
+                                answer = None
+                            else:
+                                length_note = f"explanation is {words} words, outside the range"
                 else:
                     result = _run_tool(call, tools, ctx, run)
                 results.append(result)
@@ -209,7 +205,7 @@ def run_learn(
                         "failed_citations", "no cited URL was fetched in this run", answer, check
                     )
                 kept = Explanation(explanation=answer.explanation, citations=check.kept)
-                return finish("passed", answer=kept, check=check)
+                return finish("passed", length_note, answer=kept, check=check)
 
 
 def _accept_answer(call: ToolCall) -> tuple[ToolResult, Explanation | None]:
@@ -240,6 +236,7 @@ def _run_tool(call: ToolCall, tools: dict[str, Tool], ctx: ToolContext, run: _Ru
             kind="tool",
             summary=f"{call.name}({_preview(call.arguments)}) -> {status}",
             seconds=round(time.monotonic() - started, 2),
+            tool=call.name,
             is_error=is_error,
         )
     )

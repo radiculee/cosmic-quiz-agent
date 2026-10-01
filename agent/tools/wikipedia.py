@@ -7,11 +7,10 @@ import re
 from typing import Any
 from urllib.parse import quote, unquote, urlsplit
 
-import httpx2
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from agent.llm import JsonObject, ToolSpec
-from agent.tools.base import Tool, ToolContext, ToolError
+from agent.tools.base import Tool, ToolContext, ToolError, http_get
 
 SEARCH_HOST = "en.wikipedia.org"
 MAX_RESULTS = 5
@@ -33,12 +32,9 @@ class _SearchArgs(BaseModel):
 
 def _api_get(ctx: ToolContext, host: str, params: dict[str, str]) -> dict[str, Any]:
     url = f"https://{host}/w/api.php"
+    response = http_get(ctx, url, {**params, "format": "json", "formatversion": "2"})
     try:
-        response = ctx.http.get(url, params={**params, "format": "json", "formatversion": "2"})
-        response.raise_for_status()
         data = response.json()
-    except httpx2.HTTPError as error:
-        raise ToolError(f"Wikipedia request failed: {error}") from error
     except ValueError as error:
         raise ToolError("Wikipedia returned a response that was not JSON.") from error
     if not isinstance(data, dict):

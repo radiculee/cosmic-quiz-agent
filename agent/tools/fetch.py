@@ -1,8 +1,8 @@
 """fetch_page: read a page from an allow-listed domain as plain text.
 
-Every successful fetch is recorded in the run context, which is what makes a URL citable.
-Wikipedia articles go through the MediaWiki API for clean text; other pages are fetched as HTML
-and reduced to their headings, paragraphs and list items.
+Every successful read is recorded in the run context, which is what makes a URL citable.
+Wikipedia articles and arXiv abstracts come from their APIs as clean text; other pages are fetched
+as HTML and reduced to their headings, paragraphs and list items.
 """
 
 from __future__ import annotations
@@ -13,10 +13,11 @@ import httpx2
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from agent.llm import JsonObject, ToolSpec
-from agent.tools.base import Tool, ToolContext, ToolError
+from agent.tools.arxiv import fetch_abstract, parse_abs_url
+from agent.tools.base import Tool, ToolContext, ToolError, http_get
 from agent.tools.wikipedia import fetch_article, parse_article_url
 
-_MAX_HTML_BYTES = 2_000_000
+_MAX_HTML_CHARS = 2_000_000
 
 
 class _FetchArgs(BaseModel):
@@ -87,14 +88,20 @@ class _TextExtractor(HTMLParser):
             self._current.append(data)
 
 
-def _fetch_html(url: str, ctx: ToolContext) -> tuple[str, str, str]:
-    """Fetch an HTML page. Returns (final_url, title, text)."""
-    try:
-        response = ctx.http.get(url)
-        response.raise_for_status()
-    except httpx2.HTTPError as error:
-        raise ToolError(f"Could not fetch {url}: {error}") from error
+def extract_text(html: str) -> tuple[str, str]:
+    """Return (title, text) from an HTML document."""
+    extractor = _TextExtractor()
+    extractor.feed(html[:_MAX_HTML_CHARS])
+    return " ".join(extractor.title.split()), "\n\n".join(extractor.blocks)
 
+
+def fetch_html(url: str, ctx: ToolContext) -> tuple[str, str, str]:
+    """Fetch an HTML page. Returns (final_url, title, text)."""
+    return html_page(url, http_get(ctx, url), ctx)
+
+
+def html_page(url: str, response: httpx2.Response, ctx: ToolContext) -> tuple[str, str, str]:
+    """Check a fetched response is an allowed HTML page and extract it: (final_url, title, text)."""
     final_url = str(response.url)
     if not ctx.is_allowed(final_url):
         raise ToolError(f"{url} redirected to {final_url}, which is not on the allow-list.")
@@ -102,12 +109,45 @@ def _fetch_html(url: str, ctx: ToolContext) -> tuple[str, str, str]:
     if "html" not in content_type:
         raise ToolError(f"{url} is not an HTML page (content type {content_type!r}).")
 
-    extractor = _TextExtractor()
-    extractor.feed(response.text[:_MAX_HTML_BYTES])
-    text = "\n\n".join(extractor.blocks)
+    title, text = extract_text(response.text)
     if not text:
         raise ToolError(f"No readable text found at {url}.")
-    return final_url, " ".join(extractor.title.split()), text
+    return final_url, title, text
+
+
+def read_page(url: str, ctx: ToolContext) -> str:
+    """Read an allow-listed page, record it as fetched, and format it for the model."""
+    url = url.strip()
+    if not ctx.is_allowed(url):
+        allowed = ", ".join(ctx.settings.allowed_domains)
+        raise ToolError(
+            f"{url} is not allowed. Only https pages on these domains: {allowed} "
+            "(arXiv abstract pages only)."
+        )
+
+    article = parse_article_url(url)
+    arxiv_id = parse_abs_url(url)
+    if article is not None:
+        final_url, title, text = fetch_article(*article, ctx)
+    elif arxiv_id is not None:
+        final_url, title, text = fetch_abstract(arxiv_id, ctx)
+    else:
+        final_url, title, text = fetch_html(url, ctx)
+    return record_and_format(ctx, url, final_url, title, text)
+
+
+def record_and_format(
+    ctx: ToolContext, requested_url: str, final_url: str, title: str, text: str
+) -> str:
+    """Trim a page to the size limit, record it as fetched, and format it for the model."""
+    limit = ctx.settings.max_page_chars
+    truncated = len(text) > limit
+    text = text[:limit]
+    # Record exactly the text the model sees, under both the requested and the final URL.
+    ctx.record_fetch(text, requested_url, final_url)
+
+    note = "\n\n[Page truncated.]" if truncated else ""
+    return f"URL: {final_url}\nTitle: {title}\n\n{text}{note}"
 
 
 def fetch_page(arguments: JsonObject, ctx: ToolContext) -> str:
@@ -115,35 +155,18 @@ def fetch_page(arguments: JsonObject, ctx: ToolContext) -> str:
         args = _FetchArgs.model_validate(arguments)
     except ValidationError as error:
         raise ToolError(f"Invalid arguments: {error}") from error
-
-    url = args.url.strip()
-    if not ctx.is_allowed(url):
-        allowed = ", ".join(ctx.settings.allowed_domains)
-        raise ToolError(f"{url} is not allowed. Only https pages on these domains: {allowed}.")
-
-    article = parse_article_url(url)
-    if article is not None:
-        final_url, title, text = fetch_article(*article, ctx)
-    else:
-        final_url, title, text = _fetch_html(url, ctx)
-
-    limit = ctx.settings.max_page_chars
-    truncated = len(text) > limit
-    text = text[:limit]
-    # Record exactly the text the model sees, under both the requested and the final URL.
-    ctx.record_fetch(text, url, final_url)
-
-    note = "\n\n[Page truncated.]" if truncated else ""
-    return f"URL: {final_url}\nTitle: {title}\n\n{text}{note}"
+    return read_page(args.url, ctx)
 
 
 FETCH_PAGE = Tool(
     spec=ToolSpec(
         name="fetch_page",
         description=(
-            "Read a web page as plain text. Only https pages on allow-listed domains work "
-            "(Wikipedia, NASA, ESA). Only pages read with this tool can be cited; cite the URL "
-            "shown on the 'URL:' line of the result."
+            "Read a web page as plain text. Only https pages on allow-listed domains work: "
+            "Wikipedia; NASA, ESA, STScI, Webb and Hubble sites; ESO, NOIRLab and the IAU; "
+            "arXiv abstract pages (arxiv.org/abs/...); Space.com and Sky & Telescope. "
+            "Only pages read with this tool can be cited; cite the URL shown on "
+            "the 'URL:' line of the result."
         ),
         input_schema={
             "type": "object",

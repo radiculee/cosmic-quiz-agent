@@ -3,18 +3,29 @@
 from __future__ import annotations
 
 from agent.llm import ToolSpec
+from agent.tools.arxiv import SEARCH_ARXIV
 from agent.tools.base import Tool, ToolContext, ToolError, make_http_client
+from agent.tools.feeds import FETCH_FEED
 from agent.tools.fetch import FETCH_PAGE
+from agent.tools.nasa import NASA_APOD, SEARCH_NASA_IMAGES
 from agent.tools.wikipedia import SEARCH_WIKIPEDIA
 
-RESEARCH_TOOLS: tuple[Tool, ...] = (SEARCH_WIKIPEDIA, FETCH_PAGE)
+# Order is part of the cached prompt prefix: keep it stable.
+RESEARCH_TOOLS: tuple[Tool, ...] = (
+    SEARCH_WIKIPEDIA,
+    SEARCH_ARXIV,
+    FETCH_FEED,
+    NASA_APOD,
+    SEARCH_NASA_IMAGES,
+    FETCH_PAGE,
+)
 
 # Handled by the loop itself: the arguments are the final answer, validated with Pydantic.
 SUBMIT_ANSWER = ToolSpec(
     name="submit_answer",
     description=(
         "Submit the final explanation with its citations. Call this exactly once, after "
-        "reading the pages you cite with fetch_page. Calling it ends the run."
+        "reading the pages you cite. Calling it ends the run."
     ),
     input_schema={
         "type": "object",
@@ -31,7 +42,7 @@ SUBMIT_ANSWER = ToolSpec(
                     "properties": {
                         "url": {
                             "type": "string",
-                            "description": "URL from the 'URL:' line of a fetch_page result.",
+                            "description": "URL from the 'URL:' line of a page you read.",
                         },
                         "quote": {
                             "type": "string",

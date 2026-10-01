@@ -17,8 +17,8 @@ from typing import get_args
 
 from agent.config import load_settings
 from agent.llm import AnthropicProvider
-from agent.loop import RunResult, Step, run_learn
-from agent.schemas import Difficulty
+from agent.loop import run_learn
+from agent.schemas import Difficulty, RunResult, Step
 
 
 def _print_step(step: Step) -> None:
