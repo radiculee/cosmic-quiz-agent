@@ -31,14 +31,17 @@ runs on a schedule with no human trigger), and code that reads well to recruiter
    - The only costs are the domain, the Anthropic API (capped at $10 a month) and TypeSafe Jev (prepaid balance, EUR 5 at 2026-10-01; $0.042 per million input tokens, output free).
 9. **On-demand guardrails:**
    - A cheap on-topic check. Candidate: a Jev yes/no question (about 0.2 s and a fraction of a cent per check), compared with a keyword filter in Session 6.
-   - A per-IP limit of about 5 runs a day (IP stored as a salted hash, for GDPR).
+   - Per-user limits, where a user is a salted hash of the IP address (never the raw IP, for GDPR). Decided 2026-10-01:
+     - 10 custom-topic agent runs a day per user (about $0.20 at most), resetting at midnight UTC. Bank questions do not count.
+     - 60 API requests an hour per user, across all endpoints (bank questions, reports, stats), against scraping and runaway scripts.
+     - Over a limit, custom topics fall back to the bank and other requests get HTTP 429 with a retry time.
    - A daily global cap in runs and dollars that stays under the $10 limit. When it's exhausted, serve from the bank.
    - Verified results are cached into the bank.
    - The UI streams live agent steps.
-10. **Evidence tools:**
-    - `search_wikipedia`, `search_arxiv` (astro-ph), `nasa_image_library` / APOD (free NASA key), and `fetch_feed` (NASA, ESA, JWST, Hubble RSS).
-    - `fetch_page`, limited to an allow-list of domains.
-    - A free-tier `web_search` fallback. The agent stops using it when the monthly cap is hit.
+10. **Evidence tools** (built in Session 2):
+    - `search_wikipedia`, `search_arxiv` (astro-ph), `search_nasa_images` (NASA Image Library), `nasa_apod` (read from the APOD pages, since the APOD API now returns placeholders), and `fetch_feed` (NASA news, NASA Science, ESA Space Science, ESA/Webb, ESA/Hubble). None needs a key.
+    - `fetch_page`, limited to an allow-list: Wikipedia; NASA, ESA, STScI, Webb and Hubble sites; arXiv (abstract pages only), ESO, NOIRLab, the IAU; and popular science sites (Space.com, Sky & Telescope) at the lowest preference. Britannica was removed in Session 2 because it blocks the agent (HTTP 403).
+    - No web search fallback for now (decided 2026-10-01). Revisit if the Session 3 evals show topics failing for lack of sources; Tavily's free tier (1,000 searches a month) is the first option then.
 11. **Stack:**
     - A Python agent core package, shared by `curator` (run with `python -m curator` in Actions) and `api/research.py` (Vercel Python function).
     - Vite + React + TypeScript + Tailwind UI, with pnpm.
@@ -63,14 +66,14 @@ runs on a schedule with no human trigger), and code that reads well to recruiter
 - **Player state:** no accounts. Streak and score are kept in `localStorage`.
 - **Model selection:** a small eval set (about 20 fixed topics) scored on tool-call success, citation pass rate and verifier agreement. It scores the configured model and runs again whenever a model is swapped.
 - **Verifier evaluation:** the eval also includes a seeded-error set: generated items with planted faults (a wrong number, an unsupported claim, a quote that is not on the page, a distractor that is actually true). Each layer's catch rate and false-reject rate is measured on it, together with Haiku/Jev agreement and whether Jev's confidence is calibrated (do 0.9-confidence verdicts turn out right about 90% of the time).
-- **Secrets:** `ANTHROPIC_API_KEY`, `TYPESAFE_API_KEY`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` (Actions and server only), `SUPABASE_ANON_KEY` (read-only, row-level security), `NASA_API_KEY`, `SEARCH_API_KEY`, `IP_HASH_SALT`.
+- **Secrets:** `ANTHROPIC_API_KEY`, `TYPESAFE_API_KEY`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` (Actions and server only), `SUPABASE_ANON_KEY` (read-only, row-level security), `IP_HASH_SALT`. `NASA_API_KEY` is kept in `.env` but unused while APOD is read from its pages; `SEARCH_API_KEY` only if a web search fallback is added.
 
 ## Proposed repo layout (new repo; name and domain are Vedant's choice)
 ```
 agent/                 Python package (shared core)
   llm.py               provider interface + Anthropic implementation, model config
   loop.py              tool-calling loop with step budget
-  tools/               wikipedia.py arxiv.py nasa.py feeds.py fetch.py search.py
+  tools/               wikipedia.py arxiv.py nasa.py feeds.py fetch.py base.py (shared HTTP + retries)
   schemas.py           Pydantic: QuizItem, Explanation, Citation, Run
   verify.py            layer 1 code checks: fetched URLs, verbatim quotes, numbers
   verifiers/           Verifier interface: haiku.py (layer 2), jev.py (layer 3)
@@ -117,5 +120,5 @@ Vedant then opens the folder in a new VS Code window and continues from `docs/HA
 - **Verifiers:** on the seeded-error set, report each layer's catch rate and false-reject rate, Haiku/Jev agreement and Jev's calibration. Targets are agreed with Vedant in Session 3; the combined gate must catch every planted wrong number and non-verbatim quote.
 - **Curator:** trigger the workflow manually (`workflow_dispatch`), confirm new `published` rows in Supabase and a `runs` row with step logs, and confirm that failed or borderline items land in the right status.
 - **UI:** run `pnpm dev` locally. Play each mode and difficulty, check that sources open and appear in that item's fetched set, and that Report hides an item after 2 reports.
-- **On-demand:** run a valid topic (steps stream, result is cached, the second request is instant), an off-topic query (rejected), and a 6th request from the same IP (falls back to the bank).
+- **On-demand:** run a valid topic (steps stream, result is cached, the second request is instant), an off-topic query (rejected), an 11th custom topic in a day from the same user (falls back to the bank), and a 61st request in an hour (HTTP 429).
 - **Cost check:** confirm Anthropic Console spend stays under $10 a month, the TypeSafe balance matches the Jev usage logged per run, and every other service is on a free tier.

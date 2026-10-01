@@ -82,7 +82,9 @@ Claude Code:
 Vedant:
 - [ ] Review this plan and correct anything that's wrong.
 - [x] Create an Anthropic Console account and an API key (in `.env`, working since Session 1).
-- [ ] Confirm the **$10 monthly spend limit** is set on the workspace.
+- [x] Confirm the **$10 monthly spend limit** is set on the workspace. Done 2026-10-01: dedicated
+      `cosmic-quiz-agent` workspace with a $10 limit and a new `local-dev` key; the old Default-workspace
+      key was revoked. New key verified with one run ("The Moon", easy, passed, $0.0121).
 - [x] Decide whether to make the first commit (CLAUDE.md, docs, .gitignore) now. Done: private repo
       `radiculee/cosmic-quiz-agent` created and `main` pushed on 2026-10-01.
 
@@ -137,14 +139,30 @@ Vedant prepares:
 - A NASA API key from api.nasa.gov, added to `.env`.
 
 Claude Code:
-- [ ] Tools: `wikipedia.py`, `arxiv.py` (astro-ph), `nasa.py` (APOD and image library), `feeds.py` (NASA, ESA,
-      JWST, Hubble RSS), `fetch.py` (allow-listed, text-extracted, size-capped).
-- [ ] `schemas.py`: `Citation`, `Explanation`, `QuizItem`, `Run`.
-- [ ] Loop hardening: tool errors returned to the model, retries on 429/5xx, token budget per run.
-- [ ] CLI: `python -m agent learn "<topic>" --difficulty easy|medium|hard`.
-- [ ] Unit tests for the citation check and the tools (network mocked).
+- [x] Tools: `wikipedia.py`, `arxiv.py` (astro-ph), `nasa.py` (APOD and image library), `feeds.py` (NASA, ESA,
+      JWST, Hubble RSS), `fetch.py` (allow-listed, text-extracted, size-capped). Notes: the APOD API now
+      returns placeholders, so APOD is read from its pages (today and older dates work; recent past dates
+      cannot be looked up); webbtelescope.org and hubblesite.org no longer have feeds, so Webb and Hubble news
+      comes from esawebb.org, esahubble.org and science.nasa.gov; science.nasa.gov's feed has an XML bug that
+      is repaired before parsing; britannica.com returns 403 to the agent, so Vedant removed it from the allow-list. No NASA key is needed for now.
+- [x] `schemas.py`: `Citation`, `Explanation`, `QuizItem`, plus `Step`, `RunResult` and `CitationCheck`
+      (moved from `loop.py`). The stored `Run` row is designed with the Supabase schema in Session 4.
+- [x] Loop hardening: tool errors returned to the model, retries on 429/5xx and network errors (shared
+      `http_get`), token budget per run. Added: the word range is checked in code, with one correction.
+- [x] CLI: `python -m agent learn "<topic>" --difficulty easy|medium|hard` (built in Session 1).
+- [x] Unit tests for the citation check and the tools (network mocked): 77 tests with `pytest`, plus loop
+      tests with a scripted fake model. No test touches the network or a paid API.
+
+Decided 2026-10-01: allow-list = core agencies, research and observatories, and popular science sites
+(lowest preference in the prompt); no web search fallback for now (revisit with Session 3 eval data);
+LEARN length by difficulty (EASY 80-120, MEDIUM 120-180, HARD 160-220 words).
 
 Gate (Vedant): runs LEARN on 3 topics of his choice and judges whether the explanations and sources are good.
+- [x] Passed 2026-10-01. Vedant ran "Black holes" (hard: passed, 221 words, 5 of 5 quotes verbatim, used
+      search_arxiv and fetch_feed, $0.0165) and "Quasar" (easy: passed, 116 words, 4 of 6 quotes verbatim,
+      $0.0154) and approved the results. Britannica removed from the allow-list after it returned HTTP 403.
+      Re-verified: ruff and mypy --strict clean, 77 tests pass, 14 of 15 live tool checks pass (the 15th is
+      Britannica, now correctly rejected).
 
 ---
 
@@ -246,7 +264,8 @@ Gate (Vedant): plays every mode and difficulty with `pnpm dev`, checks that sour
 **Goal:** a typed topic runs the agent live, with guardrails and streamed steps.
 
 Decisions to ask:
-- Per-IP daily limit and the global daily cap, in runs and in dollars.
+- The global daily cap, in runs and in dollars. (Per-user limits were decided on 2026-10-01: 10 custom-topic
+  runs a day and 60 API requests an hour per salted-hash user; no global hourly cap.)
 - What the UI shows while steps stream, and what it shows when a run is rejected or capped.
 
 Claude Code:
@@ -254,11 +273,14 @@ Claude Code:
       about 0.2 s and $0.00002 per check, measured against a keyword filter on a small set of on- and
       off-topic inputs. The input is user-controlled, so it goes into Jev's state as data, never into the
       question's instructions.
-- [ ] Per-IP limit with salted-hash IPs, global cap, fallback to the bank.
+- [ ] Per-user limits (salted-hash IPs): 10 custom-topic runs a day and 60 requests an hour; global daily
+      cap; over a limit, custom topics fall back to the bank and other requests get HTTP 429. Counters live
+      in the Supabase `rate_limits` table so they hold across serverless instances.
 - [ ] Streamed agent steps to the UI, including each Jev claim check and its confidence as it completes;
       verified results cached into the bank.
 
-Gate (Vedant): valid topic streams and caches; off-topic is rejected; the limit falls back to the bank.
+Gate (Vedant): valid topic streams and caches; off-topic is rejected; an 11th custom topic in a day falls
+back to the bank; a 61st request in an hour gets HTTP 429.
 
 ---
 
@@ -362,3 +384,9 @@ unsubscribe, then WhatsApp.
   the publish gate is three layers (code checks, Haiku, Jev); Jev's confidence is stored per claim and
   shown in the UI; the Session 3 evals measure each layer on a seeded-error set; Jev is the candidate for
   the Session 6 on-topic check.
+- 2026-10-01 - Session 2: decisions recorded (allow-list, no web search, length by difficulty). Added
+  search_arxiv, fetch_feed, nasa_apod and search_nasa_images; a shared HTTP helper with retries; QuizItem
+  and the run models in schemas.py; a code-enforced word range; 77 unit tests (pytest, no network). Three
+  verification runs passed using the new tools (arXiv abstract, ESA/Webb and NASA feeds, NASA images),
+  11 of 12 quotes verbatim, $0.070 including one re-run. Next: Vedant's gate (LEARN on 3 topics of his
+  choice), then Session 3.
