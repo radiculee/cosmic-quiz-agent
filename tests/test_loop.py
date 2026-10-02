@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import random
 from typing import Any
 
 import httpx2
@@ -7,7 +8,8 @@ import pytest
 
 from agent.config import Settings
 from agent.llm import LLMError, ToolResultsMessage
-from agent.loop import MAX_NUDGES, length_ok, run_learn
+from agent.loop import MAX_NUDGES, length_ok, run_learn, run_quiz, shuffle_options
+from agent.schemas import QuizItem
 from tests.conftest import FakeLLM, FakeWeb, completion
 from tests.test_tools import WIKI_API, wiki_extract
 
@@ -41,7 +43,8 @@ def test_passing_run(settings: Settings, http: httpx2.Client) -> None:
 
     assert result.outcome == "passed"
     assert result.answer is not None and result.answer.citations[0].url == ARTICLE
-    assert result.citation_check is not None and result.citation_check.quotes_found == 1
+    assert result.code_check is not None and result.code_check.passed
+    assert QUOTE in result.cited_pages[ARTICLE]
     assert steps == ["model", "tool", "model"]
     assert result.model_calls == 2
     # Two calls of 100 input and 10 output tokens at $1 and $5 per million.
@@ -52,13 +55,65 @@ def test_passing_run(settings: Settings, http: httpx2.Client) -> None:
     assert QUOTE in tool_results.results[0].content
 
 
-def test_citations_to_unfetched_pages_fail_the_run(settings: Settings, http: httpx2.Client) -> None:
-    llm = FakeLLM([completion(submit(url="https://en.wikipedia.org/wiki/Pulsar"))])
+def test_unfetched_citations_fail_after_one_correction(
+    settings: Settings, http: httpx2.Client
+) -> None:
+    unread = submit(url="https://en.wikipedia.org/wiki/Pulsar")
+    llm = FakeLLM([completion(unread), completion(unread)])
 
     result = run_learn("Neutron stars", "easy", llm, settings, http_client=http)
 
-    assert result.outcome == "failed_citations"
-    assert result.citation_check is not None and len(result.citation_check.dropped) == 1
+    assert result.outcome == "failed_checks"
+    assert result.code_check is not None and len(result.code_check.citations.unfetched) == 1
+    correction = llm.calls[1][-1]
+    assert isinstance(correction, ToolResultsMessage)
+    assert "not read in this run" in correction.results[0].content
+
+
+def test_misquote_is_corrected(settings: Settings, http: httpx2.Client) -> None:
+    misquoted = submit(quote="A neutron star is a collapsed stellar core.")
+    llm = FakeLLM([completion(FETCH), completion(misquoted), completion(submit())])
+
+    result = run_learn("Neutron stars", "easy", llm, settings, http_client=http)
+
+    assert result.outcome == "passed"
+    correction = llm.calls[2][-1]
+    assert isinstance(correction, ToolResultsMessage)
+    assert "not word for word" in correction.results[0].content
+
+
+def test_unsupported_number_fails_after_one_correction(
+    settings: Settings, http: httpx2.Client
+) -> None:
+    wrong_year = submit(text=EASY_TEXT + " It was first proposed in 1932.")
+    llm = FakeLLM([completion(FETCH), completion(wrong_year), completion(wrong_year)])
+
+    result = run_learn("Neutron stars", "easy", llm, settings, http_client=http)
+
+    assert result.outcome == "failed_checks"
+    assert "number not found in the cited pages: 1932" in result.detail
+
+
+def test_misquoted_citation_is_dropped_when_another_is_valid(
+    settings: Settings, http: httpx2.Client
+) -> None:
+    mixed = (
+        "submit_answer",
+        {
+            "explanation": EASY_TEXT,
+            "citations": [
+                {"url": ARTICLE, "quote": QUOTE},
+                {"url": ARTICLE, "quote": "Neutron stars are made of cheese."},
+            ],
+        },
+    )
+    llm = FakeLLM([completion(FETCH), completion(mixed), completion(mixed)])
+
+    result = run_learn("Neutron stars", "easy", llm, settings, http_client=http)
+
+    assert result.outcome == "passed"
+    assert result.answer is not None and [c.quote for c in result.answer.citations] == [QUOTE]
+    assert "not word for word" in result.detail
 
 
 def test_invalid_answer_is_returned_to_the_model(settings: Settings, http: httpx2.Client) -> None:
@@ -151,5 +206,43 @@ def test_second_wrong_length_is_accepted_with_a_note(
     result = run_learn("Neutron stars", "easy", llm, settings, http_client=http)
 
     assert result.outcome == "passed"
-    assert result.detail == "explanation is 152 words, outside the range"
+    assert result.detail == "The explanation is 152 words; easy needs 80 to 120."
     assert result.model_calls == 3
+
+
+def quiz_submission(correct_index: int = 0) -> tuple[str, dict[str, Any]]:
+    options = ["A collapsed stellar core", "A young planet", "A comet", "A gas cloud"]
+    return (
+        "submit_quiz",
+        {
+            "question": "What is a neutron star?",
+            "options": options,
+            "correct_index": correct_index,
+            "explanation": EASY_TEXT,
+            "citations": [{"url": ARTICLE, "quote": QUOTE}],
+        },
+    )
+
+
+def test_quiz_run_shuffles_options_and_keeps_the_answer(
+    settings: Settings, http: httpx2.Client
+) -> None:
+    llm = FakeLLM([completion(FETCH), completion(quiz_submission())])
+
+    result = run_quiz(
+        "Neutron stars", "easy", llm, settings, http_client=http, rng=random.Random(3)
+    )
+
+    assert result.outcome == "passed" and result.mode == "quiz"
+    assert isinstance(result.answer, QuizItem)
+    assert result.answer.correct_option == "A collapsed stellar core"
+    assert sorted(result.answer.options) == sorted(quiz_submission()[1]["options"])
+
+
+def test_shuffle_spreads_the_correct_position() -> None:
+    item = QuizItem.model_validate({k: v for k, v in quiz_submission()[1].items()})
+    rng = random.Random(0)
+
+    positions = {shuffle_options(item, rng).correct_index for _ in range(50)}
+
+    assert positions == {0, 1, 2, 3}

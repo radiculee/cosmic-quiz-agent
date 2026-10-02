@@ -1,15 +1,18 @@
-"""The tool-calling loop.
+"""The tool-calling loop, shared by LEARN and QUIZ.
 
 The model decides which tools to call and when to answer. The code owns everything that must
-not depend on the model: step, time and token budgets, the citation rule, and the outcome.
+not depend on the model: step, time and token budgets, the layer 1 checks (fetched URLs,
+verbatim quotes, numbers), the word range, and the outcome.
 """
 
 from __future__ import annotations
 
 import json
+import random
 import time
 from collections.abc import Callable
 from contextlib import ExitStack
+from dataclasses import dataclass
 
 import httpx2
 from pydantic import ValidationError
@@ -22,32 +25,78 @@ from agent.llm import (
     ToolCall,
     ToolResult,
     ToolResultsMessage,
+    ToolSpec,
     Usage,
     UserMessage,
 )
-from agent.prompts.learn import (
-    NUDGE,
-    SYSTEM_PROMPT,
-    WORD_LIMITS,
-    length_correction,
-    user_prompt,
+from agent.prompts import learn, quiz
+from agent.prompts.common import WORD_LIMITS, correction, length_problem, nudge
+from agent.schemas import (
+    CodeCheck,
+    Difficulty,
+    Explanation,
+    Mode,
+    Outcome,
+    QuizItem,
+    RunResult,
+    Step,
 )
-from agent.schemas import CitationCheck, Difficulty, Explanation, Outcome, RunResult, Step
 from agent.tools import (
     RESEARCH_TOOLS,
     SUBMIT_ANSWER,
+    SUBMIT_QUIZ,
     Tool,
     ToolContext,
     ToolError,
     make_http_client,
 )
-from agent.verify import check_citations
+from agent.verify import cited_pages, code_check
 
 MAX_NUDGES = 2
-# One chance to fix the length; after that a good answer is accepted with a note rather than lost.
-MAX_LENGTH_CORRECTIONS = 1
+# One round to fix the code-check problems and the length. After that, a wrong length is accepted
+# with a note, bad citations are dropped, and an unsupported number fails the run.
+MAX_ANSWER_CORRECTIONS = 1
 LENGTH_TOLERANCE = 0.1
 _MAX_ARGUMENT_PREVIEW = 80
+
+StepCallback = Callable[[Step], None]
+
+
+@dataclass(frozen=True)
+class Task[AnswerT: (Explanation, QuizItem)]:
+    """What one run should produce: its prompts, its submit tool and its answer model."""
+
+    mode: Mode
+    topic: str
+    difficulty: Difficulty
+    system_prompt: str
+    user_prompt: str
+    submit_tool: ToolSpec
+    answer_model: type[AnswerT]
+
+
+def learn_task(topic: str, difficulty: Difficulty) -> Task[Explanation]:
+    return Task(
+        mode="learn",
+        topic=topic,
+        difficulty=difficulty,
+        system_prompt=learn.SYSTEM_PROMPT,
+        user_prompt=learn.user_prompt(topic, difficulty),
+        submit_tool=SUBMIT_ANSWER,
+        answer_model=Explanation,
+    )
+
+
+def quiz_task(topic: str, difficulty: Difficulty) -> Task[QuizItem]:
+    return Task(
+        mode="quiz",
+        topic=topic,
+        difficulty=difficulty,
+        system_prompt=quiz.SYSTEM_PROMPT,
+        user_prompt=quiz.user_prompt(topic, difficulty),
+        submit_tool=SUBMIT_QUIZ,
+        answer_model=QuizItem,
+    )
 
 
 def length_ok(words: int, difficulty: Difficulty) -> bool:
@@ -56,11 +105,18 @@ def length_ok(words: int, difficulty: Difficulty) -> bool:
     return low * (1 - LENGTH_TOLERANCE) <= words <= high * (1 + LENGTH_TOLERANCE)
 
 
-StepCallback = Callable[[Step], None]
+def shuffle_options(item: QuizItem, rng: random.Random) -> QuizItem:
+    """Put the correct option at a random position, so models' position habits do not leak."""
+    order = list(range(len(item.options)))
+    rng.shuffle(order)
+    options = tuple(item.options[i] for i in order)
+    return item.model_copy(
+        update={"options": options, "correct_index": order.index(item.correct_index)}
+    )
 
 
 class _Run:
-    """Mutable state for a single run, kept out of the public function's signature."""
+    """Mutable state for a single run, kept out of the public functions' signatures."""
 
     def __init__(self, settings: Settings, on_step: StepCallback | None) -> None:
         self.settings = settings
@@ -103,17 +159,45 @@ def run_learn(
     on_step: StepCallback | None = None,
     http_client: httpx2.Client | None = None,
 ) -> RunResult:
-    """Research a topic and return a LEARN explanation, with the full run log and its cost.
+    """Research a topic and return a LEARN explanation, with the full run log and its cost."""
+    return run_agent(learn_task(topic, difficulty), llm, settings, on_step, http_client)
+
+
+def run_quiz(
+    topic: str,
+    difficulty: Difficulty,
+    llm: LLMProvider,
+    settings: Settings,
+    on_step: StepCallback | None = None,
+    http_client: httpx2.Client | None = None,
+    rng: random.Random | None = None,
+) -> RunResult:
+    """Research a topic and return one quiz item, with its options in random order."""
+    result = run_agent(quiz_task(topic, difficulty), llm, settings, on_step, http_client)
+    if isinstance(result.answer, QuizItem):
+        shuffled = shuffle_options(result.answer, rng or random.Random())
+        result = result.model_copy(update={"answer": shuffled})
+    return result
+
+
+def run_agent[AnswerT: (Explanation, QuizItem)](
+    task: Task[AnswerT],
+    llm: LLMProvider,
+    settings: Settings,
+    on_step: StepCallback | None = None,
+    http_client: httpx2.Client | None = None,
+) -> RunResult:
+    """Run the tool-calling loop for one task.
 
     Tools share one HTTP client per run. Pass `http_client` to supply your own (the caller then
     owns closing it); otherwise one is created and closed here.
     """
     run = _Run(settings, on_step)
     tools = {tool.spec.name: tool for tool in RESEARCH_TOOLS}
-    tool_specs = [tool.spec for tool in RESEARCH_TOOLS] + [SUBMIT_ANSWER]
-    messages: list[Message] = [UserMessage(text=user_prompt(topic, difficulty))]
+    tool_specs = [tool.spec for tool in RESEARCH_TOOLS] + [task.submit_tool]
+    messages: list[Message] = [UserMessage(text=task.user_prompt)]
     nudges = 0
-    length_corrections = 0
+    corrections = 0
 
     with ExitStack() as stack:
         http = http_client or stack.enter_context(make_http_client(settings))
@@ -122,18 +206,20 @@ def run_learn(
         def finish(
             outcome: Outcome,
             detail: str = "",
-            answer: Explanation | None = None,
-            check: CitationCheck | None = None,
+            answer: AnswerT | None = None,
+            check: CodeCheck | None = None,
         ) -> RunResult:
+            pages = cited_pages(answer.citations, ctx.fetched) if answer is not None else {}
             return RunResult(
-                mode="learn",
-                topic=topic,
-                difficulty=difficulty,
+                mode=task.mode,
+                topic=task.topic,
+                difficulty=task.difficulty,
                 model=llm.model,
                 outcome=outcome,
                 detail=detail,
                 answer=answer,
-                citation_check=check,
+                code_check=check,
+                cited_pages=pages,
                 fetched_urls=tuple(sorted(ctx.fetched)),
                 steps=tuple(run.steps),
                 model_calls=run.model_calls,
@@ -150,7 +236,7 @@ def run_learn(
             call_started = time.monotonic()
             try:
                 completion = llm.complete(
-                    SYSTEM_PROMPT, messages, tool_specs, settings.max_output_tokens
+                    task.system_prompt, messages, tool_specs, settings.max_output_tokens
                 )
             except LLMError as error:
                 return finish("llm_error", str(error))
@@ -173,48 +259,52 @@ def run_learn(
             if not calls:
                 nudges += 1
                 if nudges > MAX_NUDGES:
-                    return finish("no_answer", "model stopped without calling submit_answer")
-                messages.append(UserMessage(text=NUDGE))
+                    return finish(
+                        "no_answer", f"model stopped without calling {task.submit_tool.name}"
+                    )
+                messages.append(UserMessage(text=nudge(task.submit_tool.name)))
                 continue
 
             results: list[ToolResult] = []
-            answer: Explanation | None = None
-            length_note = ""
+            final: tuple[AnswerT, CodeCheck, list[str]] | None = None
             for call in calls:
-                if call.name == SUBMIT_ANSWER.name:
-                    result, answer = _accept_answer(call)
-                    if answer is not None:
-                        words = len(answer.explanation.split())
-                        if not length_ok(words, difficulty):
-                            if length_corrections < MAX_LENGTH_CORRECTIONS:
-                                length_corrections += 1
-                                message = length_correction(words, difficulty)
-                                result = ToolResult(call_id=call.id, content=message, is_error=True)
-                                answer = None
-                            else:
-                                length_note = f"explanation is {words} words, outside the range"
-                else:
-                    result = _run_tool(call, tools, ctx, run)
-                results.append(result)
+                if call.name != task.submit_tool.name:
+                    results.append(_run_tool(call, tools, ctx, run))
+                    continue
+                answer = _parse_answer(call, task)
+                if isinstance(answer, ToolResult):
+                    results.append(answer)  # invalid arguments: the model is told and tries again
+                    continue
+                check = code_check(answer, ctx.fetched)
+                words = len(answer.explanation.split())
+                problems = list(check.problems)
+                if not length_ok(words, task.difficulty):
+                    problems.append(length_problem(words, task.difficulty))
+                if problems and corrections < MAX_ANSWER_CORRECTIONS:
+                    corrections += 1
+                    message = correction(problems, task.submit_tool.name)
+                    results.append(ToolResult(call_id=call.id, content=message, is_error=True))
+                    continue
+                results.append(ToolResult(call_id=call.id, content="Answer received."))
+                final = (answer, check, problems)
             messages.append(ToolResultsMessage(results=tuple(results)))
 
-            if answer is not None:
-                check = check_citations(answer.citations, ctx.fetched)
+            if final is not None:
+                answer, check, problems = final
                 if not check.passed:
-                    return finish(
-                        "failed_citations", "no cited URL was fetched in this run", answer, check
-                    )
-                kept = Explanation(explanation=answer.explanation, citations=check.kept)
-                return finish("passed", length_note, answer=kept, check=check)
+                    return finish("failed_checks", "; ".join(check.problems), answer, check)
+                kept = answer.model_copy(update={"citations": check.citations.kept})
+                return finish("passed", "; ".join(problems), kept, check)
 
 
-def _accept_answer(call: ToolCall) -> tuple[ToolResult, Explanation | None]:
+def _parse_answer[AnswerT: (Explanation, QuizItem)](
+    call: ToolCall, task: Task[AnswerT]
+) -> AnswerT | ToolResult:
     try:
-        answer = Explanation.model_validate(call.arguments)
+        return task.answer_model.model_validate(call.arguments)
     except ValidationError as error:
-        message = f"submit_answer arguments were invalid, fix and call it again: {error}"
-        return ToolResult(call_id=call.id, content=message, is_error=True), None
-    return ToolResult(call_id=call.id, content="Answer received."), answer
+        message = f"{task.submit_tool.name} arguments were invalid, fix and call it again: {error}"
+        return ToolResult(call_id=call.id, content=message, is_error=True)
 
 
 def _run_tool(call: ToolCall, tools: dict[str, Tool], ctx: ToolContext, run: _Run) -> ToolResult:

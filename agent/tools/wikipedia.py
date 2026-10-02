@@ -16,6 +16,9 @@ SEARCH_HOST = "en.wikipedia.org"
 MAX_RESULTS = 5
 
 _TAG = re.compile(r"<[^>]+>")
+_EMPTY_BRACKETS = re.compile(r"\(\s*[,;:]?\s*\)")
+_DOUBLE_SPACES = re.compile(r"[ \t]{2,}")
+_SPACE_BEFORE_PUNCTUATION = re.compile(r" ([,.;:])")
 # Reference sections add tokens without adding facts the agent can use.
 _TRAILING_SECTIONS = re.compile(
     r"\n=+\s*(See also|References|Notes|Footnotes|Citations|Sources|Bibliography|"
@@ -107,11 +110,21 @@ def fetch_article(host: str, title: str, ctx: ToolContext) -> tuple[str, str, st
 
     page = pages[0]
     canonical_title = str(page.get("title", title))
-    text = str(page["extract"])
+    text = clean_extract(str(page["extract"]))
     match = _TRAILING_SECTIONS.search(text)
     if match:
         text = text[: match.start()]
     return article_url(host, canonical_title), canonical_title, text.strip()
+
+
+def clean_extract(text: str) -> str:
+    """Remove artifacts the plain-text API leaves where it strips markup.
+
+    Pronunciation guides and similar templates leave empty brackets, as in
+    "Kuiper belt ( ) is a circumstellar disc", which the model then quotes without them.
+    """
+    text = _EMPTY_BRACKETS.sub("", text)
+    return _SPACE_BEFORE_PUNCTUATION.sub(r"\1", _DOUBLE_SPACES.sub(" ", text))
 
 
 SEARCH_WIKIPEDIA = Tool(

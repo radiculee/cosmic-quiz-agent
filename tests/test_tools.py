@@ -315,3 +315,29 @@ def test_nasa_images_records_each_result(ctx: ToolContext, web: FakeWeb) -> None
     url = "https://images.nasa.gov/details/PIA03606"
     assert f"URL: {url}" in output
     assert "The Crab Nebula is a supernova remnant." in ctx.fetched[normalize_url(url)]
+
+
+def test_wikipedia_extract_drops_empty_brackets() -> None:
+    from agent.tools.wikipedia import clean_extract
+
+    text = "The Kuiper belt ( ) is a disc, near Neptune ( ), and beyond (; Latin) too."
+
+    assert (
+        clean_extract(text) == "The Kuiper belt is a disc, near Neptune, and beyond (; Latin) too."
+    )
+
+
+def test_arxiv_latex_becomes_plain_text() -> None:
+    from agent.tools.arxiv import latex_to_text
+
+    # Built from code points so the test source holds no escape sequences or look-alikes.
+    bs, plus_minus, mu, tilde_op, times = chr(92), chr(0xB1), chr(0x3BC), chr(0x223C), chr(0xD7)
+    latex = (
+        f"a diameter of $51.8 {bs}pm 2.3${bs},{bs}uas (68{bs}% credible), "
+        f"{bs}sim 3 Gyr, Fig.~2, 2{bs}times10^3"
+    )
+
+    assert latex_to_text(latex) == (
+        f"a diameter of 51.8 {plus_minus} 2.3 {mu}as (68% credible), "
+        f"{tilde_op} 3 Gyr, Fig. 2, 2{times}10^3"
+    )

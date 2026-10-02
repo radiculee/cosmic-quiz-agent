@@ -6,6 +6,7 @@ client) can be added by writing one more class that satisfies `LLMProvider`.
 
 from __future__ import annotations
 
+import json
 from collections.abc import Sequence
 from typing import Any, Literal, Protocol
 
@@ -137,6 +138,12 @@ class LLMProvider(Protocol):
         max_tokens: int,
     ) -> Completion: ...
 
+    def complete_json(
+        self, system: str, prompt: str, schema: JsonObject, max_tokens: int
+    ) -> tuple[JsonObject, Usage]:
+        """One call whose reply is a JSON object matching `schema`."""
+        ...
+
 
 class AnthropicProvider:
     """Claude via the official `anthropic` SDK.
@@ -203,6 +210,38 @@ class AnthropicProvider:
                 cache_write_tokens=usage.cache_creation_input_tokens or 0,
                 cache_read_tokens=usage.cache_read_input_tokens or 0,
             ),
+        )
+
+    def complete_json(
+        self, system: str, prompt: str, schema: JsonObject, max_tokens: int
+    ) -> tuple[JsonObject, Usage]:
+        """Structured output: the API constrains the reply to `schema` (`output_config.format`)."""
+        try:
+            response = self._client.messages.create(
+                model=self._model,
+                max_tokens=max_tokens,
+                system=system,
+                messages=[{"role": "user", "content": prompt}],
+                output_config={"format": {"type": "json_schema", "schema": schema}},
+            )
+        except anthropic.AnthropicError as error:
+            raise LLMError(f"{type(error).__name__}: {error}") from error
+
+        if response.stop_reason != "end_turn":
+            raise LLMError(f"structured output stopped early ({response.stop_reason})")
+        text = "".join(block.text for block in response.content if block.type == "text")
+        try:
+            data = json.loads(text)
+        except json.JSONDecodeError as error:
+            raise LLMError("structured output was not valid JSON") from error
+        if not isinstance(data, dict):
+            raise LLMError("structured output was not a JSON object")
+        usage = response.usage
+        return data, Usage(
+            input_tokens=usage.input_tokens,
+            output_tokens=usage.output_tokens,
+            cache_write_tokens=usage.cache_creation_input_tokens or 0,
+            cache_read_tokens=usage.cache_read_input_tokens or 0,
         )
 
 

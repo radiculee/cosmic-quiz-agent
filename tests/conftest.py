@@ -69,9 +69,15 @@ class FakeWeb:
 class FakeLLM:
     """Plays back a scripted list of completions (or errors) and records what it was sent."""
 
-    def __init__(self, script: Sequence[Completion | Exception]) -> None:
+    def __init__(
+        self,
+        script: Sequence[Completion | Exception] = (),
+        json_replies: Sequence[dict[str, Any] | Exception] = (),
+    ) -> None:
         self._script = list(script)
+        self._json_replies = list(json_replies)
         self.calls: list[list[Message]] = []
+        self.json_prompts: list[str] = []
 
     @property
     def model(self) -> str:
@@ -91,6 +97,17 @@ class FakeLLM:
         if isinstance(item, Exception):
             raise item
         return item
+
+    def complete_json(
+        self, system: str, prompt: str, schema: dict[str, Any], max_tokens: int
+    ) -> tuple[dict[str, Any], Usage]:
+        self.json_prompts.append(prompt)
+        if not self._json_replies:
+            raise AssertionError("FakeLLM ran out of scripted JSON replies")
+        reply = self._json_replies.pop(0)
+        if isinstance(reply, Exception):
+            raise reply
+        return reply, CALL_USAGE
 
 
 CALL_USAGE = Usage(input_tokens=100, output_tokens=10)

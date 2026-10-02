@@ -27,6 +27,34 @@ _ABS_PATH = re.compile(
     r"^/abs/(?P<id>(?:\d{4}\.\d{4,5}|[a-z\-]+(?:\.[A-Z]{2})?/\d{7}))(?:v\d+)?/?$"
 )
 _VERSION = re.compile(r"v\d+$")
+# Longest commands first, so a longer command is not split by a shorter one.
+_LATEX_SYMBOLS: tuple[tuple[str, str], ...] = (
+    (r"\lesssim", "≲"),
+    (r"\gtrsim", "≳"),
+    (r"\approx", "≈"),
+    (r"\times", "\u00d7"),  # multiplication sign
+    (r"\odot", "☉"),
+    (r"\sun", "☉"),
+    (r"\sim", "\u223c"),  # tilde operator: LaTeX uses a plain "~" as a space
+    (r"\pm", "±"),
+    (r"\leq", "≤"),
+    (r"\geq", "≥"),
+    (r"\le", "≤"),
+    (r"\ge", "≥"),
+    (r"\deg", "°"),
+    (r"\uas", "μas"),
+    (r"\mu", "μ"),
+    (r"\alpha", "\u03b1"),
+    (r"\beta", "\u03b2"),
+    (r"\gamma", "\u03b3"),
+    (r"\Omega", "Ω"),
+    (r"\Lambda", "Λ"),
+    (r"\%", "%"),
+    (r"\&", "&"),
+    (r"\rm", ""),
+    (r"\mathrm", ""),
+)
+_LATEX_SPACING = re.compile(r"\\[,;!: ]|~")
 
 
 class _SearchArgs(BaseModel):
@@ -67,9 +95,19 @@ def parse_abs_url(url: str) -> str | None:
     return match.group("id") if match else None
 
 
+def latex_to_text(text: str) -> str:
+    """Turn the common LaTeX in arXiv abstracts into plain text, so the model reads (and quotes)
+    the same characters the page check compares against: "$51.8 \\pm 2.3$" becomes "51.8 ± 2.3"."""
+    for command, replacement in _LATEX_SYMBOLS:
+        text = text.replace(command, replacement)
+    text = _LATEX_SPACING.sub(" ", text)
+    text = text.replace("$", "").replace("{", "").replace("}", "")
+    return " ".join(text.split())
+
+
 def _text(element: ET.Element, path: str) -> str:
     found = element.find(path, _NS)
-    return " ".join((found.text or "").split()) if found is not None else ""
+    return latex_to_text(found.text or "") if found is not None else ""
 
 
 def parse_feed(xml_text: str) -> list[Paper]:

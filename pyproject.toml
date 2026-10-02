@@ -27,7 +27,7 @@ select = [
 [tool.mypy]
 python_version = "3.12"
 strict = true
-files = ["agent", "tests"]
+files = ["agent", "evals", "tests"]
 plugins = ["pydantic.mypy"]
 
 [tool.pytest.ini_options]

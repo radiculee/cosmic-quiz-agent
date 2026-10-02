@@ -86,6 +86,14 @@ class Settings(BaseModel):
     http_retry_backoff_seconds: float = Field(default=1.0, ge=0)
     user_agent: str = "CosmicQuizAgent/0.1 (+https://github.com/radiculee/cosmic-quiz-agent)"
 
+    # Verifiers (layers 2 and 3 of the publish gate).
+    verifier_max_output_tokens: int = Field(default=2048, gt=0)
+    # Pinned so thresholds and the confidence players see stay stable across Jev releases.
+    jev_model: str = "jev-1.13.0"
+    jev_input_per_mtok: float = 0.042  # TypeSafe price; output tokens are free
+    jev_threshold: float = Field(default=0.8, gt=0, lt=1)
+    jev_timeout_seconds: float = Field(default=30.0, gt=0)
+
     runs_dir: str = "runs"
 
     @field_validator("model")
