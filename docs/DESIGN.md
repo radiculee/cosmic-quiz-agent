@@ -59,6 +59,7 @@ runs on a schedule with no human trigger), and code that reads well to recruiter
     - **Layer 3, Jev second opinion:** for each claim and each distractor with its quoted passage, TypeSafe Jev answers supports / contradicts / says nothing, with probabilities and a confidence. Jev is pinned to a fixed version (`jev-1.13.0`) so thresholds and the scores players see stay stable. Jev cannot check numbers reliably (it accepted the spike's 10^-27 vs 10^-30 error at 0.86), which is why layer 1 checks numbers.
     - How layers 2 and 3 combine, and the thresholds, are set in Session 3 from the eval results. Pass: auto-publish. Borderline (the verifiers disagree, or Jev's confidence is below threshold): `review` status. Fail: discard and log.
     - Every layer's result is stored with the item, including Jev's confidence, which the UI shows (decision 5).
+    - Decided 2026-10-01 from the Session 3 eval and Vedant's hand review: **all_must_pass** with a Jev threshold of **0.8**. Any layer failing discards; any doubt goes to review. Measured: 38 of 40 planted faults handled, 43% of generated items published directly. See `docs/EVALS.md`.
     - A Report button on each question; 2 reports hide it.
 
 ## Defaults chosen without asking (change if wanted)

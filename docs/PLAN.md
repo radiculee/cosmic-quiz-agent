@@ -185,25 +185,37 @@ Decisions to ask:
   scored 0.86, so the threshold alone is not enough).
 - Approve the eval run cost before running it (estimate shown first, Haiku and Jev separately).
 
+Decided 2026-10-01: the 20 proposed topics approved as listed (`evals/topics.py`); a full run is 20 topics
+x 3 difficulties = 60 items, with a 5-topic `--quick` mode; the planted-error set is 40 items, 10 per
+fault type, with code planting wrong numbers and broken quotes and Haiku planting unsupported claims and
+true distractors (a fixed seed keeps it reproducible); a $0.30 development budget for real checks; the
+full eval spend (about $1.75-$2.55) approved before running.
+
 Claude Code:
-- [ ] Per-difficulty prompt templates in `agent/prompts/`, including a rule to keep numbers in the form the
+- [x] Per-difficulty prompt templates in `agent/prompts/`, including a rule to keep numbers in the form the
       source uses.
-- [ ] `verify.py`, layer 1 code checks as hard gates: fetched URLs (exists), verbatim quotes (now a gate,
+- [x] `verify.py`, layer 1 code checks as hard gates: fetched URLs (exists), verbatim quotes (now a gate,
       not just a count), and every number in the answer appears in a fetched page.
-- [ ] `agent/verifiers/`: a `Verifier` interface with `haiku.py` (layer 2: confirms support and that each
+- [x] `agent/verifiers/`: a `Verifier` interface with `haiku.py` (layer 2: confirms support and that each
       distractor is wrong) and `jev.py` (layer 3: one `Choice` per claim and per distractor, pinned to
       `jev-1.13.0`, returning verdict, probabilities, confidence, tokens and cost).
-- [ ] `schemas.py`: a `ClaimCheck` model holding every layer's result per claim, ready for Supabase.
-- [ ] `evals/`: the fixed topics, the seeded-error set, a scoring script, and results written to
+- [x] `schemas.py`: a `ClaimCheck` model holding every layer's result per claim, ready for Supabase.
+      Built as `JevCheck` (per claim), `HaikuReport`, `CodeCheck` and `Verification`, plus `ItemRecord`.
+- [x] `evals/`: the fixed topics, the seeded-error set, a scoring script, and results written to
       `evals/results/` (not committed). The report shows, per layer and combined: catch rate and
       false-reject rate on seeded errors, Haiku/Jev agreement, Jev calibration (verdicts grouped by
       confidence band against the expected answer), and cost and latency for Haiku and Jev separately.
-- [ ] CLI: `python -m agent quiz "<topic>" --difficulty ...` (prints each claim's Jev verdict and
+- [x] CLI: `python -m agent quiz "<topic>" --difficulty ...` (prints each claim's Jev verdict and
       confidence) and `python -m evals`.
 
 Gate (Vedant): the eval report meets the DESIGN.md targets (at least 90% citation pass, 0 unfetched URLs,
 every item schema-valid, every planted wrong number and non-verbatim quote caught), the combination rule and
 Jev threshold are agreed from the measured results, and the hand-reviewed questions are acceptable.
+- [x] Passed 2026-10-01. Full run of 60 items: layer 1 85% (92% re-scored after fixing text-matching
+      artifacts the eval exposed), 0 unfetched URLs, every item schema-valid; 38 of 40 planted faults
+      handled (the 2 misses look like planting noise). Vedant hand-reviewed 10 items: nothing published
+      was wrong, the discarded item had a real error, and 2 items Haiku sent to review were correct.
+      Decision: keep all_must_pass with the Jev threshold at 0.8. Results in `docs/EVALS.md`.
 
 ---
 
@@ -390,3 +402,10 @@ unsubscribe, then WhatsApp.
   verification runs passed using the new tools (arXiv abstract, ESA/Webb and NASA feeds, NASA images),
   11 of 12 quotes verbatim, $0.070 including one re-run. Next: Vedant's gate (LEARN on 3 topics of his
   choice), then Session 3.
+- 2026-10-01 - Session 3: QUIZ mode, the three-layer publish gate (code checks as hard rules with one
+  correction round; Haiku verifier with its own quote re-checked in code; Jev claim checks pinned to
+  jev-1.13.0) and pure publish rules re-scorable from stored results; evals with a 60-item run, a
+  40-item planted-error set and a report. The eval exposed text-matching artifacts (empty Wikipedia
+  brackets, zero-width characters, dash variants, arXiv LaTeX), now fixed. Vedant chose all_must_pass
+  at threshold 0.8 after his hand review. 136 tests. Spend about $2.11 Anthropic, $0.02 TypeSafe.
+  Next: Session 4 (Supabase bank and Curator).
