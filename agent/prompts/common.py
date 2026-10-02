@@ -53,6 +53,13 @@ other forms, and do not write numbers as words.
 """
 
 
+def lead_line(lead_url: str | None) -> str:
+    """For a topic found in a news feed: the article to start from, as its own prompt line."""
+    if lead_url is None:
+        return ""
+    return f"\nStart from this news article (read it with fetch_page before citing it): {lead_url}"
+
+
 def nudge(submit_tool: str) -> str:
     return (
         f"Please continue with your tools. When you have read your sources, call {submit_tool}; "

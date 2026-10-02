@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 import random
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from contextlib import ExitStack
 from dataclasses import dataclass
 
@@ -28,6 +28,7 @@ from agent.llm import (
     ToolSpec,
     Usage,
     UserMessage,
+    prompt_tokens_bound,
 )
 from agent.prompts import learn, quiz
 from agent.prompts.common import WORD_LIMITS, correction, length_problem, nudge
@@ -75,25 +76,27 @@ class Task[AnswerT: (Explanation, QuizItem)]:
     answer_model: type[AnswerT]
 
 
-def learn_task(topic: str, difficulty: Difficulty) -> Task[Explanation]:
+def learn_task(
+    topic: str, difficulty: Difficulty, lead_url: str | None = None
+) -> Task[Explanation]:
     return Task(
         mode="learn",
         topic=topic,
         difficulty=difficulty,
         system_prompt=learn.SYSTEM_PROMPT,
-        user_prompt=learn.user_prompt(topic, difficulty),
+        user_prompt=learn.user_prompt(topic, difficulty, lead_url),
         submit_tool=SUBMIT_ANSWER,
         answer_model=Explanation,
     )
 
 
-def quiz_task(topic: str, difficulty: Difficulty) -> Task[QuizItem]:
+def quiz_task(topic: str, difficulty: Difficulty, lead_url: str | None = None) -> Task[QuizItem]:
     return Task(
         mode="quiz",
         topic=topic,
         difficulty=difficulty,
         system_prompt=quiz.SYSTEM_PROMPT,
-        user_prompt=quiz.user_prompt(topic, difficulty),
+        user_prompt=quiz.user_prompt(topic, difficulty, lead_url),
         submit_tool=SUBMIT_QUIZ,
         answer_model=QuizItem,
     )
@@ -125,6 +128,9 @@ class _Run:
         self.steps: list[Step] = []
         self.usage = Usage()
         self.model_calls = 0
+        # For the cost bound: the exact prompt size of the last call, and how many messages it had.
+        self.last_prompt_tokens: int | None = None
+        self.messages_sent = 0
 
     def elapsed(self) -> float:
         return time.monotonic() - self.started
@@ -134,13 +140,32 @@ class _Run:
         if self.on_step is not None:
             self.on_step(step)
 
-    def budget_problem(self) -> str | None:
+    def next_call_bound_usd(
+        self, system: str, messages: Sequence[Message], tools: Sequence[ToolSpec]
+    ) -> float:
+        """An upper bound on what the next call can cost. After the first call the previous
+        prompt's exact size is known, so only the messages added since are bounded by bytes."""
+        if self.last_prompt_tokens is None:
+            texts = [system, *(m.model_dump_json() for m in messages)]
+            tokens = prompt_tokens_bound(*texts, *(t.model_dump_json() for t in tools))
+        else:
+            added = (m.model_dump_json() for m in messages[self.messages_sent :])
+            tokens = self.last_prompt_tokens + prompt_tokens_bound(*added)
+        return self.settings.price.max_call_cost_usd(tokens, self.settings.max_output_tokens)
+
+    def budget_problem(self, next_call_usd: float) -> str | None:
         if self.model_calls >= self.settings.max_steps:
             return f"step budget of {self.settings.max_steps} model calls reached"
         if self.elapsed() >= self.settings.max_seconds:
             return f"time budget of {self.settings.max_seconds:.0f}s reached"
         if self.usage.total_input_tokens >= self.settings.max_input_tokens:
             return f"token budget of {self.settings.max_input_tokens} input tokens reached"
+        spent = self.usage.cost_usd(self.settings.price)
+        if spent + next_call_usd > self.settings.max_run_cost_usd:
+            return (
+                f"cost limit of ${self.settings.max_run_cost_usd:.2f} per run reached: spent "
+                f"${spent:.4f}, and the next call could cost up to ${next_call_usd:.4f}"
+            )
         return None
 
 
@@ -158,9 +183,14 @@ def run_learn(
     settings: Settings,
     on_step: StepCallback | None = None,
     http_client: httpx2.Client | None = None,
+    lead_url: str | None = None,
 ) -> RunResult:
-    """Research a topic and return a LEARN explanation, with the full run log and its cost."""
-    return run_agent(learn_task(topic, difficulty), llm, settings, on_step, http_client)
+    """Research a topic and return a LEARN explanation, with the full run log and its cost.
+
+    `lead_url` is a news article to start from, for topics the Curator found in a feed.
+    """
+    task = learn_task(topic, difficulty, lead_url)
+    return run_agent(task, llm, settings, on_step, http_client)
 
 
 def run_quiz(
@@ -171,9 +201,11 @@ def run_quiz(
     on_step: StepCallback | None = None,
     http_client: httpx2.Client | None = None,
     rng: random.Random | None = None,
+    lead_url: str | None = None,
 ) -> RunResult:
     """Research a topic and return one quiz item, with its options in random order."""
-    result = run_agent(quiz_task(topic, difficulty), llm, settings, on_step, http_client)
+    task = quiz_task(topic, difficulty, lead_url)
+    result = run_agent(task, llm, settings, on_step, http_client)
     if isinstance(result.answer, QuizItem):
         shuffled = shuffle_options(result.answer, rng or random.Random())
         result = result.model_copy(update={"answer": shuffled})
@@ -221,19 +253,23 @@ def run_agent[AnswerT: (Explanation, QuizItem)](
                 code_check=check,
                 cited_pages=pages,
                 fetched_urls=tuple(sorted(ctx.fetched)),
+                pages_read=tuple(ctx.reads),
                 steps=tuple(run.steps),
                 model_calls=run.model_calls,
+                nudges=nudges,
                 usage=run.usage,
                 cost_usd=run.usage.cost_usd(settings.price),
                 seconds=round(run.elapsed(), 2),
             )
 
         while True:
-            problem = run.budget_problem()
+            bound = run.next_call_bound_usd(task.system_prompt, messages, tool_specs)
+            problem = run.budget_problem(bound)
             if problem is not None:
                 return finish("budget_exceeded", problem)
 
             call_started = time.monotonic()
+            run.messages_sent = len(messages)
             try:
                 completion = llm.complete(
                     task.system_prompt, messages, tool_specs, settings.max_output_tokens
@@ -242,6 +278,7 @@ def run_agent[AnswerT: (Explanation, QuizItem)](
                 return finish("llm_error", str(error))
             run.model_calls += 1
             run.usage = run.usage + completion.usage
+            run.last_prompt_tokens = completion.usage.total_input_tokens
             messages.append(completion.message)
 
             calls = completion.message.tool_calls
@@ -257,11 +294,11 @@ def run_agent[AnswerT: (Explanation, QuizItem)](
             )
 
             if not calls:
-                nudges += 1
-                if nudges > MAX_NUDGES:
+                if nudges >= MAX_NUDGES:
                     return finish(
                         "no_answer", f"model stopped without calling {task.submit_tool.name}"
                     )
+                nudges += 1
                 messages.append(UserMessage(text=nudge(task.submit_tool.name)))
                 continue
 

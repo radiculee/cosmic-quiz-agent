@@ -7,7 +7,7 @@ import httpx2
 import pytest
 
 from agent.config import Settings
-from agent.llm import LLMError, ToolResultsMessage
+from agent.llm import FORMAT_ALLOWANCE_TOKENS, LLMError, ToolResultsMessage, prompt_tokens_bound
 from agent.loop import MAX_NUDGES, length_ok, run_learn, run_quiz, shuffle_options
 from agent.schemas import QuizItem
 from tests.conftest import FakeLLM, FakeWeb, completion
@@ -149,6 +149,7 @@ def test_model_that_never_submits_gets_nudged_then_stops(
 
     assert result.outcome == "no_answer"
     assert result.model_calls == MAX_NUDGES + 1
+    assert result.nudges == MAX_NUDGES  # only the nudges actually sent
 
 
 def test_step_budget_stops_the_run(http: httpx2.Client) -> None:
@@ -246,3 +247,33 @@ def test_shuffle_spreads_the_correct_position() -> None:
     positions = {shuffle_options(item, rng).correct_index for _ in range(50)}
 
     assert positions == {0, 1, 2, 3}
+
+
+def test_cost_limit_stops_the_run_before_a_call_that_could_cross_it(http: httpx2.Client) -> None:
+    settings = Settings(max_run_cost_usd=0.001, http_retry_backoff_seconds=0.0)
+    llm = FakeLLM([])  # any model call would fail the test
+
+    result = run_learn("Neutron stars", "easy", llm, settings, http_client=http)
+
+    assert result.outcome == "budget_exceeded"
+    assert "cost limit of $0.00 per run" in result.detail
+    assert result.model_calls == 0 and result.cost_usd == 0
+
+
+def test_default_cost_limit_leaves_a_normal_run_alone(
+    settings: Settings, http: httpx2.Client
+) -> None:
+    llm = FakeLLM([completion(FETCH), completion(submit())])
+
+    result = run_learn("Neutron stars", "easy", llm, settings, http_client=http)
+
+    assert result.outcome == "passed"
+
+
+def test_call_cost_bound_prices_every_byte_at_the_dearest_rate() -> None:
+    price = Settings().price
+
+    # A token covers at least one byte of UTF-8, and a two-byte character counts as two.
+    assert prompt_tokens_bound("abc", chr(0xE9)) == 3 + 2 + FORMAT_ALLOWANCE_TOKENS
+    assert price.max_call_cost_usd(1_000_000, 0) == pytest.approx(1.25)  # cache-write rate
+    assert price.max_call_cost_usd(0, 1_000_000) == pytest.approx(5.0)

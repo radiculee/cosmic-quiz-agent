@@ -223,7 +223,8 @@ Jev threshold are agreed from the measured results, and the hand-reviewed questi
 **Goal:** the Curator fills the bank when run by hand on Vedant's machine.
 
 Vedant prepares:
-- A free Supabase project. Add `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` and `SUPABASE_ANON_KEY` to `.env`.
+- [x] A free Supabase project. `SUPABASE_URL`, `SUPABASE_SECRET_KEY` and `SUPABASE_PUBLISHABLE_KEY`
+      (Supabase's new names for the service-role and anon keys) are in `.env`.
 
 Decisions to ask:
 - Daily Curator volume (topics per day), given the measured cost per topic and the $10 cap.
@@ -231,19 +232,77 @@ Decisions to ask:
 - Who runs `schema.sql`: Vedant pastes it into the Supabase SQL editor, or Claude Code runs it via the
   Supabase CLI (an extra dependency).
 
+Decided 2026-10-02:
+- Build the bank up front instead of a slow daily trickle: 30 evergreen topics (approved list in
+  `curator/topics.py`), each in LEARN and QUIZ at all three difficulties, about $5 under a $6 cap.
+  Then 1 news topic a day (about $0.17 a day, about $5 a month) under a $0.40 cap per run. October
+  already had about $2.30 of spend, so daily runs start in November or at Session 7.
+- LEARN is served from the bank too (stored explanations per topic and difficulty).
+- Keep the three-layer gate (all_must_pass, Jev at 0.8); Jev's confidence is shown to players.
+  Jev's criteria made astronomy-specific (`astro-1`) after a Jev-only re-check of the Session 3
+  eval: planted faults handled stayed 38/40, generated items 22/20/9 became 23/19/9, $0.022 on
+  TypeSafe (`python -m evals rejev RUN_DIR --criteria astro-1`).
+- Retirement: news topics' items retire after 90 days; evergreen items never retire.
+- Vedant pastes `supabase/schema.sql` into the SQL editor; later changes go in numbered files
+  under `supabase/migrations/`.
+- Gate amended: a Haiku verifier quote that is not on a cited page sends the item to review instead
+  of discarding it (same 38/40 planted faults handled; see `docs/EVALS.md`).
+- No new dependency: the store calls Supabase's REST API through `httpx2`. The untracked npm
+  `package.json` (`@supabase/server`) was removed; the Session 5 UI is set up with pnpm.
+
 Claude Code:
-- [ ] `supabase/schema.sql`: `items`, `sources`, `claim_checks` (every layer's result per claim: code-check
-      outcomes, Haiku verdict, Jev verdict, confidence, probabilities and model version), `runs` (with
-      Haiku and Jev tokens and cost kept separately), `reports`, `rate_limits`, with row-level security
-      (the anon key can only read published items and their checks).
-- [ ] `agent/store.py`: Supabase REST reads and writes.
-- [ ] `curator/__main__.py`: discover -> research -> draft -> verify -> publish / review / discard -> retire,
-      with a `runs` row and step log per run.
-- [ ] `runs` rows store every metric the v2 analytics page needs (listed under Session 9), so history
+- [x] `supabase/schema.sql`: `topics`, `items`, `sources`, `claim_checks` (every layer's result per
+      claim: code-check outcomes, Haiku verdict, Jev verdict, confidence, probabilities and model
+      version), `runs` (with Haiku and Jev tokens and cost kept separately), `curator_runs`,
+      `cited_pages`, `reports`, `rate_limits`, with row-level security (the publishable key can only
+      read published items with fewer than 2 reports, their sources and checks, and their topics).
+      Each run is saved in one transaction by a `record_item()` function.
+- [x] `agent/store.py`: Supabase REST reads and writes, with every reply validated by Pydantic.
+- [x] `curator/`: `build` and `daily`; discover -> research -> draft -> verify -> publish / review /
+      discard -> retire, with a `runs` row and step log per run and a `curator_runs` row per
+      invocation. A hard dollar cap; unstored runs are kept on disk and sent by the next run.
+- [x] `runs` rows store every metric the v2 analytics page needs (listed under Session 9), so history
       exists from the first Curator run.
 
-Gate (Vedant): runs `python -m curator`, sees `published` and `review` rows in the Supabase table editor,
-approves one borderline item by changing its status.
+Results 2026-10-02 (schema checked first with 18 free checks against the live project: RLS, grants,
+triggers, retirement, all passing):
+- 1-topic trial ("The Sun and solar flares"): $0.161 Anthropic, $0.0011 TypeSafe.
+- Full build, 29 more topics (174 jobs, curator run 3): $4.82 Anthropic (estimate $4.70, cap $6),
+  $0.040 TypeSafe, 0 crashes, 0 unstored runs. Median run 15-16 s, about $0.027 per job.
+- Bank: 99 published, 66 review, 14 discarded (179 items from 180 runs; 1 run ended without an
+  answer). LEARN 55 published / 34 review / 1 discarded; QUIZ 44 / 32 / 13.
+- The review queue is mostly Haiku's doubts about explanations (82 of 99 review reasons), most of
+  all in LEARN hard (19 of 30 in review). This is the "revisit if the review queue grows faster than
+  it can be cleared" case from Session 3; to decide with Vedant after he looks at a sample.
+- October Anthropic spend is now about $7.30 of the $10 cap (Sessions 1-3 about $2.30, today
+  about $4.98), so no more paid runs this month beyond small checks.
+
+Added after Vedant's first look at the review queue (2026-10-02): the table editor shows an item
+without its sources, and he will not publish anything without seeing them. Every item does have
+sources (545 of 545 on published and review items were fetched in their run), so the fix is the
+review workflow:
+- [x] `python -m curator review [--mode] [--difficulty]`: one item at a time with its reasons, marked
+      answer, explanation, sources and quotes, and Jev's checks; p / d / s / q. Free.
+- [x] Migration `supabase/migrations/002_reviewed_at.sql`: `items.reviewed_at`, set by the status
+      trigger when an item leaves review (by the command or the table editor).
+- Decided: 1 fetched, verbatim-quoted source per item stays the minimum.
+
+Code review before the first push (2026-10-02): 15 findings, all confirmed and fixed. The ones that
+touched hard rules:
+- The dollar cap is now hard. Each agent run stops before any model call whose cost bound (prompt
+  bytes at the cache-write rate plus the full output allowance) could take it past $0.10, and the
+  Haiku verifier is skipped (item to review) if its call could cost over $0.07. A job therefore
+  never costs more than $0.17, and that is what it reserves against the cap. A replay of the 180
+  build runs showed no run or verification would have been stopped by these limits.
+- A re-sent payload is never stored twice (`runs.client_id`, checked in `record_item()`).
+- A URL that was not read in its run is never stored where a player can see it (citation rule).
+Also: Ctrl+C or a crash keeps paid results and still closes the `curator_runs` row; a verifier bug
+sends the item to review instead of losing the run; jobs that hit a temporary API error are
+retried by the next build; `daily` asks before any spend; stored eval results are re-scored under
+the current rules. Migration `002_review_and_safe_resume.sql` carries the SQL side.
+
+Gate (Vedant): runs `python -m curator`, sees `published` and `review` rows, and decides review items
+with `python -m curator review`, seeing their sources before publishing.
 
 ---
 
@@ -310,6 +369,8 @@ Decisions to ask:
 - Curator schedule (time of day, frequency).
 
 Claude Code:
+- [ ] Keep `runs/curator/pending/` between scheduled runs (actions/cache or an artifact), so a run
+      the bank could not store is re-sent by the next one, as it is locally.
 - [ ] Run the Vercel streaming spike planned on 2026-10-01 (incremental delivery, 300 s cap, client
       disconnect, coexistence with Vite, cold start) and record results in `docs/SPIKE.md`.
 - [ ] Deploy the UI and API; set `maxDuration`; the agent's own time budget stays under it.
@@ -409,3 +470,10 @@ unsubscribe, then WhatsApp.
   brackets, zero-width characters, dash variants, arXiv LaTeX), now fixed. Vedant chose all_must_pass
   at threshold 0.8 after his hand review. 136 tests. Spend about $2.11 Anthropic, $0.02 TypeSafe.
   Next: Session 4 (Supabase bank and Curator).
+- 2026-10-02 - Session 4: Jev criteria made astronomy-specific (astro-1, Jev-only re-check $0.022);
+  a verifier misquote now goes to review instead of discard (same 38/40 planted faults handled);
+  supabase/schema.sql (RLS: the publishable key reads only published items), agent/store.py over
+  REST with no new dependency, and the Curator (build and daily, dollar cap, unstored runs kept on
+  disk). Bank built: 30 topics, 99 published, 66 review, 14 discarded, $4.98 Anthropic and $0.041
+  TypeSafe including the trial. 160 tests. Next: Vedant's gate (approve one review item in the
+  table editor), the review-queue decision, then Session 5.

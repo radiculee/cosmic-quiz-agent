@@ -105,8 +105,20 @@ class CodeCheck(BaseModel):
 
     @property
     def problems(self) -> tuple[str, ...]:
+        return self.describe()
+
+    def describe(self, *, show_unread_urls: bool = True) -> tuple[str, ...]:
+        """The problems in words. Pass `show_unread_urls=False` for anything a player could
+        see: a URL that was not read in the run may never be shown as a source."""
         found: list[str] = []
-        found += [f"cited URL was not read in this run: {c.url}" for c in self.citations.unfetched]
+        if show_unread_urls:
+            found += [
+                f"cited URL was not read in this run: {c.url}" for c in self.citations.unfetched
+            ]
+        elif self.citations.unfetched:
+            found.append(
+                f"{len(self.citations.unfetched)} cited URL(s) not read in this run, dropped"
+            )
         found += [
             f"quote is not word for word on {c.url}: {c.quote!r}" for c in self.citations.misquoted
         ]
@@ -171,6 +183,9 @@ class JevReport(BaseModel):
     verdict: LayerVerdict
     reasons: tuple[str, ...] = ()
     model: str = ""
+    # Which criteria wording Jev answered against (agent/verifiers/jev.py). Records saved before
+    # the wording was versioned used the first one.
+    criteria: str = "generic-1"
     threshold: float = 0.8
     checks: tuple[JevCheck, ...] = ()
     input_tokens: int = 0
@@ -229,8 +244,10 @@ class RunResult(BaseModel):
     # Text of each cited page exactly as the model read it, for the verifiers and storage.
     cited_pages: dict[str, str] = Field(default_factory=dict)
     fetched_urls: tuple[str, ...] = ()
+    pages_read: tuple[str, ...] = ()  # one URL per page or record read; a redirect counts once
     steps: tuple[Step, ...] = ()
     model_calls: int = 0
+    nudges: int = 0  # nudge messages sent: the model replied without a tool call
     usage: Usage = Usage()
     cost_usd: float = 0.0
     seconds: float = 0.0

@@ -5,7 +5,7 @@ Per-difficulty guidance follows DESIGN.md decision 13 (depth plus distractors).
 
 from __future__ import annotations
 
-from agent.prompts.common import RESEARCH_RULES, WORD_LIMITS, WRITING_RULES
+from agent.prompts.common import RESEARCH_RULES, WORD_LIMITS, WRITING_RULES, lead_line
 from agent.schemas import Difficulty
 
 SUBMIT_TOOL = "submit_quiz"
@@ -47,10 +47,11 @@ _DIFFICULTY_FOCUS: dict[Difficulty, str] = {
 }
 
 
-def user_prompt(topic: str, difficulty: Difficulty) -> str:
+def user_prompt(topic: str, difficulty: Difficulty, lead_url: str | None = None) -> str:
     low, high = WORD_LIMITS[difficulty]
     return (
         f"Topic: {topic}\n"
         f"Difficulty: {difficulty}. {_DIFFICULTY_FOCUS[difficulty]}\n"
         f"Explanation: {low} to {high} words."
+        f"{lead_line(lead_url)}"
     )

@@ -88,3 +88,14 @@ volume: in the hand review, nothing published was wrong, the one discarded item 
 error, and two items Haiku sent to review were judged correct. Revisit if the review queue grows
 faster than it can be cleared; the hybrid rule and a less strict Haiku prompt are the measured
 alternatives.
+
+## Follow-ups (2026-10-02)
+
+- **Jev criteria `astro-1`:** astronomy-specific verdict definitions, re-checked with Jev only on this
+  run (`python -m evals rejev RUN_DIR --criteria astro-1`, $0.022 on TypeSafe). Published / review /
+  discarded went from 22 / 20 / 9 to 23 / 19 / 9; planted faults handled stayed 38/40, and Jev
+  flagged 30 of 40 on its own (was 28). It no longer doubted the Great Red Spot "since 1831" error,
+  which Haiku still catches. Adopted as the default.
+- **Verifier misquote goes to review:** Haiku's own supporting quote not being on a cited page used
+  to discard the item. Re-scored, it caught 0 of 40 planted faults and discarded 5 of 51 items
+  (23 / 19 / 9 becomes 23 / 24 / 4); now it sends the item to review.

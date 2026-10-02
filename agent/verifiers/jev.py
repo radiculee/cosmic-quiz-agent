@@ -17,15 +17,41 @@ from typing import Protocol
 from pydantic import BaseModel, ConfigDict, ValidationError
 from typesafe_sdk import Choice, ChoiceAnswer, TypeSafeClient, TypeSafeError
 
-from agent.config import Settings
+from agent.config import JevCriteria, Settings
 from agent.gate import jev_verdict
 from agent.llm import JsonObject
 from agent.schemas import Answer, ClaimKind, JevCheck, JevReport, JevVerdict, QuizItem
 
-CRITERIA: dict[str, str] = {
-    "supports": "The sources state the claim or directly imply it, including any numbers in it.",
-    "contradicts": "The sources state something that conflicts with the claim.",
-    "says_nothing": "The sources do not address the claim.",
+# What each verdict means, sent to Jev with every claim. Each wording is versioned and the version
+# is stored with every result, because the confidence threshold was measured against one wording.
+CRITERIA: dict[JevCriteria, dict[str, str]] = {
+    # Measured in the Session 3 eval (2026-10-01).
+    "generic-1": {
+        "supports": (
+            "The sources state the claim or directly imply it, including any numbers in it."
+        ),
+        "contradicts": "The sources state something that conflicts with the claim.",
+        "says_nothing": "The sources do not address the claim.",
+    },
+    # Astronomy-specific: what counts as the same quantity, object or classification.
+    "astro-1": {
+        "supports": (
+            "The sources state the claim or directly imply it. Every quantity, unit, date, "
+            "object and classification in the claim matches the sources. The same quantity in "
+            "an equivalent unit or notation counts (1 AU and about 150 million km; 10^30 and "
+            "1e30), and an approximate value counts only if it is a fair rounding of the value "
+            "the sources give."
+        ),
+        "contradicts": (
+            "The sources state something that conflicts with the claim: a different value, "
+            "order of magnitude, unit, date or object, or a different classification (for "
+            "example a dwarf planet called a planet, or a moon called a planet)."
+        ),
+        "says_nothing": (
+            "The sources do not address the claim, or discuss the same object without settling "
+            "this particular point."
+        ),
+    },
 }
 _INSTRUCTIONS = "How do the sources relate to this claim? Claim: {claim}"
 _SENTENCE_END = re.compile(r"(?<=[.!?])\s+(?=[A-Z0-9\"'(])")
@@ -53,18 +79,29 @@ class ClaimResults(BaseModel):
 
 
 class JevClient(Protocol):
+    @property
+    def criteria(self) -> JevCriteria:
+        """The criteria wording this client sends, recorded with every result."""
+        ...
+
     def check_claims(self, state: JsonObject, claims: Mapping[str, str]) -> ClaimResults: ...
 
 
 class TypeSafeJev:
     """Jev via the official `typesafe-sdk`, which reads TYPESAFE_API_KEY from the environment."""
 
-    def __init__(self, model: str, timeout_seconds: float) -> None:
+    def __init__(self, model: str, timeout_seconds: float, criteria: JevCriteria) -> None:
         self._client = TypeSafeClient(model=model, timeout=timeout_seconds)
+        self._criteria_name: JevCriteria = criteria
+        self._criteria = CRITERIA[criteria]
+
+    @property
+    def criteria(self) -> JevCriteria:
+        return self._criteria_name
 
     def check_claims(self, state: JsonObject, claims: Mapping[str, str]) -> ClaimResults:
         questions = {
-            key: Choice(instructions=_INSTRUCTIONS.format(claim=claim), criteria=CRITERIA)
+            key: Choice(instructions=_INSTRUCTIONS.format(claim=claim), criteria=self._criteria)
             for key, claim in claims.items()
         }
         try:
@@ -123,6 +160,8 @@ def build_claims(answer: Answer) -> dict[str, tuple[ClaimKind, str]]:
 def verify_with_jev(
     answer: Answer, pages: Mapping[str, str], jev: JevClient, settings: Settings
 ) -> JevReport:
+    """Check every claim of an answer against its cited pages, recording the criteria wording
+    the client actually sent."""
     started = time.monotonic()
     claims = build_claims(answer)
     state: JsonObject = {"sources": [{"url": url, "text": text} for url, text in pages.items()]}
@@ -133,6 +172,7 @@ def verify_with_jev(
             verdict="error",
             reasons=(str(error),),
             model=settings.jev_model,
+            criteria=jev.criteria,
             threshold=settings.jev_threshold,
             seconds=round(time.monotonic() - started, 2),
         )
@@ -152,6 +192,7 @@ def verify_with_jev(
         verdict=verdict,
         reasons=reasons,
         model=results.model,
+        criteria=jev.criteria,
         threshold=settings.jev_threshold,
         checks=checks,
         input_tokens=results.input_tokens,

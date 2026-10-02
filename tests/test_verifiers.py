@@ -7,8 +7,8 @@ from typing import Any
 
 import pytest
 
-from agent.config import Settings
-from agent.gate import decide, haiku_verdict, jev_verdict
+from agent.config import JevCriteria, Settings
+from agent.gate import decide, haiku_verdict, jev_verdict, rescore
 from agent.llm import JsonObject, LLMError
 from agent.schemas import (
     Citation,
@@ -72,6 +72,8 @@ def haiku_reply(**overrides: object) -> dict[str, Any]:
 class FakeJev:
     """Answers every claim with the probabilities chosen for its key (default: clear support)."""
 
+    criteria: JevCriteria = "astro-1"
+
     def __init__(self, overrides: Mapping[str, dict[str, float]] | None = None) -> None:
         self.overrides = dict(overrides or {})
         self.states: list[JsonObject] = []
@@ -98,6 +100,8 @@ class FakeJev:
 
 
 class BrokenJev:
+    criteria: JevCriteria = "astro-1"
+
     def check_claims(self, state: JsonObject, claims: Mapping[str, str]) -> ClaimResults:
         raise JevError("TypeSafeRateLimitError: slow down")
 
@@ -127,7 +131,7 @@ def test_haiku_pass_matches_distractors_by_text(settings: Settings) -> None:
     ("overrides", "verdict"),
     [
         ({"answer": {"verdict": "not_found", "quote": "", "source_url": URL}}, "fail"),
-        # The verifier claims support but its quote is not on the page: it may have invented it.
+        # The verifier claims support but its quote is not on the page: a person decides.
         (
             {
                 "answer": {
@@ -136,7 +140,7 @@ def test_haiku_pass_matches_distractors_by_text(settings: Settings) -> None:
                     "source_url": URL,
                 }
             },
-            "fail",
+            "borderline",
         ),
         (
             {
@@ -331,3 +335,56 @@ def test_verify_without_jev_goes_to_review(settings: Settings) -> None:
     assert result.jev is None
     assert decide(result, "all_must_pass") == "review"
     assert decide(result, "haiku_only") == "published"
+
+
+class CrashingJev:
+    criteria: JevCriteria = "astro-1"
+
+    def check_claims(self, state: JsonObject, claims: Mapping[str, str]) -> ClaimResults:
+        raise RuntimeError("unexpected SDK bug")
+
+
+def test_verify_turns_unexpected_failures_into_error_verdicts(settings: Settings) -> None:
+    llm = FakeLLM(json_replies=[RuntimeError("boom")])
+
+    verification = verify(ITEM, CODE_PASS, PAGES, llm, CrashingJev(), settings)
+
+    assert verification.haiku is not None and verification.haiku.verdict == "error"
+    assert "crashed" in verification.haiku.reasons[0]
+    assert verification.jev is not None and verification.jev.verdict == "error"
+    assert verification.jev.criteria == "astro-1"
+    assert decide(verification) == "review"
+
+
+def test_verifier_is_skipped_when_its_call_could_cost_too_much(settings: Settings) -> None:
+    tight = settings.model_copy(update={"max_verifier_cost_usd": 0.001})
+    llm = FakeLLM()  # a model call would fail the test
+
+    report = verify_with_haiku(ITEM, PAGES, llm, tight)
+
+    assert report.verdict == "error" and report.reasons[0].startswith("verifier skipped")
+
+
+def test_jev_report_records_the_criteria_the_client_sent(settings: Settings) -> None:
+    generic = settings.model_copy(update={"jev_criteria": "generic-1"})
+
+    report = verify_with_jev(ITEM, PAGES, FakeJev(), generic)
+
+    assert report.criteria == "astro-1"
+
+
+def test_rescore_applies_the_current_rules_to_stored_verdicts() -> None:
+    # Stored under the old rule: a verifier quote not on the page failed the item.
+    stored = HaikuReport(
+        verdict="fail",
+        reasons=("verifier's supporting quote is not on a cited page",),
+        answer_verdict="supported",
+        answer_quote="Not on the page.",
+        answer_quote_verbatim=False,
+    )
+    verification = Verification(code=CODE_PASS, haiku=stored, jev=JevReport(verdict="pass"))
+
+    rescored = rescore(verification)
+
+    assert rescored.haiku is not None and rescored.haiku.verdict == "borderline"
+    assert decide(verification) == "discarded" and decide(rescored) == "review"

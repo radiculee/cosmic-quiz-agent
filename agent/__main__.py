@@ -11,13 +11,13 @@ from __future__ import annotations
 
 import argparse
 import os
-import re
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import get_args
 
 from agent.config import Settings, load_settings
+from agent.console import slugify, use_utf8_output
 from agent.gate import DEFAULT_RULE, decide
 from agent.llm import AnthropicProvider
 from agent.loop import run_learn, run_quiz
@@ -109,7 +109,7 @@ def _print_totals(record: ItemRecord) -> None:
 
 def _save(record: ItemRecord, runs_dir: str) -> Path:
     run = record.run
-    slug = re.sub(r"[^a-z0-9]+", "-", run.topic.lower()).strip("-")[:40] or "topic"
+    slug = slugify(run.topic)
     stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
     path = Path(runs_dir) / f"{stamp}-{run.mode}-{run.difficulty}-{slug}.json"
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -121,13 +121,11 @@ def make_jev(settings: Settings) -> JevClient | None:
     """A Jev client if a TypeSafe key is configured, otherwise None (layer 3 is skipped)."""
     if not os.environ.get("TYPESAFE_API_KEY", "").strip():
         return None
-    return TypeSafeJev(settings.jev_model, settings.jev_timeout_seconds)
+    return TypeSafeJev(settings.jev_model, settings.jev_timeout_seconds, settings.jev_criteria)
 
 
 def main(argv: list[str] | None = None) -> int:
-    # Page text can contain characters the Windows console code page cannot encode.
-    if hasattr(sys.stdout, "reconfigure"):
-        sys.stdout.reconfigure(encoding="utf-8")
+    use_utf8_output()
 
     parser = argparse.ArgumentParser(prog="python -m agent", description=__doc__.splitlines()[0])
     commands = parser.add_subparsers(dest="command", required=True)

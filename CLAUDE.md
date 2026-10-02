@@ -53,7 +53,7 @@ Vercel Python function (`api/research.py`), behind guardrails, with steps stream
    - A separate verifier pass must quote a source passage that supports the correct answer and confirm each distractor is wrong.
    - Pass: `published`. Borderline: `review`. Fail: discard and log.
 4. **Guardrails on on-demand runs:** an on-topic check, a per-IP limit (salted-hash IPs only, for GDPR), a daily global cap in runs and dollars that stays under the $10 limit, and fallback to the bank.
-5. **Secrets** live only in env vars (Vercel, GitHub Actions secrets, a local `.env` that is never committed). The Supabase service-role key never reaches the browser.
+5. **Secrets** live only in env vars (Vercel, GitHub Actions secrets, a local `.env` that is never committed). The Supabase secret key (`SUPABASE_SECRET_KEY`, the new name for the service-role key) never reaches the browser; only the publishable key may.
 
 ---
 

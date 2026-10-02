@@ -31,7 +31,7 @@ def pct(part: int, whole: int) -> str:
     return f"{100 * part / whole:.0f}% ({part}/{whole})" if whole else "n/a"
 
 
-def _table(headers: Sequence[str], rows: Sequence[Sequence[object]]) -> list[str]:
+def table(headers: Sequence[str], rows: Sequence[Sequence[object]]) -> list[str]:
     lines = ["| " + " | ".join(headers) + " |", "|" + "---|" * len(headers)]
     lines += ["| " + " | ".join(str(cell) for cell in row) + " |" for row in rows]
     return [*lines, ""]
@@ -80,7 +80,7 @@ def generation_section(items: Sequence[ItemRecord]) -> tuple[list[str], dict[str
             ]
         )
         summary[label] = {"items": len(group), "layer1_pass": len(passed)}
-    lines += _table(
+    lines += table(
         [
             "Difficulty",
             "Items",
@@ -121,7 +121,7 @@ def verifier_section(items: Sequence[ItemRecord]) -> tuple[list[str], dict[str, 
     haiku_counts = Counter(_haiku(v) for _, v in verified)
     jev_counts = Counter(_jev(v) for _, v in verified)
     verdicts: tuple[LayerVerdict, ...] = ("pass", "borderline", "fail", "error")
-    lines += _table(
+    lines += table(
         ["Layer", *verdicts],
         [
             ["Haiku (layer 2)", *(haiku_counts[k] for k in verdicts)],
@@ -149,7 +149,7 @@ def verifier_section(items: Sequence[ItemRecord]) -> tuple[list[str], dict[str, 
         rule_rows.append(
             [rule, pct(counts["published"], len(verified)), counts["review"], counts["discarded"]]
         )
-    lines += _table(["Rule", "Published", "Review", "Discarded"], rule_rows)
+    lines += table(["Rule", "Published", "Review", "Discarded"], rule_rows)
 
     reasons: Counter[str] = Counter()
     for _, v in verified:
@@ -185,7 +185,7 @@ def _layer1_caught(result: SeededResult) -> bool:
     return not code.passed
 
 
-def _handled(result: SeededResult, rule: GateRule) -> bool:
+def fault_handled(result: SeededResult, rule: GateRule) -> bool:
     """The fault cannot reach a player: the item is not published, or (for a fake quote) the bad
     citation is dropped by layer 1 and the item is published on its remaining valid citations."""
     if result.seeded.fault == "fake_quote" and result.verification.code.citations.misquoted:
@@ -211,7 +211,7 @@ def seeded_section(results: Sequence[SeededResult]) -> tuple[list[str], dict[str
         layer1 = sum(1 for r in group if _layer1_caught(r))
         haiku = sum(1 for r in group if _haiku(r.verification) != "pass")
         jev = sum(1 for r in group if _jev(r.verification) != "pass")
-        by_rule = {rule: sum(1 for r in group if _handled(r, rule)) for rule in GATE_RULES}
+        by_rule = {rule: sum(1 for r in group if fault_handled(r, rule)) for rule in GATE_RULES}
         rows.append(
             [
                 fault,
@@ -223,7 +223,7 @@ def seeded_section(results: Sequence[SeededResult]) -> tuple[list[str], dict[str
             ]
         )
         summary[fault] = {"n": n, "layer1": layer1, "haiku": haiku, "jev": jev, "by_rule": by_rule}
-    lines += _table(
+    lines += table(
         ["Fault", "Items", "Layer 1", "Haiku", "Jev", *(f"Handled: {r}" for r in GATE_RULES)],
         rows,
     )
@@ -235,7 +235,7 @@ def seeded_section(results: Sequence[SeededResult]) -> tuple[list[str], dict[str
         "valid citations).",
         "",
     ]
-    missed = [r for r in results if not _handled(r, "all_must_pass")]
+    missed = [r for r in results if not fault_handled(r, "all_must_pass")]
     if missed:
         lines.append("Planted faults that would still be published under all_must_pass:")
         lines += [f"- {r.seeded.id} ({r.seeded.topic}): {r.seeded.description}" for r in missed]
@@ -285,7 +285,7 @@ def threshold_section(
                 entry[f"{rule}_caught"] = caught
             rows.append(row)
             summary[f"{threshold}|flag={flag}"] = entry
-    lines += _table(
+    lines += table(
         [
             "Threshold",
             "Flag unsupported",
@@ -323,7 +323,7 @@ def calibration_section(items: Sequence[ItemRecord]) -> tuple[list[str], dict[st
         label = f"{low:.2f}-{min(high, 1.0):.2f}"
         rows.append([label, len(band), pct(sum(band), len(band))])
         summary[label] = {"n": len(band), "right": sum(band)}
-    lines += _table(["Jev confidence", "Claims", "Verdict right"], rows)
+    lines += table(["Jev confidence", "Claims", "Verdict right"], rows)
     lines += [
         "Well calibrated means the 'right' rate in each band roughly matches its confidence.",
         "",
@@ -349,7 +349,7 @@ def cost_section(
     lines = [
         "## 6. Cost and speed",
         "",
-        *_table(
+        *table(
             ["Part", "Total", "Per item", "Average time"],
             [
                 [

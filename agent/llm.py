@@ -25,6 +25,16 @@ from agent.config import ModelPrice
 
 JsonObject = dict[str, Any]
 
+# Tokens the API adds around messages, tool definitions and the tool-use instructions, on top of
+# the text we send. Generous on purpose: it only feeds an upper bound.
+FORMAT_ALLOWANCE_TOKENS = 1500
+
+
+def prompt_tokens_bound(*texts: str) -> int:
+    """An upper bound on the tokens these texts become. Every token covers at least one byte
+    of UTF-8 text, so the byte count can never be lower than the token count."""
+    return sum(len(text.encode("utf-8")) for text in texts) + FORMAT_ALLOWANCE_TOKENS
+
 
 class ToolSpec(BaseModel):
     """A tool the model may call, described by a JSON schema for its arguments."""

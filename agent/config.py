@@ -7,6 +7,7 @@ budgets and the domain allow-list are reviewed in code so changes show up in a d
 from __future__ import annotations
 
 import os
+from typing import Literal
 
 from dotenv import load_dotenv
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -22,6 +23,12 @@ class ModelPrice(BaseModel):
     cache_write_per_mtok: float
     cache_read_per_mtok: float
 
+    def max_call_cost_usd(self, prompt_tokens: int, max_output_tokens: int) -> float:
+        """The most one call can cost: every prompt token at the dearest input rate (a cache
+        write) and the full output allowance."""
+        input_rate = max(self.input_per_mtok, self.cache_write_per_mtok, self.cache_read_per_mtok)
+        return (prompt_tokens * input_rate + max_output_tokens * self.output_per_mtok) / 1_000_000
+
 
 # Anthropic first-party prices. Cache writes use the 5-minute TTL rate (1.25x input).
 PRICES: dict[str, ModelPrice] = {
@@ -34,6 +41,12 @@ PRICES: dict[str, ModelPrice] = {
 }
 
 DEFAULT_MODEL = "claude-haiku-4-5"
+
+# Versions of the verdict definitions sent to Jev (the wording is in agent/verifiers/jev.py).
+JevCriteria = Literal["generic-1", "astro-1"]
+
+# Measured in Session 3: one Jev request per item costs about $0.0002 to $0.0003 on TypeSafe.
+JEV_COST_PER_ITEM = 0.0003
 
 
 def _default_path_prefixes() -> dict[str, tuple[str, ...]]:
@@ -52,6 +65,10 @@ class Settings(BaseModel):
     max_steps: int = Field(default=12, gt=0)
     max_seconds: float = Field(default=120.0, gt=0)
     max_input_tokens: int = Field(default=200_000, gt=0)
+    # Before every model call the loop checks that the spend so far plus an upper bound on that
+    # call's cost stays within this. Set from a replay of the 180 bank-build runs under the
+    # bound (2026-10-02): none would have been stopped at $0.10.
+    max_run_cost_usd: float = Field(default=0.10, gt=0)
 
     # Tool behaviour.
     max_page_chars: int = Field(default=12_000, gt=0)  # about 3,000 tokens
@@ -88,8 +105,15 @@ class Settings(BaseModel):
 
     # Verifiers (layers 2 and 3 of the publish gate).
     verifier_max_output_tokens: int = Field(default=2048, gt=0)
+    # The Haiku verifier call is skipped (the item goes to review) if its cost bound exceeds this.
+    # The highest bound in the bank build was $0.061.
+    max_verifier_cost_usd: float = Field(default=0.07, gt=0)
     # Pinned so thresholds and the confidence players see stay stable across Jev releases.
     jev_model: str = "jev-1.13.0"
+    # Chosen 2026-10-02 after a Jev-only re-check of the Session 3 eval (evals rejev): at the same
+    # threshold, planted faults handled stayed 38/40 and Jev flagged two more of them itself;
+    # generated items went from 22/20/9 to 23/19/9 published/review/discarded.
+    jev_criteria: JevCriteria = "astro-1"
     jev_input_per_mtok: float = 0.042  # TypeSafe price; output tokens are free
     jev_threshold: float = Field(default=0.8, gt=0, lt=1)
     jev_timeout_seconds: float = Field(default=30.0, gt=0)

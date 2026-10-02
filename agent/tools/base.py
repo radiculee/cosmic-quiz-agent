@@ -26,16 +26,20 @@ class ToolContext:
     """Per-run state shared by tools.
 
     `fetched` is the source of truth for the citation rule: normalized URL to the text returned
-    to the model. Only tools that read a page's content add to it.
+    to the model. Only tools that read a page's content add to it. A redirected page is recorded
+    under both its requested and final URL, so `reads` keeps one URL (the last) per page read.
     """
 
     settings: Settings
     http: httpx2.Client
     fetched: dict[str, str] = field(default_factory=dict)
+    reads: list[str] = field(default_factory=list)
 
     def record_fetch(self, text: str, *urls: str) -> None:
         for url in urls:
             self.fetched[normalize_url(url)] = text
+        if urls:
+            self.reads.append(normalize_url(urls[-1]))
 
     def is_allowed(self, url: str) -> bool:
         parts = urlsplit(url)

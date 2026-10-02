@@ -10,7 +10,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 from typing import Literal
 
-from agent.schemas import HaikuReport, JevCheck, LayerVerdict, Status, Verification
+from agent.schemas import HaikuReport, ItemRecord, JevCheck, LayerVerdict, Status, Verification
 
 GateRule = Literal["all_must_pass", "jev_escalates", "haiku_only", "jev_only"]
 
@@ -31,7 +31,10 @@ def haiku_verdict(report: HaikuReport, *, is_quiz: bool) -> tuple[LayerVerdict, 
         if report.answer_verdict != "supported":
             fail.append(f"correct answer is {report.answer_verdict or 'not judged'}")
         elif not report.answer_quote_verbatim:
-            fail.append("verifier's supporting quote is not on a cited page")
+            # The verifier's own evidence is not word for word on a page. That is the verifier's
+            # mistake, not proof the item is wrong, so a person decides (changed 2026-10-02: in
+            # the Session 3 eval it caught no planted fault and discarded 5 items).
+            doubt.append("verifier's supporting quote is not on a cited page")
         for judged in report.distractors:
             if judged.verdict == "also_correct":
                 fail.append(f"distractor may also be correct: {judged.option}")
@@ -135,3 +138,32 @@ def decide(
     if rule == "haiku_only":
         return _combine(haiku)
     return _combine(jev)
+
+
+def rescore(verification: Verification) -> Verification:
+    """The same results with each layer's verdict recomputed under the current rules.
+
+    Stored records keep the verdicts of the rules they were decided under. Re-scoring them makes
+    old and new results comparable after a rule changes (for example the 2026-10-02 change that
+    sends a verifier misquote to review). A Haiku report is a quiz report when it judged an
+    answer; LEARN reports never do.
+    """
+    haiku = verification.haiku
+    if haiku is not None and haiku.verdict != "error":
+        verdict, reasons = haiku_verdict(haiku, is_quiz=haiku.answer_verdict is not None)
+        haiku = haiku.model_copy(update={"verdict": verdict, "reasons": reasons})
+    jev = verification.jev
+    if jev is not None and jev.verdict != "error":
+        jev_layer, jev_reasons = jev_verdict(jev.checks, jev.threshold)
+        jev = jev.model_copy(update={"verdict": jev_layer, "reasons": jev_reasons})
+    return verification.model_copy(update={"haiku": haiku, "jev": jev})
+
+
+def rescore_record(record: ItemRecord, rule: GateRule = DEFAULT_RULE) -> ItemRecord:
+    """A stored record with its verdicts and publish status under the current rules."""
+    if record.verification is None:
+        return record
+    verification = rescore(record.verification)
+    return record.model_copy(
+        update={"verification": verification, "status": decide(verification, rule), "rule": rule}
+    )

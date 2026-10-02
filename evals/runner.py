@@ -8,7 +8,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import UTC, datetime
 from pathlib import Path
 
-from agent.config import Settings
+from agent.config import JEV_COST_PER_ITEM, Settings
 from agent.gate import DEFAULT_RULE, decide
 from agent.llm import LLMProvider
 from agent.loop import run_quiz
@@ -20,7 +20,6 @@ from evals.store import ITEMS_FILE, RESULTS_DIR, JsonLinesWriter
 # about $0.006. The upper bound allows for longer runs and one correction round.
 ITEM_COST_LOW = 0.025
 ITEM_COST_HIGH = 0.035
-JEV_COST_PER_ITEM = 0.0003
 
 
 def estimate(items: int) -> str:

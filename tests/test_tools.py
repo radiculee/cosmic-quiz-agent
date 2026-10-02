@@ -341,3 +341,11 @@ def test_arxiv_latex_becomes_plain_text() -> None:
         f"a diameter of 51.8 {plus_minus} 2.3 {mu}as (68% credible), "
         f"{tilde_op} 3 Gyr, Fig. 2, 2{times}10^3"
     )
+
+
+def test_a_redirected_page_is_one_read_under_two_urls(ctx: ToolContext) -> None:
+    ctx.record_fetch("text", "https://nasa.gov/a", "https://www.nasa.gov/a/")
+    ctx.record_fetch("other", "https://images.nasa.gov/details/1")
+
+    assert len(ctx.fetched) == 3
+    assert len(ctx.reads) == 2 and ctx.reads[0].startswith("https://www.nasa.gov/a")

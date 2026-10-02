@@ -4,6 +4,7 @@ python -m evals run [--quick] [--workers N] [--yes]
 python -m evals seed RUN_DIR [--yes]
 python -m evals verify-seeded RUN_DIR [--workers N] [--yes]
 python -m evals report RUN_DIR
+python -m evals rejev RUN_DIR --criteria astro-1 [--workers N] [--yes]
 """
 
 from __future__ import annotations
@@ -12,13 +13,17 @@ import argparse
 import sys
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from typing import get_args
 
 from agent.__main__ import make_jev
-from agent.config import Settings, load_settings
+from agent.config import JEV_COST_PER_ITEM, JevCriteria, Settings, load_settings
+from agent.console import confirm, use_utf8_output
+from agent.gate import rescore, rescore_record
 from agent.llm import AnthropicProvider, LLMProvider
 from agent.schemas import ItemRecord
 from agent.verifiers import JevClient, verify
 from agent.verify import code_check
+from evals import rejev
 from evals.report import write_report
 from evals.runner import estimate, new_run_dir, run_eval
 from evals.seeding import FAULT_TYPES, PER_FAULT, SeededItem, SeededResult, build_seeded_set
@@ -32,17 +37,6 @@ VERIFY_SEEDED_ESTIMATE = (
     f"{len(FAULT_TYPES) * PER_FAULT} items: about $0.20 to $0.35 on Anthropic (Haiku verifier) "
     "and under $0.02 on TypeSafe (Jev)"
 )
-
-
-def confirm(message: str, assume_yes: bool) -> bool:
-    print(f"Estimated cost: {message}")
-    if assume_yes:
-        return True
-    try:
-        return input("Continue? [y/N] ").strip().lower() in ("y", "yes")
-    except EOFError:  # no terminal to answer from: treat as no
-        print("\nNo answer; stopping. Pass --yes to approve the cost in advance.")
-        return False
 
 
 def _clients(settings: Settings) -> tuple[LLMProvider, JevClient | None]:
@@ -132,16 +126,92 @@ def command_verify_seeded(args: argparse.Namespace, settings: Settings) -> int:
 
 def command_report(args: argparse.Namespace, settings: Settings) -> int:
     run_dir = Path(args.run_dir)
-    items = list(read_lines(run_dir / ITEMS_FILE, ItemRecord))
+    items = [rescore_record(r) for r in read_lines(run_dir / ITEMS_FILE, ItemRecord)]
     results_path = run_dir / SEEDED_RESULTS_FILE
-    results = list(read_lines(results_path, SeededResult)) if results_path.exists() else []
+    results = (
+        [rescore_seeded(r) for r in read_lines(results_path, SeededResult)]
+        if results_path.exists()
+        else []
+    )
     print(f"Report: {write_report(run_dir, items, results)}")
     return 0
 
 
+def command_rejev(args: argparse.Namespace, settings: Settings) -> int:
+    run_dir = Path(args.run_dir)
+    criteria: JevCriteria = args.criteria
+    # Stored results are re-scored under the current rules, so only the criteria change differs.
+    items = [rescore_record(r) for r in read_lines(run_dir / ITEMS_FILE, ItemRecord)]
+    results_path = run_dir / SEEDED_RESULTS_FILE
+    seeded = (
+        [rescore_seeded(r) for r in read_lines(results_path, SeededResult)]
+        if results_path.exists()
+        else []
+    )
+    verified = [r for r in items if r.verification is not None]
+    total = len(verified) + len(seeded)
+    estimate = (
+        f"{total} Jev requests: under ${total * JEV_COST_PER_ITEM:.3f} on TypeSafe, "
+        "nothing on Anthropic"
+    )
+    if not confirm(estimate, args.yes):
+        return 1
+    recheck_settings = settings.model_copy(update={"jev_criteria": criteria})
+    jev = make_jev(recheck_settings)
+    if jev is None:
+        print("TYPESAFE_API_KEY is not set; nothing to re-check.")
+        return 1
+
+    items_writer = JsonLinesWriter(run_dir / rejev.items_file(criteria))
+    items_writer.path.unlink(missing_ok=True)
+    seeded_writer = JsonLinesWriter(run_dir / rejev.seeded_file(criteria))
+    seeded_writer.path.unlink(missing_ok=True)
+
+    stored = {(r.run.topic, r.run.difficulty): r for r in verified}
+
+    def item_done(record: ItemRecord) -> None:
+        items_writer.write(record)
+        old = stored[(record.run.topic, record.run.difficulty)]
+        print(
+            f"  {record.run.difficulty:<6} {record.run.topic[:40]:<40} "
+            f"jev {_jev_verdict(old)} -> {_jev_verdict(record)}",
+            flush=True,
+        )
+
+    def seeded_done(result: SeededResult) -> None:
+        seeded_writer.write(result)
+        jev_report = result.verification.jev
+        print(f"  {result.seeded.id:<22} jev {jev_report.verdict if jev_report else '-'}")
+
+    print(f"Re-checking {len(verified)} generated items with Jev ({criteria})...")
+    new_items = rejev.recheck_all(
+        verified, lambda r: rejev.recheck_item(r, jev, recheck_settings), args.workers, item_done
+    )
+    print(f"Re-checking {len(seeded)} planted-fault items...")
+    new_seeded = rejev.recheck_all(
+        seeded,
+        lambda r: rejev.recheck_seeded(r, jev, recheck_settings),
+        args.workers,
+        seeded_done,
+    )
+    path = rejev.write_comparison(
+        run_dir, criteria, rejev.stored_criteria(verified), verified, new_items, seeded, new_seeded
+    )
+    print(f"Comparison: {path}")
+    return 0
+
+
+def rescore_seeded(result: SeededResult) -> SeededResult:
+    return result.model_copy(update={"verification": rescore(result.verification)})
+
+
+def _jev_verdict(record: ItemRecord) -> str:
+    v = record.verification
+    return v.jev.verdict if v is not None and v.jev is not None else "-"
+
+
 def main(argv: list[str] | None = None) -> int:
-    if hasattr(sys.stdout, "reconfigure"):
-        sys.stdout.reconfigure(encoding="utf-8")
+    use_utf8_output()
     parser = argparse.ArgumentParser(prog="python -m evals", description=__doc__.splitlines()[0])
     commands = parser.add_subparsers(dest="command", required=True)
 
@@ -162,6 +232,14 @@ def main(argv: list[str] | None = None) -> int:
     report = commands.add_parser("report", help="Rebuild the report from stored results (free).")
     report.add_argument("run_dir")
 
+    recheck = commands.add_parser(
+        "rejev", help="Re-run only Jev on stored items with another criteria wording (TypeSafe)."
+    )
+    recheck.add_argument("run_dir")
+    recheck.add_argument("--criteria", choices=get_args(JevCriteria), required=True)
+    recheck.add_argument("--workers", type=int, default=4)
+    recheck.add_argument("--yes", action="store_true")
+
     args = parser.parse_args(argv)
     settings = load_settings()
     handlers = {
@@ -169,6 +247,7 @@ def main(argv: list[str] | None = None) -> int:
         "seed": command_seed,
         "verify-seeded": command_verify_seeded,
         "report": command_report,
+        "rejev": command_rejev,
     }
     return handlers[args.command](args, settings)
 

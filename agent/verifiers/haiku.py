@@ -1,12 +1,13 @@
 """Layer 2: a separate Haiku pass, with its own prompt, that checks an answer against its sources.
 
 The verifier must quote the passage that supports the correct answer; the quote is then checked
-against the page in code, so a verifier that invents support is caught. The layer verdict is
-derived in `agent/gate.py` from the structured report, not taken from the model.
+against the page in code, so support the verifier cannot show sends the item to review. The layer
+verdict is derived in `agent/gate.py` from the structured report, not taken from the model.
 """
 
 from __future__ import annotations
 
+import json
 import time
 from collections.abc import Mapping
 
@@ -14,7 +15,7 @@ from pydantic import BaseModel, ConfigDict, ValidationError
 
 from agent.config import Settings
 from agent.gate import haiku_verdict
-from agent.llm import JsonObject, LLMError, LLMProvider
+from agent.llm import JsonObject, LLMError, LLMProvider, prompt_tokens_bound
 from agent.schemas import (
     Answer,
     DistractorJudgement,
@@ -168,12 +169,19 @@ def verify_with_haiku(
 ) -> HaikuReport:
     started = time.monotonic()
     is_quiz = isinstance(answer, QuizItem)
+    prompt = build_prompt(answer, pages)
+    schema = QUIZ_SCHEMA if is_quiz else LEARN_SCHEMA
+    bound = settings.price.max_call_cost_usd(
+        prompt_tokens_bound(SYSTEM_PROMPT, prompt, json.dumps(schema)),
+        settings.verifier_max_output_tokens,
+    )
+    if bound > settings.max_verifier_cost_usd:
+        limit = settings.max_verifier_cost_usd
+        reason = f"verifier skipped: the call could cost up to ${bound:.4f}, over ${limit:.2f}"
+        return HaikuReport(verdict="error", reasons=(reason,))
     try:
         data, usage = llm.complete_json(
-            SYSTEM_PROMPT,
-            build_prompt(answer, pages),
-            QUIZ_SCHEMA if is_quiz else LEARN_SCHEMA,
-            settings.verifier_max_output_tokens,
+            SYSTEM_PROMPT, prompt, schema, settings.verifier_max_output_tokens
         )
     except LLMError as error:
         return HaikuReport(

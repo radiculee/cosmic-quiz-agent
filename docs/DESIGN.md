@@ -20,6 +20,9 @@ runs on a schedule with no human trigger), and code that reads well to recruiter
 6. **Citation rule:** a source may only be a URL fetched in that run, enforced in code. Any other URL is dropped.
 7. **Architecture:**
    - The daily **Curator** scans sources, picks notable topics, researches them, writes MCQs at each difficulty, verifies them, publishes to the bank, and retires stale items.
+   - The bank is filled up front, then grown daily (decided 2026-10-02). `python -m curator build` researches 30 approved evergreen topics (`curator/topics.py`), each in LEARN and QUIZ at all three difficulties, under a $6 cap; it can be re-run and skips jobs already done. `python -m curator daily` then adds 1 news topic a day from the NASA and ESA feeds under a $0.40 cap.
+   - LEARN is also served from the bank: each topic has a verified explanation per difficulty, so players can browse topics to explore. A typed new topic still runs live (decision 9).
+   - Retirement: items from news topics retire 90 days after the topic is added; evergreen topics never retire. Retired items keep their rows (status `retired`) so history and analytics survive.
    - The UI serves questions from the bank.
    - A typed custom topic runs the same agent core on demand.
    - v2 newsletter: the same Curator with an email output.
@@ -60,15 +63,17 @@ runs on a schedule with no human trigger), and code that reads well to recruiter
     - **Layer 3, Jev second opinion:** for each claim and each distractor with its quoted passage, TypeSafe Jev answers supports / contradicts / says nothing, with probabilities and a confidence. Jev is pinned to a fixed version (`jev-1.13.0`) so thresholds and the scores players see stay stable. Jev cannot check numbers reliably (it accepted the spike's 10^-27 vs 10^-30 error at 0.86), which is why layer 1 checks numbers.
     - How layers 2 and 3 combine, and the thresholds, are set in Session 3 from the eval results. Pass: auto-publish. Borderline (the verifiers disagree, or Jev's confidence is below threshold): `review` status. Fail: discard and log.
     - Every layer's result is stored with the item, including Jev's confidence, which the UI shows (decision 5).
+    - Jev's verdict definitions are astronomy-specific (`astro-1`, chosen 2026-10-02): the same quantity in an equivalent unit or notation counts as support; a different value, order of magnitude, object or classification counts as a contradiction. A Jev-only re-check of the Session 3 eval at the same threshold kept planted faults handled at 38/40, with two more flagged by Jev itself; generated items went from 22/20/9 to 23/19/9 published/review/discarded. The wording's version is stored with every Jev result.
     - Decided 2026-10-01 from the Session 3 eval and Vedant's hand review: **all_must_pass** with a Jev threshold of **0.8**. Any layer failing discards; any doubt goes to review. Measured: 38 of 40 planted faults handled, 43% of generated items published directly. See `docs/EVALS.md`.
+    - Amended 2026-10-02: when the Haiku verifier's own supporting quote is not word for word on a cited page, the item goes to `review` instead of being discarded. That is the verifier's mistake, not evidence against the item: re-scored on the Session 3 eval it caught 0 of 40 planted faults and discarded 5 items, which now go to review; none is newly published and 38 of 40 planted faults are still handled.
     - A Report button on each question; 2 reports hide it.
 
 ## Defaults chosen without asking (change if wanted)
-- **Review queue:** Vedant approves borderline items by changing `status` in the Supabase table editor. No admin UI in v1.
+- **Review queue:** Vedant decides borderline items with `python -m curator review`, which shows each item with its question, answer, explanation, why it is in review, every cited source with its quote, and Jev's source check (changed 2026-10-02: the table editor does not show an item's sources, and nothing is approved without seeing them). `items.reviewed_at` records when each item left review, so the verifiers' doubts can be compared with his decisions. No admin UI in v1.
 - **Player state:** no accounts. Streak and score are kept in `localStorage`.
 - **Model selection:** a small eval set (about 20 fixed topics) scored on tool-call success, citation pass rate and verifier agreement. It scores the configured model and runs again whenever a model is swapped.
 - **Verifier evaluation:** the eval also includes a seeded-error set: generated items with planted faults (a wrong number, an unsupported claim, a quote that is not on the page, a distractor that is actually true). Each layer's catch rate and false-reject rate is measured on it, together with Haiku/Jev agreement and whether Jev's confidence is calibrated (do 0.9-confidence verdicts turn out right about 90% of the time).
-- **Secrets:** `ANTHROPIC_API_KEY`, `TYPESAFE_API_KEY`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` (Actions and server only), `SUPABASE_ANON_KEY` (read-only, row-level security), `IP_HASH_SALT`. `NASA_API_KEY` is kept in `.env` but unused while APOD is read from its pages; `SEARCH_API_KEY` only if a web search fallback is added.
+- **Secrets:** `ANTHROPIC_API_KEY`, `TYPESAFE_API_KEY`, `SUPABASE_URL`, `SUPABASE_SECRET_KEY` (Actions and server only; Supabase's new name for the service-role key), `SUPABASE_PUBLISHABLE_KEY` (the new name for the anon key: read-only, row-level security), `IP_HASH_SALT`. `NASA_API_KEY` is kept in `.env` but unused while APOD is read from its pages; `SEARCH_API_KEY` only if a web search fallback is added.
 
 ## Proposed repo layout (new repo; name and domain are Vedant's choice)
 ```
@@ -81,14 +86,15 @@ agent/                 Python package (shared core)
   verifiers/           Verifier interface: haiku.py (layer 2), jev.py (layer 3)
   prompts/             per-difficulty prompt templates
   store.py             Supabase REST writes/reads
-curator/__main__.py    daily job: discover -> research -> draft -> verify -> publish -> retire
+curator/               build (initial bank) and daily (news) runs: discover -> research -> draft ->
+                       verify -> publish / review / discard -> retire, under a dollar cap
 api/research.py        Vercel Python fn: guarded on-demand run, streams steps
 api/quiz.ts|py         serve random/filtered item from bank; report endpoint
 evals/                 fixed topic set + scoring script
 src/                   Vite + React UI (Speedrun-style layout)
-supabase/schema.sql    items, sources, claim_checks (per-claim results of all three layers, incl.
-                       Jev verdict, confidence, probabilities and model version), runs, reports,
-                       rate_limits (+ subscribers in v2)
+supabase/schema.sql    topics, items, sources, claim_checks (per-claim results of all three layers,
+                       incl. Jev verdict, confidence, probabilities and model version), runs,
+                       curator_runs, cited_pages, reports, rate_limits (+ subscribers in v2)
 .github/workflows/curator.yml   daily cron + manual dispatch
 ```
 
