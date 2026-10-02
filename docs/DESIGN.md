@@ -26,6 +26,7 @@ runs on a schedule with no human trigger), and code that reads well to recruiter
 8. **Runtime:**
    - GitHub Actions cron runs the Curator as a plain Python script (no Docker).
    - Supabase free Postgres stores the bank. Daily writes stop the free tier from pausing.
+   - Azure was considered and turned down on 2026-10-02. The only always-free Azure database (Azure SQL's free offer) has a monthly compute allowance that a public site could use up, after which it pauses until the next month; Azure PostgreSQL is free for 12 months only; and Azure SQL has no browser-safe read API. Azure could still host another part later (for example the Curator's schedule or v2 email).
    - Vercel Hobby hosts the UI and `/api`.
    - Local first: everything runs on Vedant's machine against Supabase, and moves to the cloud in Session 7 (changed 2026-10-01).
    - The only costs are the domain, the Anthropic API (capped at $10 a month) and TypeSafe Jev (prepaid balance, EUR 5 at 2026-10-01; $0.042 per million input tokens, output free).
