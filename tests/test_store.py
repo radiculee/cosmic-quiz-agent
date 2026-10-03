@@ -214,7 +214,7 @@ Handler = Callable[[httpx2.Request], httpx2.Response]
 
 def store_with(handler: Handler) -> SupabaseStore:
     client = httpx2.Client(transport=httpx2.MockTransport(handler))
-    return SupabaseStore(BASE, "sb_secret_test", client=client)
+    return SupabaseStore(BASE, "sb_secret_test", client=client, retry_backoff_seconds=0.0)
 
 
 def test_record_item_calls_the_rpc_with_the_secret_key() -> None:
@@ -234,7 +234,7 @@ def test_record_item_calls_the_rpc_with_the_secret_key() -> None:
     assert body["payload"]["topic"]["name"] == "Neutron stars"
 
 
-def test_reads_retry_server_errors_but_writes_do_not() -> None:
+def test_reads_retry_server_errors_but_creating_a_run_row_does_not() -> None:
     calls: list[str] = []
 
     def handler(request: httpx2.Request) -> httpx2.Response:
@@ -254,9 +254,10 @@ def test_reads_retry_server_errors_but_writes_do_not() -> None:
         return httpx2.Response(503, text="busy")
 
     calls.clear()
-    with pytest.raises(StoreError, match="503"):
-        store_with(busy).record_item(build_payload(quiz_record(), TOPIC, "curator"))
-    assert calls == ["write"]
+    with pytest.raises(StoreError, match="503") as raised:
+        store_with(busy).start_curator_run("build", ["Quasars"], 6.0)
+    assert calls == ["write"]  # creating a run row is sent once
+    assert not raised.value.permanent
 
 
 def test_unexpected_replies_and_client_errors_raise_store_errors() -> None:
@@ -269,7 +270,7 @@ def test_unexpected_replies_and_client_errors_raise_store_errors() -> None:
     with pytest.raises(StoreError, match="unexpected reply"):
         store_with(bad_reply).retire_stale()
     with pytest.raises(StoreError, match="404"):
-        store_with(not_found).topic_names()
+        store_with(not_found).topics()
 
 
 def test_curator_run_rows_are_created_and_finished() -> None:
@@ -309,7 +310,7 @@ def test_a_shared_client_never_carries_the_secret_key_and_stays_open() -> None:
 
     shared = httpx2.Client(transport=httpx2.MockTransport(handler))
     with SupabaseStore(BASE, "sb_secret_test", client=shared) as store:
-        store.topic_names()
+        store.topics()
 
     assert seen[0].headers["apikey"] == "sb_secret_test"
     assert "apikey" not in shared.headers
@@ -333,4 +334,60 @@ def test_a_reply_that_is_not_json_is_a_store_error() -> None:
         return httpx2.Response(200, text="<html>gateway</html>")
 
     with pytest.raises(StoreError, match="not JSON"):
-        store_with(handler).topic_names()
+        store_with(handler).topics()
+
+
+def test_record_item_is_retried_because_the_bank_stores_a_payload_once() -> None:
+    calls: list[str] = []
+
+    def flaky(_request: httpx2.Request) -> httpx2.Response:
+        calls.append("write")
+        if len(calls) < 3:
+            return httpx2.Response(503, text="busy")
+        return httpx2.Response(200, json={"topic_id": 1, "run_id": 2, "item_id": None})
+
+    ids = store_with(flaky).record_item(build_payload(quiz_record(), TOPIC, "curator"))
+
+    assert ids.run_id == 2 and len(calls) == 3
+
+
+def test_a_refused_request_is_permanent_and_nul_characters_are_never_sent() -> None:
+    sent: list[bytes] = []
+
+    def refuse(request: httpx2.Request) -> httpx2.Response:
+        sent.append(request.content)
+        return httpx2.Response(400, json={"message": "violates check constraint"})
+
+    record = quiz_record()
+    nul = chr(0)
+    with_nul = record.model_copy(
+        update={"run": record.run.model_copy(update={"cited_pages": {URL: f"text{nul}more"}})}
+    )
+    with pytest.raises(StoreError) as raised:
+        store_with(refuse).record_item(build_payload(with_nul, TOPIC, "curator"))
+
+    assert raised.value.permanent and raised.value.status == 400
+    assert len(sent) == 1  # a refusal is not retried
+    assert json.loads(sent[0])["payload"]["cited_pages"][0]["page_text"] == "textmore"
+
+
+def test_topics_are_read_with_their_news_articles() -> None:
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        assert request.url.params["select"] == "name,kind,lead_url,retire_after"
+        return httpx2.Response(
+            200,
+            json=[
+                {
+                    "name": "The Cat's Paw Nebula",
+                    "kind": "news",
+                    "lead_url": "https://science.nasa.gov/x/",
+                    "retire_after": "2027-01-01T00:00:00+00:00",
+                },
+                {"name": "Quasars", "kind": "evergreen", "lead_url": None, "retire_after": None},
+            ],
+        )
+
+    topics = store_with(handler).topics()
+
+    assert [t.kind for t in topics] == ["news", "evergreen"]
+    assert topics[0].lead_url == "https://science.nasa.gov/x/"

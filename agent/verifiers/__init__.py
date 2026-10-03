@@ -7,6 +7,7 @@ different rule or threshold without calling the models again.
 
 from __future__ import annotations
 
+import os
 from collections.abc import Mapping
 from concurrent.futures import ThreadPoolExecutor
 
@@ -15,6 +16,13 @@ from agent.llm import LLMProvider
 from agent.schemas import Answer, CodeCheck, HaikuReport, JevReport, Verification
 from agent.verifiers.haiku import verify_with_haiku
 from agent.verifiers.jev import JevClient, TypeSafeJev, verify_with_jev
+
+
+def make_jev(settings: Settings) -> JevClient | None:
+    """A Jev client if a TypeSafe key is configured, otherwise None (layer 3 is skipped)."""
+    if not os.environ.get("TYPESAFE_API_KEY", "").strip():
+        return None
+    return TypeSafeJev(settings.jev_model, settings.jev_timeout_seconds, settings.jev_criteria)
 
 
 def verify(
@@ -55,4 +63,11 @@ def verify(
     return Verification(code=code, haiku=haiku, jev=jev_report)
 
 
-__all__ = ["JevClient", "TypeSafeJev", "verify", "verify_with_haiku", "verify_with_jev"]
+__all__ = [
+    "JevClient",
+    "TypeSafeJev",
+    "make_jev",
+    "verify",
+    "verify_with_haiku",
+    "verify_with_jev",
+]

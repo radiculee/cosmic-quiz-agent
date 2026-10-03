@@ -14,6 +14,7 @@ each run (GitHub Actions), the pending folder must be carried between runs for t
 
 from __future__ import annotations
 
+import contextlib
 import threading
 from collections import deque
 from collections.abc import Callable, Sequence
@@ -24,10 +25,10 @@ from pathlib import Path
 
 from agent.config import Settings
 from agent.console import slugify
-from agent.gate import DEFAULT_RULE, decide
 from agent.llm import LLMProvider
 from agent.loop import run_learn, run_quiz
-from agent.schemas import Difficulty, ItemRecord, Mode, Status
+from agent.publish import verify_and_decide
+from agent.schemas import Difficulty, ItemRecord, Mode
 from agent.store import (
     CuratorSummary,
     CuratorTrigger,
@@ -39,7 +40,7 @@ from agent.store import (
     build_payload,
     job_key,
 )
-from agent.verifiers import JevClient, verify
+from agent.verifiers import JevClient
 
 MODES: tuple[Mode, ...] = ("learn", "quiz")
 DIFFICULTIES: tuple[Difficulty, ...] = ("easy", "medium", "hard")
@@ -47,6 +48,9 @@ DIFFICULTIES: tuple[Difficulty, ...] = ("easy", "medium", "hard")
 # Typical Anthropic cost per job (agent run plus the Haiku verifier), measured over the 180 runs
 # of the bank build on 2026-10-02. Used for the estimate shown before a run.
 JOB_COST_TYPICAL: dict[Mode, float] = {"learn": 0.027, "quiz": 0.029}
+# How often the job loop wakes while jobs run. A wait without a timeout cannot be interrupted by
+# Ctrl+C on Windows, so the loop polls instead.
+_POLL_SECONDS = 1.0
 
 
 def _print_now(message: str) -> None:
@@ -106,17 +110,7 @@ def produce(job: Job, llm: LLMProvider, jev: JevClient | None, settings: Setting
         result = run_learn(job.topic.name, job.difficulty, llm, settings, lead_url=lead)
     else:
         result = run_quiz(job.topic.name, job.difficulty, llm, settings, lead_url=lead)
-    if result.answer is None or result.code_check is None or not result.code_check.passed:
-        # No answer, or one that failed the layer 1 code checks: never verified or published.
-        status: Status | None = "discarded" if result.answer is not None else None
-        return ItemRecord(run=result, status=status, rule=DEFAULT_RULE)
-    verification = verify(result.answer, result.code_check, result.cited_pages, llm, jev, settings)
-    return ItemRecord(
-        run=result,
-        verification=verification,
-        status=decide(verification, DEFAULT_RULE),
-        rule=DEFAULT_RULE,
-    )
+    return verify_and_decide(result, llm, jev, settings)
 
 
 class Budget:
@@ -163,7 +157,8 @@ def run_jobs(
 ) -> tuple[int, str | None]:
     """Run jobs in order on `workers` threads while the budget allows.
 
-    `on_done` is called on this thread as each job finishes. On Ctrl+C no new job starts, and the
+    `on_done` is called on this thread as each job finishes and must not raise (the Curator's
+    never does: a result it cannot handle is written to disk). On Ctrl+C no new job starts, and the
     jobs already running (already paid for) are waited for and handed to `on_done`. Returns how
     many jobs ran and, if the run stopped early, why.
     """
@@ -192,7 +187,7 @@ def run_jobs(
                     running[pool.submit(work, job)] = job
                 if not running:
                     break  # nothing can start within the cap
-                done, _ = wait(running, return_when=FIRST_COMPLETED)
+                done, _ = wait(running, timeout=_POLL_SECONDS, return_when=FIRST_COMPLETED)
                 for future in done:
                     collect(future)
         except KeyboardInterrupt:
@@ -242,7 +237,30 @@ class Curator:
 
     def say(self, message: str) -> None:
         self._log.append(message)
-        self._say(message)
+        with contextlib.suppress(OSError):  # a closed or broken console must never stop a run
+            self._say(message)
+
+    def _set_aside(self, path: Path, folder: str, reason: object) -> None:
+        """Move a pending payload out of the way, with the reason next to it, so it is kept for
+        inspection but never blocks or repeats in later runs."""
+        target = self.pending_dir / folder
+        target.mkdir(parents=True, exist_ok=True)
+        path.replace(target / path.name)
+        (target / f"{path.stem}.reason.txt").write_text(str(reason), encoding="utf-8")
+        self.say(f"  Set aside {path.name} in {target}: {reason}")
+
+    def _rescue(self, job: Job, record: ItemRecord, error: Exception) -> None:
+        """Last resort when a finished job's result cannot be handled: keep the raw record."""
+        stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%fZ")
+        target = self.pending_dir / "unsaved"
+        name = f"{stamp}-{job.mode}-{job.difficulty}-{slugify(job.topic.name)}.json"
+        try:
+            target.mkdir(parents=True, exist_ok=True)
+            (target / name).write_text(record.model_dump_json(), encoding="utf-8")
+            kept = f"kept the record in {target / name}"
+        except OSError as write_error:
+            kept = f"and it could not be written to disk either ({write_error})"
+        self.say(f"  {job.label}: could not be saved ({error!r}); {kept}")
 
     def plan(self, topics: Sequence[TopicRef]) -> tuple[list[Job], int]:
         attempted = self.store.attempted_jobs([topic.name for topic in topics])
@@ -250,21 +268,22 @@ class Curator:
 
     def flush_pending(self) -> int:
         """Send payloads left on disk by an earlier run that could not reach the bank. A file
-        that cannot be read is moved to `corrupt/` so it never blocks later runs."""
+        that cannot be read goes to `corrupt/`, and one the bank refuses goes to `rejected/`, so
+        neither blocks or repeats in later runs."""
         sent = 0
         for path in sorted(self.pending_dir.glob("*.json")):
             try:
                 payload = ItemPayload.model_validate_json(path.read_text(encoding="utf-8"))
             except (OSError, ValueError) as error:  # pydantic's ValidationError is a ValueError
-                corrupt = self.pending_dir / "corrupt"
-                corrupt.mkdir(parents=True, exist_ok=True)
-                path.replace(corrupt / path.name)
-                self.say(f"Set aside unreadable {path.name} in {corrupt}: {error}")
+                self._set_aside(path, "corrupt", error)
                 continue
             try:
                 self.store.record_item(payload)
             except StoreError as error:
-                self.say(f"Still cannot store {path.name}: {error}")
+                if error.permanent:  # the bank refuses this payload: sending it again cannot help
+                    self._set_aside(path, "rejected", error)
+                else:
+                    self.say(f"Still cannot store {path.name}: {error}")
                 continue
             path.unlink()
             sent += 1
@@ -295,6 +314,9 @@ class Curator:
         try:
             ids = self.store.record_item(payload)
         except Exception as error:  # whatever went wrong, a paid run must not be lost silently
+            if path is not None and isinstance(error, StoreError) and error.permanent:
+                self._set_aside(path, "rejected", error)
+                return False
             kept = f"kept {path} for the next run" if path else "it could not be kept on disk"
             self.say(f"  Could not store it ({error}); {kept}.")
             return False
@@ -330,22 +352,25 @@ class Curator:
                 self.say(f"  {job.label}: crashed ({type(outcome).__name__}: {outcome})")
                 return
             record = outcome
-            tally.typesafe_usd += record.typesafe_cost_usd
-            status = record.status if record.run.answer is not None else None
-            if status == "published":
-                tally.published += 1
-            elif status == "review":
-                tally.review += 1
-            elif status == "discarded":
-                tally.discarded += 1
-            else:
-                tally.no_item += 1
-            self.say(
-                f"  {job.label}: {record.run.outcome} -> {status or 'no item'} "
-                f"(${record.anthropic_cost_usd:.3f}, {record.run.seconds:.0f}s, "
-                f"spent ${budget.spent_usd:.2f})"
-            )
-            self.save(job, record, curator_run_id)
+            try:
+                tally.typesafe_usd += record.typesafe_cost_usd
+                status = record.status if record.run.answer is not None else None
+                if status == "published":
+                    tally.published += 1
+                elif status == "review":
+                    tally.review += 1
+                elif status == "discarded":
+                    tally.discarded += 1
+                else:
+                    tally.no_item += 1
+                self.say(
+                    f"  {job.label}: {record.run.outcome} -> {status or 'no item'} "
+                    f"(${record.anthropic_cost_usd:.3f}, {record.run.seconds:.0f}s, "
+                    f"spent ${budget.spent_usd:.2f})"
+                )
+                self.save(job, record, curator_run_id)
+            except Exception as error:  # one result that cannot be handled must not lose others
+                self._rescue(job, record, error)
 
         def work(job: Job) -> ItemRecord:
             return produce(job, self.llm, self.jev, self.settings)

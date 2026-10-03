@@ -164,16 +164,54 @@ def _match_distractors(
     return tuple(judged)
 
 
+def _prompt_tokens(llm: LLMProvider, prompt: str, schema: JsonObject) -> int:
+    """The verifier prompt's size: exact from the free token counter, or the byte bound (which
+    is about four times larger for English) if the counter cannot be reached."""
+    try:
+        return llm.count_json_tokens(SYSTEM_PROMPT, prompt, schema)
+    except LLMError:
+        return prompt_tokens_bound(SYSTEM_PROMPT, prompt, json.dumps(schema))
+
+
+def _judge(
+    answer: Answer, pages: Mapping[str, str], data: JsonObject, report: HaikuReport
+) -> HaikuReport:
+    """Fill a report from the verifier's reply. Raises ValidationError on a malformed reply."""
+    if isinstance(answer, QuizItem):
+        reply = _QuizReply.model_validate(data)
+        page = pages.get(reply.answer.source_url, "")
+        quote = reply.answer.quote
+        return report.model_copy(
+            update={
+                "answer_verdict": reply.answer.verdict,
+                "answer_quote": quote,
+                # The verifier's own quote must be on the page it names, or on any cited page.
+                "answer_quote_verbatim": bool(quote.strip())
+                and (
+                    quote_on_page(quote, page)
+                    or any(quote_on_page(quote, t) for t in pages.values())
+                ),
+                "distractors": _match_distractors(answer, reply.distractors),
+                "explanation_problems": tuple(reply.explanation_problems),
+            }
+        )
+    learn_reply = _LearnReply.model_validate(data)
+    return report.model_copy(
+        update={"explanation_problems": tuple(learn_reply.explanation_problems)}
+    )
+
+
 def verify_with_haiku(
     answer: Answer, pages: Mapping[str, str], llm: LLMProvider, settings: Settings
 ) -> HaikuReport:
+    """Layer 2 for one answer. Never loses the cost of a call that was made: every report after
+    the call carries its usage, whatever went wrong."""
     started = time.monotonic()
     is_quiz = isinstance(answer, QuizItem)
     prompt = build_prompt(answer, pages)
     schema = QUIZ_SCHEMA if is_quiz else LEARN_SCHEMA
     bound = settings.price.max_call_cost_usd(
-        prompt_tokens_bound(SYSTEM_PROMPT, prompt, json.dumps(schema)),
-        settings.verifier_max_output_tokens,
+        _prompt_tokens(llm, prompt, schema), settings.verifier_max_output_tokens
     )
     if bound > settings.max_verifier_cost_usd:
         limit = settings.max_verifier_cost_usd
@@ -183,52 +221,34 @@ def verify_with_haiku(
         data, usage = llm.complete_json(
             SYSTEM_PROMPT, prompt, schema, settings.verifier_max_output_tokens
         )
-    except LLMError as error:
-        return HaikuReport(
-            verdict="error", reasons=(str(error),), seconds=round(time.monotonic() - started, 2)
-        )
-
-    seconds = round(time.monotonic() - started, 2)
-    cost = usage.cost_usd(settings.price)
-    try:
-        if isinstance(answer, QuizItem):
-            reply = _QuizReply.model_validate(data)
-            page = pages.get(reply.answer.source_url, "")
-            quote = reply.answer.quote
-            report = HaikuReport(
-                verdict="pass",
-                answer_verdict=reply.answer.verdict,
-                answer_quote=quote,
-                # The verifier's own quote must be on the page it names, or on any cited page.
-                answer_quote_verbatim=bool(quote.strip())
-                and (
-                    quote_on_page(quote, page)
-                    or any(quote_on_page(quote, t) for t in pages.values())
-                ),
-                distractors=_match_distractors(answer, reply.distractors),
-                explanation_problems=tuple(reply.explanation_problems),
-                usage=usage,
-                cost_usd=cost,
-                seconds=seconds,
-            )
-        else:
-            learn_reply = _LearnReply.model_validate(data)
-            report = HaikuReport(
-                verdict="pass",
-                explanation_problems=tuple(learn_reply.explanation_problems),
-                usage=usage,
-                cost_usd=cost,
-                seconds=seconds,
-            )
-    except ValidationError as error:
+    except LLMError as error:  # may have been billed, e.g. a reply cut off at the output limit
         return HaikuReport(
             verdict="error",
-            reasons=(f"verifier reply did not match the schema: {error}",),
-            usage=usage,
-            cost_usd=cost,
-            seconds=seconds,
+            reasons=(str(error),),
+            usage=error.usage,
+            cost_usd=error.usage.cost_usd(settings.price),
+            seconds=round(time.monotonic() - started, 2),
         )
 
+    paid = HaikuReport(
+        verdict="pass",
+        usage=usage,
+        cost_usd=usage.cost_usd(settings.price),
+        seconds=round(time.monotonic() - started, 2),
+    )
+    try:
+        report = _judge(answer, pages, data, paid)
+    except ValidationError as error:
+        return paid.model_copy(
+            update={
+                "verdict": "error",
+                "reasons": (f"verifier reply did not match the schema: {error}",),
+            }
+        )
+    except Exception as error:  # a bug after a paid call: keep the cost, send the item to review
+        return paid.model_copy(
+            update={"verdict": "error", "reasons": (f"verifier crashed: {error!r}",)}
+        )
     verdict, reasons = haiku_verdict(report, is_quiz=is_quiz)
     return report.model_copy(update={"verdict": verdict, "reasons": reasons})
 

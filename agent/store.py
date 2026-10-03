@@ -12,6 +12,7 @@ security. It is for the Curator and server functions only and must never reach t
 from __future__ import annotations
 
 import os
+import time
 from collections import Counter
 from collections.abc import Iterable, Sequence
 from datetime import UTC, datetime
@@ -43,7 +44,19 @@ CheckKind = Literal["citation", "number", "correct_answer", "distractor", "sente
 
 
 class StoreError(Exception):
-    """A read or write to the bank failed."""
+    """A read or write to the bank failed. `status` is the HTTP status, if there was a reply."""
+
+    def __init__(self, message: str, status: int | None = None) -> None:
+        super().__init__(message)
+        self.status = status
+
+    @property
+    def permanent(self) -> bool:
+        """The bank refused the request itself (a 4xx other than a timeout or rate limit), so
+        sending the same request again cannot succeed."""
+        return (
+            self.status is not None and 400 <= self.status < 500 and self.status not in (408, 429)
+        )
 
 
 # --- What is stored -----------------------------------------------------------------------------
@@ -399,7 +412,7 @@ class Store(Protocol):
 
     def attempted_jobs(self, topics: Sequence[str]) -> set[JobKey]: ...
 
-    def topic_names(self) -> list[str]: ...
+    def topics(self) -> list[TopicRef]: ...
 
     def retire_stale(self) -> int: ...
 
@@ -474,13 +487,9 @@ class _IdRow(BaseModel):
     id: int
 
 
-class _NameRow(BaseModel):
-    name: str
-
-
 _ATTEMPTED = TypeAdapter(list[_AttemptedJob])
 _ID_ROWS = TypeAdapter(list[_IdRow])
-_NAME_ROWS = TypeAdapter(list[_NameRow])
+_TOPICS = TypeAdapter(list[TopicRef])
 _COUNT = TypeAdapter(int)
 _REVIEW_ITEMS = TypeAdapter(list[ReviewItem])
 _REVIEW_SELECT = (
@@ -489,8 +498,23 @@ _REVIEW_SELECT = (
     "claim_checks(kind,claim,verdict,confidence)"
 )
 
-_READ_RETRIES = 2
-_TOPIC_NAMES_LIMIT = 1000
+# Retries for requests that are safe to repeat: reads, and record_item(), which stores a payload
+# once however often it arrives. Waits double each time: 1 s, then 2 s by default.
+_RETRIES = 2
+_RETRY_STATUSES = frozenset({408, 429, 500, 502, 503, 504})
+_TOPICS_LIMIT = 1000
+_NUL = chr(0)
+
+
+def _without_nul(value: object) -> object:
+    """Postgres text and jsonb cannot hold the NUL character, which fetched page text can."""
+    if isinstance(value, str):
+        return value.replace(_NUL, "")
+    if isinstance(value, list):
+        return [_without_nul(item) for item in value]
+    if isinstance(value, dict):
+        return {key: _without_nul(item) for key, item in value.items()}
+    return value
 
 
 def _parse[T](adapter: TypeAdapter[T], reply: object, what: str) -> T:
@@ -504,8 +528,9 @@ def _parse[T](adapter: TypeAdapter[T], reply: object, what: str) -> T:
 class SupabaseStore:
     """The bank over Supabase's REST API (PostgREST), authenticated with the secret key.
 
-    Reads are retried on network errors and 5xx responses. Writes are not, because a retry after
-    an unseen success would store a run twice; the Curator keeps unsaved payloads on disk instead.
+    Requests that are safe to repeat (reads, record_item(), finishing a curator run) are
+    retried with a growing wait on network errors, timeouts, rate limits and 5xx responses.
+    Creating a curator run and deciding a review item are sent once.
     """
 
     def __init__(
@@ -514,8 +539,10 @@ class SupabaseStore:
         secret_key: str,
         *,
         timeout_seconds: float = 30.0,
+        retry_backoff_seconds: float = 1.0,
         client: httpx2.Client | None = None,
     ) -> None:
+        self._backoff = retry_backoff_seconds
         # The key goes on each request, never into the client's defaults, so a client shared with
         # other code can never send it anywhere else. A client passed in stays the caller's.
         self._headers = {"apikey": secret_key, "Content-Type": "application/json"}
@@ -563,19 +590,27 @@ class SupabaseStore:
                 )
             except httpx2.HTTPError as error:
                 if attempt < retries:
+                    self._wait(attempt)
                     attempt += 1
                     continue
                 raise StoreError(f"{method} {path} failed: {type(error).__name__}") from error
-            if response.status_code >= 500 and attempt < retries:
+            if response.status_code in _RETRY_STATUSES and attempt < retries:
+                self._wait(attempt)
                 attempt += 1
                 continue
             if response.status_code >= 400:
-                raise StoreError(f"{method} {path}: HTTP {response.status_code} {response.text}")
+                raise StoreError(
+                    f"{method} {path}: HTTP {response.status_code} {response.text}",
+                    response.status_code,
+                )
             try:
                 reply: object = response.json() if response.content else None
             except ValueError as error:
                 raise StoreError(f"{method} {path}: the reply was not JSON") from error
             return reply
+
+    def _wait(self, attempt: int) -> None:
+        time.sleep(self._backoff * 2**attempt)
 
     def start_curator_run(
         self, trigger: CuratorTrigger, topics: Sequence[str], dollar_cap: float
@@ -594,30 +629,39 @@ class SupabaseStore:
 
     def finish_curator_run(self, curator_run_id: int, summary: CuratorSummary) -> None:
         body = {**summary.model_dump(mode="json"), "finished_at": datetime.now(UTC).isoformat()}
-        self._send("PATCH", "/curator_runs", json=body, params={"id": f"eq.{curator_run_id}"})
+        self._send(
+            "PATCH",
+            "/curator_runs",
+            json=body,
+            params={"id": f"eq.{curator_run_id}"},
+            retries=_RETRIES,
+        )
 
     def record_item(self, payload: ItemPayload) -> RecordedIds:
-        reply = self._send(
-            "POST", "/rpc/record_item", json={"payload": payload.model_dump(mode="json")}
-        )
+        body = _without_nul({"payload": payload.model_dump(mode="json")})
+        reply = self._send("POST", "/rpc/record_item", json=body, retries=_RETRIES)
         return _parse(TypeAdapter(RecordedIds), reply, "record_item")
 
     def attempted_jobs(self, topics: Sequence[str]) -> set[JobKey]:
         reply = self._send(
-            "POST", "/rpc/attempted_jobs", json={"topic_names": list(topics)}, retries=_READ_RETRIES
+            "POST", "/rpc/attempted_jobs", json={"topic_names": list(topics)}, retries=_RETRIES
         )
         jobs = _parse(_ATTEMPTED, reply, "attempted_jobs")
         return {job_key(job.topic, job.mode, job.difficulty) for job in jobs}
 
-    def topic_names(self) -> list[str]:
-        """Most recent first, so a prompt can include the latest ones."""
+    def topics(self) -> list[TopicRef]:
+        """Every topic, most recent first (the latest 1,000), with each news topic's article."""
         reply = self._send(
             "GET",
             "/topics",
-            params={"select": "name", "order": "created_at.desc", "limit": str(_TOPIC_NAMES_LIMIT)},
-            retries=_READ_RETRIES,
+            params={
+                "select": "name,kind,lead_url,retire_after",
+                "order": "created_at.desc",
+                "limit": str(_TOPICS_LIMIT),
+            },
+            retries=_RETRIES,
         )
-        return [row.name for row in _parse(_NAME_ROWS, reply, "reading topics")]
+        return _parse(_TOPICS, reply, "reading topics")
 
     def retire_stale(self) -> int:
         return _parse(_COUNT, self._send("POST", "/rpc/retire_stale", json={}), "retire_stale")
@@ -635,7 +679,7 @@ class SupabaseStore:
                 "claim_checks.layer": "eq.jev",
                 "claim_checks.order": "id.asc",
             },
-            retries=_READ_RETRIES,
+            retries=_RETRIES,
         )
         return _parse(_REVIEW_ITEMS, reply, "reading the review queue")
 

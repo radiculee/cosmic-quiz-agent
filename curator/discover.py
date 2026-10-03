@@ -1,8 +1,9 @@
 """Discover: pick one notable, new astronomy story from the NASA and ESA feeds.
 
 Reading the feeds is free. One short Haiku call ranks up to three candidate topics; the code then
-takes the first one that links to a real feed item on an allowed domain and is not already in
-the bank, so the model cannot invent a source or repeat a topic.
+takes the first one that links to a real feed item on an allowed domain, whose article has not
+been used before and whose name is not already in the bank, so the model cannot invent a source
+or repeat a story under a new name.
 """
 
 from __future__ import annotations
@@ -114,14 +115,14 @@ def read_news(ctx: ToolContext, say: Callable[[str], None]) -> list[FeedItem]:
     return items
 
 
-def build_prompt(items: Sequence[FeedItem], existing_topics: Sequence[str]) -> str:
+def build_prompt(items: Sequence[FeedItem], existing_topics: Sequence[TopicRef]) -> str:
     listed = "\n".join(
         f"<item>\nTitle: {item.title}\nPublished: {item.published}\nURL: {item.link}\n"
         f"Summary: {item.summary}\n</item>"
         for item in items
     )
     recent = existing_topics[:RECENT_TOPICS_IN_PROMPT]
-    existing = "\n".join(f"- {name}" for name in recent) or "- (none yet)"
+    existing = "\n".join(f"- {topic.name}" for topic in recent) or "- (none yet)"
     return (
         f"<news>\n{listed}\n</news>\n\nExisting topics (do not repeat these):\n{existing}\n\n"
         f"{_INSTRUCTIONS}"
@@ -131,13 +132,14 @@ def build_prompt(items: Sequence[FeedItem], existing_topics: Sequence[str]) -> s
 def choose(
     picks: Sequence[NewsPick],
     items: Sequence[FeedItem],
-    existing_topics: Sequence[str],
+    existing_topics: Sequence[TopicRef],
     ctx: ToolContext,
     now: datetime,
 ) -> tuple[TopicRef | None, list[str]]:
     """The first pick that passes the code checks, with a note for each pick skipped."""
     links = {item.link for item in items}
-    existing = {name.strip().casefold() for name in existing_topics}
+    existing = {topic.name.strip().casefold() for topic in existing_topics}
+    used_articles = {topic.lead_url for topic in existing_topics if topic.lead_url}
     notes: list[str] = []
     for pick in picks[:MAX_PICKS]:
         name = " ".join(pick.topic.split())
@@ -147,6 +149,8 @@ def choose(
             notes.append(f"skipped {name!r}: its link is not a feed item ({pick.link})")
         elif not ctx.is_allowed(pick.link):
             notes.append(f"skipped {name!r}: its link is not on an allowed domain")
+        elif pick.link in used_articles:
+            notes.append(f"skipped {name!r}: its article was already used for another topic")
         elif name.casefold() in existing:
             notes.append(f"skipped {name!r}: already in the bank")
         else:
@@ -162,7 +166,7 @@ def choose(
 
 def discover(
     items: Sequence[FeedItem],
-    existing_topics: Sequence[str],
+    existing_topics: Sequence[TopicRef],
     llm: LLMProvider,
     settings: Settings,
     ctx: ToolContext,
@@ -180,8 +184,13 @@ def discover(
         )
     try:
         data, usage = llm.complete_json(SYSTEM_PROMPT, prompt, PICKS_SCHEMA, _MAX_OUTPUT_TOKENS)
-    except LLMError as error:
-        return Discovery(topic=None, notes=[f"topic choice failed: {error}"])
+    except LLMError as error:  # may have been billed, e.g. a reply cut off at the limit
+        return Discovery(
+            topic=None,
+            usage=error.usage,
+            cost_usd=error.usage.cost_usd(settings.price),
+            notes=[f"topic choice failed: {error}"],
+        )
     cost = usage.cost_usd(settings.price)
     try:
         reply = _PicksReply.model_validate(data)

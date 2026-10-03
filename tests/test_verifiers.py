@@ -9,7 +9,7 @@ import pytest
 
 from agent.config import JevCriteria, Settings
 from agent.gate import decide, haiku_verdict, jev_verdict, rescore
-from agent.llm import JsonObject, LLMError
+from agent.llm import JsonObject, LLMError, Usage
 from agent.schemas import (
     Citation,
     CitationCheck,
@@ -21,6 +21,7 @@ from agent.schemas import (
     QuizItem,
     Verification,
 )
+from agent.verifiers import haiku as haiku_module
 from agent.verifiers import verify
 from agent.verifiers.haiku import build_prompt, verify_with_haiku
 from agent.verifiers.jev import (
@@ -388,3 +389,51 @@ def test_rescore_applies_the_current_rules_to_stored_verdicts() -> None:
 
     assert rescored.haiku is not None and rescored.haiku.verdict == "borderline"
     assert decide(verification) == "discarded" and decide(rescored) == "review"
+
+
+def test_a_billed_verifier_call_that_fails_keeps_its_cost(settings: Settings) -> None:
+    cut_off = LLMError("structured output stopped early (max_tokens)", Usage(output_tokens=2048))
+    llm = FakeLLM(json_replies=[cut_off])
+
+    report = verify_with_haiku(ITEM, PAGES, llm, settings)
+
+    assert report.verdict == "error"
+    assert report.cost_usd == pytest.approx(2048 * 5 / 1_000_000)
+
+
+def test_a_crash_after_the_verifier_call_keeps_its_cost(
+    settings: Settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def broken(*_args: object) -> None:
+        raise KeyError("unexpected shape")
+
+    monkeypatch.setattr(haiku_module, "_match_distractors", broken)
+    llm = FakeLLM(json_replies=[haiku_reply()])
+
+    report = verify_with_haiku(ITEM, PAGES, llm, settings)
+
+    assert report.verdict == "error" and "crashed" in report.reasons[0]
+    assert report.cost_usd > 0
+
+
+class CountingLLM(FakeLLM):
+    def __init__(self, tokens: int | None, replies: list[dict[str, Any] | Exception]) -> None:
+        super().__init__(json_replies=replies)
+        self.tokens = tokens
+
+    def count_json_tokens(self, system: str, prompt: str, schema: dict[str, Any]) -> int:
+        if self.tokens is None:
+            raise LLMError("counter unreachable")
+        return self.tokens
+
+
+def test_the_verifier_bound_uses_the_exact_prompt_size(settings: Settings) -> None:
+    # 48,000 bytes of page text: the byte bound would skip the verifier at $0.07, but the exact
+    # count (12,000 tokens) shows the call costs at most $0.025.
+    long_pages = {URL: PAGE + " filler" * 6_800}
+    exact = CountingLLM(12_000, [haiku_reply()])
+    unknown = CountingLLM(None, [])
+
+    assert verify_with_haiku(ITEM, long_pages, exact, settings).verdict == "pass"
+    skipped = verify_with_haiku(ITEM, long_pages, unknown, settings)
+    assert skipped.reasons[0].startswith("verifier skipped")

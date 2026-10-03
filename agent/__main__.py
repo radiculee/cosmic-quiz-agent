@@ -10,19 +10,18 @@ metrics, and saves the full record as JSON under runs/.
 from __future__ import annotations
 
 import argparse
-import os
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import get_args
 
-from agent.config import Settings, load_settings
+from agent.config import load_settings
 from agent.console import slugify, use_utf8_output
-from agent.gate import DEFAULT_RULE, decide
 from agent.llm import AnthropicProvider
 from agent.loop import run_learn, run_quiz
+from agent.publish import verify_and_decide
 from agent.schemas import Difficulty, ItemRecord, QuizItem, RunResult, Step, Verification
-from agent.verifiers import JevClient, TypeSafeJev, verify
+from agent.verifiers import make_jev
 
 
 def _print_step(step: Step) -> None:
@@ -117,13 +116,6 @@ def _save(record: ItemRecord, runs_dir: str) -> Path:
     return path
 
 
-def make_jev(settings: Settings) -> JevClient | None:
-    """A Jev client if a TypeSafe key is configured, otherwise None (layer 3 is skipped)."""
-    if not os.environ.get("TYPESAFE_API_KEY", "").strip():
-        return None
-    return TypeSafeJev(settings.jev_model, settings.jev_timeout_seconds, settings.jev_criteria)
-
-
 def main(argv: list[str] | None = None) -> int:
     use_utf8_output()
 
@@ -147,19 +139,11 @@ def main(argv: list[str] | None = None) -> int:
 
     record = ItemRecord(run=result)
     should_verify = args.verify if args.command == "learn" else not args.no_verify
-    if should_verify and result.answer is not None and result.code_check is not None:
+    if should_verify and result.answer is not None:
         print("\nVerifying...", flush=True)
-        jev = make_jev(settings)
-        verification = verify(
-            result.answer, result.code_check, result.cited_pages, llm, jev, settings
-        )
-        _print_verification(verification)
-        record = ItemRecord(
-            run=result,
-            verification=verification,
-            status=decide(verification, DEFAULT_RULE),
-            rule=DEFAULT_RULE,
-        )
+        record = verify_and_decide(result, llm, make_jev(settings), settings)
+        if record.verification is not None:
+            _print_verification(record.verification)
     _print_totals(record)
     print(f"Saved run log: {_save(record, settings.runs_dir)}")
     return 0 if result.outcome == "passed" else 1

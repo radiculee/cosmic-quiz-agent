@@ -109,6 +109,10 @@ class FakeLLM:
             raise reply
         return reply, CALL_USAGE
 
+    def count_json_tokens(self, system: str, prompt: str, schema: dict[str, Any]) -> int:
+        """About four characters per token, like English text."""
+        return (len(system) + len(prompt)) // 4
+
 
 CALL_USAGE = Usage(input_tokens=100, output_tokens=10)
 

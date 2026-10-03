@@ -283,8 +283,8 @@ sources (545 of 545 on published and review items were fetched in their run), so
 review workflow:
 - [x] `python -m curator review [--mode] [--difficulty]`: one item at a time with its reasons, marked
       answer, explanation, sources and quotes, and Jev's checks; p / d / s / q. Free.
-- [x] Migration `supabase/migrations/002_reviewed_at.sql`: `items.reviewed_at`, set by the status
-      trigger when an item leaves review (by the command or the table editor).
+- [x] `items.reviewed_at`, set by the status trigger when an item leaves review (by the command
+      or the table editor). Shipped in migration `002_review_and_safe_resume.sql`.
 - Decided: 1 fetched, verbatim-quoted source per item stays the minimum.
 
 Code review before the first push (2026-10-02): 15 findings, all confirmed and fixed. The ones that
@@ -301,8 +301,27 @@ sends the item to review instead of losing the run; jobs that hit a temporary AP
 retried by the next build; `daily` asks before any spend; stored eval results are re-scored under
 the current rules. Migration `002_review_and_safe_resume.sql` carries the SQL side.
 
+Second code review (2026-10-02, on the pushed commit): 15 more findings, all fixed.
+- Cost is logged for every billed call, including ones that fail after billing (a reply cut off
+  at the output limit) or crash in post-processing, so the cap and `runs` costs stay exact.
+- The verifier's cost bound uses Anthropic's free token-counting endpoint for the exact prompt
+  size (a sample prompt: 7,739 tokens, against a byte bound of 26,540), falling back to the byte
+  bound if the counter cannot be reached.
+- `daily` never reuses a feed article under a new name, and finishes a recent news topic left
+  incomplete before choosing a new one.
+- `topics.lead_url` is hidden from the browser (migration `003_hide_lead_url.sql`): the article
+  may never have been read, so it may not be shown as a source.
+- Payloads the bank refuses (4xx) go to `pending/rejected/` with the reason instead of repeating;
+  NUL characters are stripped before storage; reads and `record_item()` retry with backoff.
+- A result that cannot be handled is kept in `pending/unsaved/`; the job loop polls, so Ctrl+C
+  works on Windows; `--workers`, `--topics` and `--cap` are validated.
+- One shared step from a run to a publish decision (`agent/publish.py`) for the Curator, the
+  evals and the CLI; `make_jev` lives in `agent/verifiers`.
+
 Gate (Vedant): runs `python -m curator`, sees `published` and `review` rows, and decides review items
 with `python -m curator review`, seeing their sources before publishing.
+- [x] Passed 2026-10-02. Vedant decided 28 review items with their sources in view: 26 published,
+      2 discarded. The bank stands at 125 published, 38 review, 16 discarded.
 
 ---
 
@@ -475,5 +494,9 @@ unsubscribe, then WhatsApp.
   supabase/schema.sql (RLS: the publishable key reads only published items), agent/store.py over
   REST with no new dependency, and the Curator (build and daily, dollar cap, unstored runs kept on
   disk). Bank built: 30 topics, 99 published, 66 review, 14 discarded, $4.98 Anthropic and $0.041
-  TypeSafe including the trial. 160 tests. Next: Vedant's gate (approve one review item in the
-  table editor), the review-queue decision, then Session 5.
+  TypeSafe including the trial. Then a review command so items are approved with their sources
+  in view (the table editor does not show them), and two code reviews (30 findings, all fixed:
+  a hard dollar cap, idempotent storage, the citation rule in stored rows, exact cost logging).
+  Migrations 002 and 003. Gate passed: Vedant decided 28 items (26 published). 194 tests.
+  Next: the review-queue decision (Haiku's explanation doubts block most of the 38 left), then
+  Session 5.

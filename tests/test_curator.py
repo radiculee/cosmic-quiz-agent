@@ -3,6 +3,7 @@ models, no network and no paid calls."""
 
 from __future__ import annotations
 
+import argparse
 from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -11,6 +12,7 @@ import pytest
 
 from agent.config import Settings
 from agent.console import slugify
+from agent.llm import LLMError, Usage
 from agent.schemas import ItemRecord, Status
 from agent.store import (
     CuratorSummary,
@@ -26,6 +28,7 @@ from agent.store import (
 from agent.tools import ToolContext
 from agent.tools.feeds import parse_rss
 from curator import pipeline
+from curator.__main__ import _positive_float, _positive_int, _unfinished_news_topic
 from curator.discover import NewsPick, choose, discover, read_news
 from curator.pipeline import (
     Budget,
@@ -52,7 +55,7 @@ class MemoryStore:
         self.attempted = attempted or set()
         self.payloads: list[ItemPayload] = []
         self.curator_runs: dict[int, CuratorSummary | None] = {}
-        self.names: list[str] = []
+        self.existing: list[TopicRef] = []
         self.fail_writes = False
         self.fail_retire = False
         self.retired = 0
@@ -80,8 +83,8 @@ class MemoryStore:
     def attempted_jobs(self, topics: Sequence[str]) -> set[JobKey]:
         return self.attempted
 
-    def topic_names(self) -> list[str]:
-        return self.names
+    def topics(self) -> list[TopicRef]:
+        return self.existing
 
     def retire_stale(self) -> int:
         if self.fail_retire:
@@ -245,13 +248,22 @@ def test_choose_rejects_invented_links_other_domains_and_known_topics(ctx: ToolC
         NewsPick(topic="  Webb's image of   the Cat's Paw Nebula ", link=LINK, why="x"),
     ]
 
-    topic, notes = choose(picks, web_items, ["quasars"], ctx, NOW)
+    topic, notes = choose(picks, web_items, [QUASARS], ctx, NOW)
 
     assert topic is not None
     assert topic.name == "Webb's image of the Cat's Paw Nebula"
     assert topic.kind == "news" and topic.lead_url == LINK
     assert topic.retire_after == NOW + timedelta(days=NEWS_RETIRE_DAYS)
     assert len(notes) == 2
+
+
+def test_choose_rejects_an_article_already_used_under_another_name(ctx: ToolContext) -> None:
+    used = TopicRef(name="Webb sees the Cat's Paw", kind="news", lead_url=LINK)
+    picks = [NewsPick(topic="The Cat's Paw Nebula seen by Webb", link=LINK, why="x")]
+
+    topic, notes = choose(picks, parse_rss(RSS), [used], ctx, NOW)
+
+    assert topic is None and "already used" in notes[0]
 
 
 def test_discover_uses_one_structured_call_and_logs_its_cost(
@@ -262,7 +274,7 @@ def test_discover_uses_one_structured_call_and_logs_its_cost(
         json_replies=[{"picks": [{"topic": "The Cat's Paw Nebula", "link": LINK, "why": "x"}]}]
     )
 
-    found = discover(items, ["Quasars"], llm, settings, ctx, NOW)
+    found = discover(items, [QUASARS], llm, settings, ctx, NOW)
 
     assert found.topic is not None and found.topic.name == "The Cat's Paw Nebula"
     assert found.cost_usd > 0
@@ -313,3 +325,85 @@ def test_slugify_makes_short_file_safe_names() -> None:
         slugify("Webb's image of the Cat's Paw Nebula!") == "webb-s-image-of-the-cat-s-paw-nebula"
     )
     assert slugify("***") == "topic"
+
+
+def test_a_billed_topic_choice_that_fails_still_logs_its_cost(
+    ctx: ToolContext, settings: Settings
+) -> None:
+    cut_off = LLMError("structured output stopped early (max_tokens)", Usage(output_tokens=1024))
+    llm = FakeLLM(json_replies=[cut_off])
+
+    found = discover(parse_rss(RSS), [], llm, settings, ctx, NOW)
+
+    assert found.topic is None
+    assert found.cost_usd == pytest.approx(1024 * 5 / 1_000_000)
+
+
+def test_a_result_that_cannot_be_saved_is_kept_on_disk(
+    tmp_path: Path, settings: Settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(pipeline, "produce", lambda *_args: record_with("published"))
+
+    def broken(*_args: object) -> None:
+        raise ValueError("cannot build the payload")
+
+    monkeypatch.setattr(pipeline, "build_payload", broken)
+    store = MemoryStore()
+    curator = make_curator(store, tmp_path, settings)
+    jobs, _ = curator.plan([QUASARS])
+
+    summary = curator.run("build", [QUASARS], jobs[:2], 0, Budget(6.0), workers=2)
+
+    assert summary.jobs_run == 2 and summary.published == 2
+    assert len(list((tmp_path / "pending" / "unsaved").glob("*.json"))) == 2
+
+
+def test_a_payload_the_bank_refuses_is_set_aside_not_resent(
+    tmp_path: Path, settings: Settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(pipeline, "produce", lambda *_args: record_with("published"))
+    store = MemoryStore()
+
+    def refuse(_payload: ItemPayload) -> RecordedIds:
+        raise StoreError("HTTP 400 violates check constraint", 400)
+
+    monkeypatch.setattr(store, "record_item", refuse)
+    curator = make_curator(store, tmp_path, settings)
+    jobs, _ = curator.plan([QUASARS])
+
+    curator.run("build", [QUASARS], jobs[:1], 0, Budget(6.0), workers=1)
+
+    pending = tmp_path / "pending"
+    assert list(pending.glob("*.json")) == []
+    assert len(list((pending / "rejected").glob("*.json"))) == 1
+    assert len(list((pending / "rejected").glob("*.reason.txt"))) == 1
+
+
+def test_a_broken_console_never_stops_a_run(tmp_path: Path, settings: Settings) -> None:
+    def broken_pipe(_message: str) -> None:
+        raise BrokenPipeError
+
+    curator = Curator(MemoryStore(), FakeLLM(), None, settings, tmp_path, say=broken_pipe)
+
+    curator.say("still running")
+
+
+def test_daily_finishes_an_unfinished_news_topic_first(tmp_path: Path, settings: Settings) -> None:
+    news = TopicRef(name="The Cat's Paw Nebula", kind="news", lead_url=LINK)
+    old = TopicRef(name="An old story", kind="news", retire_after=NOW - timedelta(days=1))
+    store = MemoryStore(attempted={job_key(news.name, "learn", "easy")})
+    curator = make_curator(store, tmp_path, settings)
+
+    found = _unfinished_news_topic(curator, [old, news, QUASARS], NOW)
+
+    assert found is not None
+    topic, jobs, done = found
+    assert topic == news and len(jobs) == 5 and done == 1
+
+
+def test_cli_numbers_must_be_positive() -> None:
+    assert _positive_int("3") == 3
+    with pytest.raises(argparse.ArgumentTypeError):
+        _positive_int("0")
+    with pytest.raises(argparse.ArgumentTypeError):
+        _positive_float("-1")

@@ -9,11 +9,11 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from agent.config import JEV_COST_PER_ITEM, Settings
-from agent.gate import DEFAULT_RULE, decide
 from agent.llm import LLMProvider
 from agent.loop import run_quiz
+from agent.publish import verify_and_decide
 from agent.schemas import Difficulty, ItemRecord
-from agent.verifiers import JevClient, verify
+from agent.verifiers import JevClient
 from evals.store import ITEMS_FILE, RESULTS_DIR, JsonLinesWriter
 
 # Measured in Session 3 development: a QUIZ run averages about $0.024 and a Haiku verifier pass
@@ -44,16 +44,7 @@ def evaluate_one(
 ) -> ItemRecord:
     """Generate one quiz item and run every layer on it. Items that fail layer 1 are recorded
     as generated, with no verification."""
-    result = run_quiz(topic, difficulty, llm, settings)
-    if result.answer is None or result.code_check is None or not result.code_check.passed:
-        return ItemRecord(run=result, status="discarded", rule=DEFAULT_RULE)
-    verification = verify(result.answer, result.code_check, result.cited_pages, llm, jev, settings)
-    return ItemRecord(
-        run=result,
-        verification=verification,
-        status=decide(verification, DEFAULT_RULE),
-        rule=DEFAULT_RULE,
-    )
+    return verify_and_decide(run_quiz(topic, difficulty, llm, settings), llm, jev, settings)
 
 
 def run_eval(
@@ -85,7 +76,8 @@ def run_eval(
             print(
                 f"[{done:>2}/{len(jobs)}] {difficulty:<6} {topic[:40]:<40} "
                 f"{record.run.outcome:<14} haiku={haiku.verdict if haiku else '-':<10} "
-                f"jev={jev_report.verdict if jev_report else '-':<10} -> {record.status} "
+                f"jev={jev_report.verdict if jev_report else '-':<10} "
+                f"-> {record.status or 'no item'} "
                 f"(${record.anthropic_cost_usd:.3f}, spent ${spent:.2f}, "
                 f"{time.monotonic() - started:.0f}s)",
                 flush=True,

@@ -10,8 +10,9 @@ cost still fits under it.
 
 build researches the approved evergreen topics (curator/topics.py) in LEARN and QUIZ at every
 difficulty. It can be re-run: jobs already in the bank are skipped, so an interrupted or capped
-build continues where it stopped. daily picks one new topic from the NASA and ESA news feeds,
-runs the same pipeline on it, and retires news items past their date. review shows each item the
+build continues where it stopped. daily first finishes a recent news topic that an earlier run
+left incomplete; otherwise it picks one new topic from the NASA and ESA news feeds. Either way it
+runs the same pipeline and retires news items past their date. review shows each item the
 gate sent to review, with its sources, and publishes or discards it on your decision (free).
 """
 
@@ -19,17 +20,18 @@ from __future__ import annotations
 
 import argparse
 import sys
+from collections.abc import Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import get_args
 
-from agent.__main__ import make_jev
 from agent.config import JEV_COST_PER_ITEM, Settings, load_settings
 from agent.console import confirm, use_utf8_output
 from agent.llm import AnthropicProvider
 from agent.schemas import Difficulty, Mode
 from agent.store import CuratorSummary, StoreError, SupabaseStore, TopicRef
 from agent.tools import ToolContext, make_http_client
+from agent.verifiers import make_jev
 from curator.discover import MAX_COST_USD as DISCOVERY_MAX_COST_USD
 from curator.discover import discover, read_news
 from curator.pipeline import (
@@ -51,6 +53,21 @@ BUILD_CAP_USD = 6.00  # approved 2026-10-02 for the 30-topic build (estimate abo
 DAILY_CAP_USD = 0.40  # approved 2026-10-02 for one news topic a day (estimate about $0.17)
 DEFAULT_WORKERS = 3
 DISCOVERY_COST_TYPICAL = 0.004  # one short Haiku call over the feed headlines
+RESUME_LOOKBACK = 7  # recent news topics checked for jobs an earlier daily run left unfinished
+
+
+def _positive_int(text: str) -> int:
+    value = int(text)
+    if value < 1:
+        raise argparse.ArgumentTypeError("must be 1 or more")
+    return value
+
+
+def _positive_float(text: str) -> float:
+    value = float(text)
+    if value <= 0:
+        raise argparse.ArgumentTypeError("must be more than 0")
+    return value
 
 
 def _describe(jobs: list[Job], skipped: int, cap: float, settings: Settings) -> str:
@@ -67,7 +84,8 @@ def _describe_daily(cap: float, settings: Settings) -> str:
     typical = DISCOVERY_COST_TYPICAL + len(DIFFICULTIES) * sum(JOB_COST_TYPICAL.values())
     worst = DISCOVERY_MAX_COST_USD + jobs * job_cost_limit(settings)
     return (
-        f"choosing one news topic and {jobs} jobs on it: about ${typical:.2f} on Anthropic, at "
+        f"one news topic (finishing an earlier one, or choosing a new one) and up to {jobs} jobs "
+        f"on it: about ${typical:.2f} on Anthropic, at "
         f"most ${min(worst, cap):.2f} (hard cap ${cap:.2f}); under "
         f"${jobs * JEV_COST_PER_ITEM:.3f} on TypeSafe (Jev)."
     )
@@ -115,6 +133,24 @@ def command_build(args: argparse.Namespace, settings: Settings, store: SupabaseS
     return 0
 
 
+def _unfinished_news_topic(
+    curator: Curator, existing: Sequence[TopicRef], now: datetime
+) -> tuple[TopicRef, list[Job], int] | None:
+    """The most recent live news topic that an earlier daily run left with jobs to do (for
+    example because it reached its cap), with those jobs and how many were already done."""
+    recent = [
+        topic
+        for topic in existing
+        if topic.kind == "news" and (topic.retire_after is None or topic.retire_after > now)
+    ][:RESUME_LOOKBACK]
+    jobs, _ = curator.plan(recent)
+    if not jobs:
+        return None
+    topic = jobs[0].topic
+    left = [job for job in jobs if job.topic == topic]
+    return topic, left, len(MODES) * len(DIFFICULTIES) - len(left)
+
+
 def command_daily(args: argparse.Namespace, settings: Settings, store: SupabaseStore) -> int:
     curator = _curator(store, settings)
     if curator is None:
@@ -124,15 +160,25 @@ def command_daily(args: argparse.Namespace, settings: Settings, store: SupabaseS
     if not confirm(_describe_daily(args.cap, settings), args.yes):
         return 1
     budget = Budget(args.cap)
+    now = datetime.now(UTC)
+    existing = store.topics()
+    unfinished = _unfinished_news_topic(curator, existing, now)
+    if unfinished is not None:
+        left_topic, left_jobs, done = unfinished
+        curator.say(
+            f"Finishing {len(left_jobs)} job(s) an earlier run left on {left_topic.name!r}."
+        )
+        summary = curator.run("daily", [left_topic], left_jobs, done, budget, args.workers)
+        _print_summary(summary)
+        return 0
+
     if not budget.try_reserve(DISCOVERY_MAX_COST_USD):
         print(f"The cap of ${args.cap:.2f} is too small to choose a topic.")
         return 1
     with make_http_client(settings) as http:
         ctx = ToolContext(settings=settings, http=http)
         items = read_news(ctx, curator.say)
-        discovery = discover(
-            items, store.topic_names(), curator.llm, settings, ctx, datetime.now(UTC)
-        )
+        discovery = discover(items, existing, curator.llm, settings, ctx, now)
     budget.settle(DISCOVERY_MAX_COST_USD, discovery.cost_usd)
     usage = discovery.usage
     curator.say(
@@ -184,15 +230,19 @@ def main(argv: list[str] | None = None) -> int:
 
     build = commands.add_parser("build", help="Research the approved evergreen topics.")
     build.add_argument(
-        "--topics", type=int, default=0, help="Only the first N topics (default: all)."
+        "--topics", type=_positive_int, help="Only the first N topics (default: all)."
     )
-    build.add_argument("--cap", type=float, default=BUILD_CAP_USD, help="Anthropic cap in USD.")
+    build.add_argument(
+        "--cap", type=_positive_float, default=BUILD_CAP_USD, help="Anthropic cap in USD."
+    )
 
     daily = commands.add_parser("daily", help="Add one topic from the news and retire old items.")
-    daily.add_argument("--cap", type=float, default=DAILY_CAP_USD, help="Anthropic cap in USD.")
+    daily.add_argument(
+        "--cap", type=_positive_float, default=DAILY_CAP_USD, help="Anthropic cap in USD."
+    )
 
     for command in (build, daily):
-        command.add_argument("--workers", type=int, default=DEFAULT_WORKERS)
+        command.add_argument("--workers", type=_positive_int, default=DEFAULT_WORKERS)
         command.add_argument("--yes", action="store_true", help="Approve the cost in advance.")
 
     queue = commands.add_parser("review", help="Publish or discard the items in review (free).")

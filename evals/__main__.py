@@ -15,13 +15,12 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import get_args
 
-from agent.__main__ import make_jev
 from agent.config import JEV_COST_PER_ITEM, JevCriteria, Settings, load_settings
 from agent.console import confirm, use_utf8_output
 from agent.gate import rescore, rescore_record
 from agent.llm import AnthropicProvider, LLMProvider
 from agent.schemas import ItemRecord
-from agent.verifiers import JevClient, verify
+from agent.verifiers import JevClient, make_jev, verify
 from agent.verify import code_check
 from evals import rejev
 from evals.report import write_report

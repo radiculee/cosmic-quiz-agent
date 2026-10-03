@@ -420,9 +420,11 @@ create policy "Topics with readable items are readable" on public.topics
     ));
 
 -- Defence in depth on top of RLS: the browser roles can read four tables and nothing else.
+-- topics.lead_url is left out (migration 003): the news article may never have been read, and a
+-- player may only see URLs read in a run. Browser queries on topics must name their columns.
 revoke all on all tables in schema public from anon, authenticated;
-grant select on public.topics, public.items, public.sources, public.claim_checks
-    to anon, authenticated;
+grant select on public.items, public.sources, public.claim_checks to anon, authenticated;
+grant select (id, name, kind, retire_after, created_at) on public.topics to anon, authenticated;
 
 grant all on all tables in schema public to service_role;
 grant usage, select on all sequences in schema public to service_role;

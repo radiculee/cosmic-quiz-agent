@@ -133,7 +133,15 @@ class Completion(BaseModel):
 
 
 class LLMError(Exception):
-    """A model call failed after the provider's own retries."""
+    """A model call failed after the provider's own retries.
+
+    `usage` holds what the failed call was still billed for (for example a reply cut off at the
+    output limit), so the cost of every call is logged even when it fails.
+    """
+
+    def __init__(self, message: str, usage: Usage | None = None) -> None:
+        super().__init__(message)
+        self.usage = usage or Usage()
 
 
 class LLMProvider(Protocol):
@@ -152,6 +160,10 @@ class LLMProvider(Protocol):
         self, system: str, prompt: str, schema: JsonObject, max_tokens: int
     ) -> tuple[JsonObject, Usage]:
         """One call whose reply is a JSON object matching `schema`."""
+        ...
+
+    def count_json_tokens(self, system: str, prompt: str, schema: JsonObject) -> int:
+        """The exact prompt size of a `complete_json` call, without making it (free)."""
         ...
 
 
@@ -237,22 +249,36 @@ class AnthropicProvider:
         except anthropic.AnthropicError as error:
             raise LLMError(f"{type(error).__name__}: {error}") from error
 
+        usage = Usage(
+            input_tokens=response.usage.input_tokens,
+            output_tokens=response.usage.output_tokens,
+            cache_write_tokens=response.usage.cache_creation_input_tokens or 0,
+            cache_read_tokens=response.usage.cache_read_input_tokens or 0,
+        )
+        # From here on the call has been billed, so every failure carries its usage.
         if response.stop_reason != "end_turn":
-            raise LLMError(f"structured output stopped early ({response.stop_reason})")
+            raise LLMError(f"structured output stopped early ({response.stop_reason})", usage)
         text = "".join(block.text for block in response.content if block.type == "text")
         try:
             data = json.loads(text)
         except json.JSONDecodeError as error:
-            raise LLMError("structured output was not valid JSON") from error
+            raise LLMError("structured output was not valid JSON", usage) from error
         if not isinstance(data, dict):
-            raise LLMError("structured output was not a JSON object")
-        usage = response.usage
-        return data, Usage(
-            input_tokens=usage.input_tokens,
-            output_tokens=usage.output_tokens,
-            cache_write_tokens=usage.cache_creation_input_tokens or 0,
-            cache_read_tokens=usage.cache_read_input_tokens or 0,
-        )
+            raise LLMError("structured output was not a JSON object", usage)
+        return data, usage
+
+    def count_json_tokens(self, system: str, prompt: str, schema: JsonObject) -> int:
+        """Anthropic's token counting endpoint: free, and exact for this model."""
+        try:
+            response = self._client.messages.count_tokens(
+                model=self._model,
+                system=system,
+                messages=[{"role": "user", "content": prompt}],
+                output_config={"format": {"type": "json_schema", "schema": schema}},
+            )
+        except anthropic.AnthropicError as error:
+            raise LLMError(f"{type(error).__name__}: {error}") from error
+        return response.input_tokens
 
 
 def _to_stop_reason(reason: str | None) -> StopReason:
