@@ -16,7 +16,7 @@ runs on a schedule with no human trigger), and code that reads well to recruiter
 5. **Modes:**
    - LEARN: a plain-language explanation plus cited sources.
    - QUIZ: one 4-option MCQ per GO. After answering (right or wrong), show the explanation plus cited sources.
-   - Each source shows a "source check" meter: Jev's verdict and confidence that the source supports the claim (added 2026-10-01). It is labelled as a source check, never as accuracy.
+   - After answering, a "source check" shows Jev's verdict and confidence for each answer option (supported, contradicted or not addressed by the cited sources); LEARN shows how many sentences the sources back. It is labelled as a source check, never as accuracy. (Changed 2026-10-03 from "per source": Jev checks each claim against all cited pages together, so there is no per-source verdict to show.)
 6. **Citation rule:** a source may only be a URL fetched in that run, enforced in code. Any other URL is dropped.
 7. **Architecture:**
    - The daily **Curator** scans sources, picks notable topics, researches them, writes MCQs at each difficulty, verifies them, publishes to the bank, and retires stale items.
@@ -85,13 +85,21 @@ agent/                 Python package (shared core)
   verify.py            layer 1 code checks: fetched URLs, verbatim quotes, numbers
   verifiers/           Verifier interface: haiku.py (layer 2), jev.py (layer 3)
   prompts/             per-difficulty prompt templates
-  store.py             Supabase REST writes/reads
+  rest.py              small PostgREST client (retries, errors, paging) shared by store and bank
+  store.py             Supabase writes/reads with the secret key (Curator, review, reports)
+  bank.py              public reads with the publishable key: topics, items, answers, source check
+  web.py               HTTP layer for api/: handle(ApiRequest) -> ApiResponse, Vercel handler class
 curator/               build (initial bank) and daily (news) runs: discover -> research -> draft ->
                        verify -> publish / review / discard -> retire, under a dollar cap
-api/research.py        Vercel Python fn: guarded on-demand run, streams steps
-api/quiz.ts|py         serve random/filtered item from bank; report endpoint
+api/research.py        Vercel Python fn: guarded on-demand run, streams steps (Session 6)
+api/topics.py          bank topics and where they can be played
+api/item.py            a random published item (a quiz item without its answer)
+api/reveal.py          a quiz item's answer, explanation, sources and source check
+api/report.py          report an item (salted IP hash; two reports hide it)
+dev/api_server.py      local server for api/ (Vite proxies /api to it); never deployed
 evals/                 fixed topic set + scoring script
-src/                   Vite + React UI (Speedrun-style layout)
+src/                   Vite + React UI (Speedrun-style layout): game.ts (points, streaks, ranks,
+                       badges, runs), profile.ts (progress in localStorage), components/
 supabase/schema.sql    topics, items, sources, claim_checks (per-claim results of all three layers,
                        incl. Jev verdict, confidence, probabilities and model version), runs,
                        curator_runs, cited_pages, reports, rate_limits (+ subscribers in v2)

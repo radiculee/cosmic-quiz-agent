@@ -323,6 +323,12 @@ with `python -m curator review`, seeing their sources before publishing.
 - [x] Passed 2026-10-02. Vedant decided 28 review items with their sources in view: 26 published,
       2 discarded. The bank stands at 125 published, 38 review, 16 discarded.
 
+Review queue cleared 2026-10-03 on Vedant's instruction: the 35 items held only by Haiku's
+explanation doubts were published, then the last 3 as well, to be cleaned up later. Bank: 163
+published, 0 review, 16 discarded. The gate rule for new items is unchanged.
+- [ ] Re-check items 100 (Jev: possibly contradicted), 136 (LIGO: announcement date and a
+      verifier misquote) and 165 (Voyager: power-supply date) against their sources.
+
 ---
 
 ## Session 5 - UI (local)
@@ -340,13 +346,62 @@ Decisions to ask:
   as a source check, not accuracy, and appears per source after the player answers.
 
 Claude Code:
-- [ ] Vite + React + TypeScript (strict) + Tailwind with pnpm, portfolio design tokens and fonts.
-- [ ] Controls: `[EASY|MEDIUM|HARD]`, `[LEARN|QUIZ]`, topic input, `[Random topic]`, `[GO]`.
-- [ ] QUIZ flow: answer, then explanation and sources. LEARN flow: explanation and sources.
-- [ ] Source-check meter per source, read from `claim_checks`: Jev's verdict and confidence.
-- [ ] Report button (2 reports hide an item). Streak and score in `localStorage`.
+- [x] Vite + React + TypeScript (strict) + Tailwind with pnpm, portfolio design tokens and fonts.
+- [x] Controls: `[EASY|MEDIUM|HARD]`, `[LEARN|QUIZ]`, topic input, `[Random topic]`, `[GO]`.
+- [x] QUIZ flow: answer, then explanation and sources. LEARN flow: explanation and sources.
+- [x] Source-check meter per answer option, read from `claim_checks`: Jev's verdict and confidence.
+- [x] Report button (2 reports hide an item). Streak and score in `localStorage`.
+
+Decided 2026-10-03:
+- API: Python functions in `api/` (stdlib only), each a `handle(ApiRequest) -> ApiResponse` wrapped
+  for Vercel by `agent/web.py`; locally served by `python -m dev.api_server` (port 8787), which
+  Vite proxies `/api` to. Reads use the publishable key, so they can only see published items.
+- Topic box: suggests bank topics playable at the chosen mode and difficulty; an unknown topic
+  shows "Custom topics are coming soon" (Session 6 turns it into a live run).
+- Sources: a numbered list with site, link and the quoted passage.
+- Source check: per answer option (Jev's verdict and confidence), not per source (see DESIGN.md
+  decision 5); LEARN shows how many sentences the sources back.
+- A quiz question reaches the browser without its answer; `/api/reveal` sends the answer,
+  explanation, sources and source check after the player answers.
+- First screen approved by Vedant ("The UI looks great"); placeholder example "Black holes"
+  (not yet a bank topic, so it shows the custom-topic hint until it is added).
+- New dependencies, all MIT: react, react-dom, vite, @vitejs/plugin-react, typescript,
+  tailwindcss, @tailwindcss/vite, and vitest (dev only). Fonts from Google Fonts. New local
+  secret `IP_HASH_SALT` for hashing visitors' IP addresses (reports, and Session 6 limits).
+
+Gamified after Vedant's first play-through (2026-10-03):
+- QUIZ is played in runs of up to 10 questions on 10 different topics (the chosen topic first),
+  with a results screen: score, accuracy, best streak, time, points, rank progress, new badges.
+- Points: EASY 100, MEDIUM 200, HARD 300 per correct answer; x1.5 from 3 in a row, x2 from 5;
+  +25% for answering within 15 seconds.
+- Speedrun clock: runs only while a question waits for an answer, so reading the explanation
+  and sources never costs time.
+- Ranks from all-time points: Stargazer, Cadet (1,000), Navigator (3,000), Astronomer (7,500),
+  Astrophysicist (15,000), Cosmologist (30,000).
+- Badges: First light, Hot streak, Perfect run, Hard mode, Speed runner (10 in under 2 min),
+  Explorer (10 topics learned).
+- No repeats: never within a run, and across visits this browser's unseen questions and
+  unplayed topics come first (a note says when repeats are unavoidable). The profile lives in
+  `localStorage` and works with storage blocked.
+- Jev's confidence stays a number. Why it is so often 1.00 on EASY and HARD: Jev returns exactly
+  1.0 when the cited page states the answer outright and plainly rules the other options out,
+  which is how EASY questions are built (DESIGN.md decision 13) and how HARD ones about a stated
+  number come out. Of the bank's option checks, 84 of 104 (EASY), 32 of 104 (MEDIUM) and 72 of
+  88 (HARD) are 1.00; MEDIUM spreads lower because its wrong options are plausible.
+
+Built:
+- [x] Endpoints: `/api/topics`, `/api/item`, `/api/reveal`, `/api/report` (salted IP hash, one
+      report per visitor per item; two hide an item).
+- [x] UI: controls, topic box with suggestions, Random topic, GO; QUIZ card (answer, then result,
+      explanation, source check and sources); LEARN card; Report; score and streak in
+      `localStorage` (works with storage blocked); recently shown items skipped.
+- [x] Game layer: `src/game.ts` (rules) and `src/profile.ts` (saved profile), run HUD, points
+      pop-up, results screen, rank and badges strip.
+- [x] Tests: 207 Python (endpoints, adapter, bank reads), 18 TypeScript (topics, game rules,
+      profile storage).
 
 Gate (Vedant): plays every mode and difficulty with `pnpm dev`, checks that sources open and belong to the item.
+- [x] Passed 2026-10-04. Vedant played the gamified build: "looks well and works well".
 
 ---
 
