@@ -12,7 +12,6 @@ security. It is for the Curator and server functions only and must never reach t
 from __future__ import annotations
 
 import os
-import time
 from collections import Counter
 from collections.abc import Iterable, Sequence
 from datetime import UTC, datetime
@@ -21,8 +20,10 @@ from urllib.parse import urlsplit
 from uuid import UUID, uuid4
 
 import httpx2
-from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
 
+from agent.rest import RETRIES, RestClient, parse
+from agent.rest import StoreError as StoreError
 from agent.schemas import (
     CodeCheck,
     Difficulty,
@@ -41,22 +42,6 @@ RunSource = Literal["curator", "on_demand"]
 CuratorTrigger = Literal["build", "daily"]
 CheckLayer = Literal["code", "haiku", "jev"]
 CheckKind = Literal["citation", "number", "correct_answer", "distractor", "sentence", "explanation"]
-
-
-class StoreError(Exception):
-    """A read or write to the bank failed. `status` is the HTTP status, if there was a reply."""
-
-    def __init__(self, message: str, status: int | None = None) -> None:
-        super().__init__(message)
-        self.status = status
-
-    @property
-    def permanent(self) -> bool:
-        """The bank refused the request itself (a 4xx other than a timeout or rate limit), so
-        sending the same request again cannot succeed."""
-        return (
-            self.status is not None and 400 <= self.status < 500 and self.status not in (408, 429)
-        )
 
 
 # --- What is stored -----------------------------------------------------------------------------
@@ -498,10 +483,6 @@ _REVIEW_SELECT = (
     "claim_checks(kind,claim,verdict,confidence)"
 )
 
-# Retries for requests that are safe to repeat: reads, and record_item(), which stores a payload
-# once however often it arrives. Waits double each time: 1 s, then 2 s by default.
-_RETRIES = 2
-_RETRY_STATUSES = frozenset({408, 429, 500, 502, 503, 504})
 _TOPICS_LIMIT = 1000
 _NUL = chr(0)
 
@@ -517,20 +498,12 @@ def _without_nul(value: object) -> object:
     return value
 
 
-def _parse[T](adapter: TypeAdapter[T], reply: object, what: str) -> T:
-    """Validate a reply from the database, so a schema mismatch fails loudly here."""
-    try:
-        return adapter.validate_python(reply)
-    except ValidationError as error:
-        raise StoreError(f"{what} returned an unexpected reply: {error}") from error
-
-
 class SupabaseStore:
     """The bank over Supabase's REST API (PostgREST), authenticated with the secret key.
 
     Requests that are safe to repeat (reads, record_item(), finishing a curator run) are
-    retried with a growing wait on network errors, timeouts, rate limits and 5xx responses.
-    Creating a curator run and deciding a review item are sent once.
+    retried with a growing wait (`agent/rest.py`). Creating a curator run and deciding a review
+    item are sent once.
     """
 
     def __init__(
@@ -542,13 +515,13 @@ class SupabaseStore:
         retry_backoff_seconds: float = 1.0,
         client: httpx2.Client | None = None,
     ) -> None:
-        self._backoff = retry_backoff_seconds
-        # The key goes on each request, never into the client's defaults, so a client shared with
-        # other code can never send it anywhere else. A client passed in stays the caller's.
-        self._headers = {"apikey": secret_key, "Content-Type": "application/json"}
-        self._owns_client = client is None
-        self._client = client or httpx2.Client(timeout=timeout_seconds)
-        self._base = url.rstrip("/") + "/rest/v1"
+        self._rest = RestClient(
+            url,
+            secret_key,
+            timeout_seconds=timeout_seconds,
+            retry_backoff_seconds=retry_backoff_seconds,
+            client=client,
+        )
 
     @classmethod
     def from_env(cls) -> Self:
@@ -559,8 +532,7 @@ class SupabaseStore:
         return cls(url, key)
 
     def close(self) -> None:
-        if self._owns_client:
-            self._client.close()
+        self._rest.close()
 
     def __enter__(self) -> Self:
         return self
@@ -568,90 +540,46 @@ class SupabaseStore:
     def __exit__(self, *_: object) -> None:
         self.close()
 
-    def _send(
-        self,
-        method: str,
-        path: str,
-        *,
-        json: object = None,
-        params: dict[str, str] | None = None,
-        headers: dict[str, str] | None = None,
-        retries: int = 0,
-    ) -> object:
-        attempt = 0
-        while True:
-            try:
-                response = self._client.request(
-                    method,
-                    self._base + path,
-                    json=json,
-                    params=params,
-                    headers={**self._headers, **(headers or {})},
-                )
-            except httpx2.HTTPError as error:
-                if attempt < retries:
-                    self._wait(attempt)
-                    attempt += 1
-                    continue
-                raise StoreError(f"{method} {path} failed: {type(error).__name__}") from error
-            if response.status_code in _RETRY_STATUSES and attempt < retries:
-                self._wait(attempt)
-                attempt += 1
-                continue
-            if response.status_code >= 400:
-                raise StoreError(
-                    f"{method} {path}: HTTP {response.status_code} {response.text}",
-                    response.status_code,
-                )
-            try:
-                reply: object = response.json() if response.content else None
-            except ValueError as error:
-                raise StoreError(f"{method} {path}: the reply was not JSON") from error
-            return reply
-
-    def _wait(self, attempt: int) -> None:
-        time.sleep(self._backoff * 2**attempt)
-
     def start_curator_run(
         self, trigger: CuratorTrigger, topics: Sequence[str], dollar_cap: float
     ) -> int:
-        reply = self._send(
+        reply = self._rest.send(
             "POST",
             "/curator_runs",
             json={"trigger": trigger, "topics": list(topics), "dollar_cap": dollar_cap},
             params={"select": "id"},
             headers={"Prefer": "return=representation"},
         )
-        rows = _parse(_ID_ROWS, reply, "creating a curator run")
+        rows = parse(_ID_ROWS, reply, "creating a curator run")
         if not rows:
             raise StoreError("creating a curator run returned no row")
         return rows[0].id
 
     def finish_curator_run(self, curator_run_id: int, summary: CuratorSummary) -> None:
         body = {**summary.model_dump(mode="json"), "finished_at": datetime.now(UTC).isoformat()}
-        self._send(
+        self._rest.send(
             "PATCH",
             "/curator_runs",
             json=body,
             params={"id": f"eq.{curator_run_id}"},
-            retries=_RETRIES,
+            retries=RETRIES,
         )
 
     def record_item(self, payload: ItemPayload) -> RecordedIds:
         body = _without_nul({"payload": payload.model_dump(mode="json")})
-        reply = self._send("POST", "/rpc/record_item", json=body, retries=_RETRIES)
-        return _parse(TypeAdapter(RecordedIds), reply, "record_item")
+        reply = self._rest.send("POST", "/rpc/record_item", json=body, retries=RETRIES)
+        return parse(TypeAdapter(RecordedIds), reply, "record_item")
 
     def attempted_jobs(self, topics: Sequence[str]) -> set[JobKey]:
-        reply = self._send(
-            "POST", "/rpc/attempted_jobs", json={"topic_names": list(topics)}, retries=_RETRIES
+        reply = self._rest.send(
+            "POST", "/rpc/attempted_jobs", json={"topic_names": list(topics)}, retries=RETRIES
         )
-        jobs = _parse(_ATTEMPTED, reply, "attempted_jobs")
+        jobs = parse(_ATTEMPTED, reply, "attempted_jobs")
         return {job_key(job.topic, job.mode, job.difficulty) for job in jobs}
 
     def topics(self) -> list[TopicRef]:
         """Every topic, most recent first (the latest 1,000), with each news topic's article."""
-        reply = self._send(
+        reply = self._rest.send(
             "GET",
             "/topics",
             params={
@@ -659,16 +587,32 @@ class SupabaseStore:
                 "order": "created_at.desc",
                 "limit": str(_TOPICS_LIMIT),
             },
-            retries=_RETRIES,
+            retries=RETRIES,
         )
-        return _parse(_TOPICS, reply, "reading topics")
+        return parse(_TOPICS, reply, "reading topics")
+
+    def add_report(self, item_id: int, user_hash: str, reason: str | None) -> bool:
+        """Record a player's report of an item. False if this player had already reported it.
+        Two reports hide an item (a trigger in supabase/schema.sql)."""
+        try:
+            self._rest.send(
+                "POST",
+                "/reports",
+                json={"item_id": item_id, "user_hash": user_hash, "reason": reason},
+                headers={"Prefer": "return=minimal"},
+            )
+        except StoreError as error:
+            if error.status == 409:  # unique (item_id, user_hash): already reported
+                return False
+            raise
+        return True
 
     def retire_stale(self) -> int:
-        return _parse(_COUNT, self._send("POST", "/rpc/retire_stale", json={}), "retire_stale")
+        return parse(_COUNT, self._rest.send("POST", "/rpc/retire_stale", json={}), "retire_stale")
 
     def review_queue(self) -> list[ReviewItem]:
         """Every item in review, oldest first, with its sources and Jev's claim checks."""
-        reply = self._send(
+        reply = self._rest.send(
             "GET",
             "/items",
             params={
@@ -679,17 +623,17 @@ class SupabaseStore:
                 "claim_checks.layer": "eq.jev",
                 "claim_checks.order": "id.asc",
             },
-            retries=_RETRIES,
+            retries=RETRIES,
         )
-        return _parse(_REVIEW_ITEMS, reply, "reading the review queue")
+        return parse(_REVIEW_ITEMS, reply, "reading the review queue")
 
     def decide_review(self, item_id: int, decision: ReviewDecision) -> bool:
         """Move an item out of review. False if it was no longer in review (decided elsewhere)."""
-        reply = self._send(
+        reply = self._rest.send(
             "PATCH",
             "/items",
             json={"status": decision},
             params={"id": f"eq.{item_id}", "status": "eq.review", "select": "id"},
             headers={"Prefer": "return=representation"},
         )
-        return len(_parse(_ID_ROWS, reply, "deciding a review item")) == 1
+        return len(parse(_ID_ROWS, reply, "deciding a review item")) == 1
