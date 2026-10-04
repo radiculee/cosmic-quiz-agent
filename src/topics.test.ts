@@ -1,0 +1,67 @@
+import { describe, expect, it } from "vitest";
+
+import { findTopic, randomTopic, suggest, topicStatus } from "./topics";
+import type { BankTopic } from "./types";
+
+const TOPICS: BankTopic[] = [
+  { name: "Quasars", kind: "evergreen", learn: ["easy", "medium", "hard"], quiz: ["hard"] },
+  { name: "Dark energy", kind: "evergreen", learn: ["easy"], quiz: ["easy", "medium"] },
+  { name: "Sagittarius A*", kind: "evergreen", learn: ["medium"], quiz: ["easy"] },
+  { name: "Magnetars", kind: "evergreen", learn: ["easy"], quiz: ["easy"] },
+];
+
+describe("findTopic", () => {
+  it("ignores case and extra spaces", () => {
+    expect(findTopic(TOPICS, "  dark   ENERGY ")?.name).toBe("Dark energy");
+    expect(findTopic(TOPICS, "")).toBeUndefined();
+  });
+});
+
+describe("suggest", () => {
+  it("lists only topics playable at the mode and difficulty, prefix matches first", () => {
+    const names = suggest(TOPICS, "a", "quiz", "easy").map((t) => t.name);
+    expect(names).toEqual(["Dark energy", "Magnetars", "Sagittarius A*"]);
+    expect(suggest(TOPICS, "ma", "quiz", "easy").map((t) => t.name)).toEqual([
+      "Magnetars",
+    ]);
+  });
+
+  it("shows everything playable for an empty query", () => {
+    expect(suggest(TOPICS, "", "learn", "easy")).toHaveLength(3);
+  });
+});
+
+describe("randomTopic", () => {
+  it("picks a playable topic other than the current one", () => {
+    const picked = randomTopic(TOPICS, "quiz", "easy", "Dark energy", () => 0);
+    expect(picked?.name).toBe("Sagittarius A*");
+  });
+
+  it("prefers topics not yet played, then any other", () => {
+    expect(randomTopic(TOPICS, "quiz", "easy", "", () => 0, ["Dark energy"])?.name).toBe(
+      "Sagittarius A*",
+    );
+    const all = ["Dark energy", "Sagittarius A*", "Magnetars"];
+    expect(randomTopic(TOPICS, "quiz", "easy", "Magnetars", () => 0, all)?.name).toBe(
+      "Dark energy",
+    );
+  });
+
+  it("falls back to the current topic when it is the only one", () => {
+    expect(randomTopic(TOPICS, "quiz", "hard", "Quasars", () => 0.5)?.name).toBe("Quasars");
+    expect(randomTopic(TOPICS, "learn", "hard", "", () => 0)?.name).toBe("Quasars");
+  });
+});
+
+describe("topicStatus", () => {
+  it("tells ready, unknown and available-elsewhere apart", () => {
+    expect(topicStatus(TOPICS, "", "quiz", "easy").kind).toBe("empty");
+    expect(topicStatus(TOPICS, "quasars", "quiz", "hard").kind).toBe("ready");
+    expect(topicStatus(TOPICS, "Pulsars", "quiz", "hard").kind).toBe("unknown");
+    expect(topicStatus(TOPICS, "Quasars", "quiz", "easy")).toEqual({
+      kind: "elsewhere",
+      topic: TOPICS[0],
+      difficulties: ["hard"],
+    });
+  });
+});
