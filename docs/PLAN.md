@@ -414,18 +414,71 @@ Decisions to ask:
 - What the UI shows while steps stream, and what it shows when a run is rejected or capped.
 
 Claude Code:
-- [ ] On-topic check. Recommended: a Jev yes/no question ("is this topic about astronomy or space?"),
+- [x] On-topic check. Recommended: a Jev yes/no question ("is this topic about astronomy or space?"),
       about 0.2 s and $0.00002 per check, measured against a keyword filter on a small set of on- and
       off-topic inputs. The input is user-controlled, so it goes into Jev's state as data, never into the
       question's instructions.
-- [ ] Per-user limits (salted-hash IPs): 10 custom-topic runs a day and 60 requests an hour; global daily
+- [x] Per-user limits (salted-hash IPs): 3 custom-topic runs a day and 300 requests an hour; global daily
       cap; over a limit, custom topics fall back to the bank and other requests get HTTP 429. Counters live
       in the Supabase `rate_limits` table so they hold across serverless instances.
-- [ ] Streamed agent steps to the UI, including each Jev claim check and its confidence as it completes;
+- [x] Streamed agent steps to the UI, including each Jev claim check and its confidence as it completes;
       verified results cached into the bank.
 
+Decided 2026-10-04:
+- Global cap: 10 live runs and $0.50 a day, plus $4 a month for live runs (the daily Curator needs
+  about $5 a month of the $10 limit). A run reserves its hard bound ($0.17) until it ends, then
+  settles at its real cost (about $0.027).
+- Requests per user raised from 60 to 300 an hour (flagged as a locked decision): a 10-question
+  run is about 21 requests.
+- While a run streams: a terminal-style agent log. Quiz option checks show only Jev's confidence
+  until the player answers (a verdict per option would give the answer away).
+- Live results the gate holds for review are shown to the player who asked, labelled 'Not fully
+  verified' with the doubts (sent with the answer for a quiz); they join the bank once approved.
+  Discarded results send the player to a bank question at the same settings.
+- A live quiz question is question 1 of a run; the other 9 come from the bank. A topic the bank
+  has but not at this mode and difficulty is researched live too.
+- On-topic check: Jev, measured against a keyword filter (`python -m evals ontopic`, $0.0009):
+  Jev 44/44, keywords 18/44; on-topic inputs scored 0.95 or more, off-topic ones 0.04 or less,
+  and injection attempts 0.18 or less as 'a plain topic name'.
+- API wrapper changed from `BaseHTTPRequestHandler` to a standard-library WSGI `app` (a form
+  Vercel's Python runtime loads), because WSGI streams a response by returning an iterator. The
+  visitor's IP is now the last `X-Forwarded-For` entry (the one a client cannot forge).
+
+Built:
+- [x] `agent/topic_check.py` (cleaning and the Jev check), `evals/ontopic.py`.
+- [x] Migration `004_on_demand_runs.sql`: custom topic kind, `on_demand_runs` (every live run, the
+      limits are counted from it), and `begin_on_demand_run`, `finish_on_demand_run`,
+      `hit_request_limit` (secret key only). Visitor hashes are removed after two days.
+- [x] `agent/limits.py`, `agent/ondemand.py` (the live run on its own thread, so a paid run is
+      stored even if the page closes), `api/research.py` (streamed JSON lines), signed reveal
+      tokens for live quiz items.
+- [x] UI: agent log, live first question, 'Not fully verified' tag and doubts, fallbacks, 429.
+- [x] Tests: 241 Python, 21 TypeScript.
+
+Code review (2026-10-05, before committing), fixed:
+- A reservation could leak if the player left right after it was made (three leaks would have
+  blocked live runs for everyone until midnight): the run's thread now starts before anything
+  more is streamed, so it always settles the slot.
+- Closing the stream now waits for a started run to be stored (the close is passed through the
+  WSGI layer), so a serverless instance stays alive for it. To confirm on Vercel in Session 7.
+- The Haiku verifier's reasons are no longer streamed for a quiz (they can name the answer);
+  they come with the answer as the doubts.
+- Players' custom topics are left out of the Curator's news prompt.
+- Each on-topic check is logged with its tokens and cost (CLAUDE.md rule 1).
+- Topic lookup is one filtered read; the public reader repeats the published / fewer-than-2-
+  reports rule in every query; the secret-key reader is a separate `LiveResults` class that reads
+  one item by id. Live-run clients are made once per process, after checking every setting.
+- The agent log's timer restarts for each run.
+- Decided by Vedant: 3 live runs a day per visitor (was 10), so one visitor cannot use up the
+  global cap of 10 runs a day. The gate's limit check above was run at 10; the rule is the same.
+
 Gate (Vedant): valid topic streams and caches; off-topic is rejected; an 11th custom topic in a day falls
-back to the bank; a 61st request in an hour gets HTTP 429.
+back to the bank; a 301st request in an hour gets HTTP 429.
+- [x] Passed 2026-10-05. Vedant ran custom topics in the browser: "Drake Equation" and "Space
+      Travel" streamed and were published to the bank, and off-topic input was rejected. Checked
+      against the API: a 301st request in an hour got HTTP 429 (Retry-After set), and with 10 runs
+      simulated for a test visitor the 11th fell back to the bank without reserving anything. A
+      first live run ("Black holes") went to review and is in the queue. Live spend: $0.066.
 
 ---
 
@@ -446,7 +499,9 @@ Claude Code:
 - [ ] Keep `runs/curator/pending/` between scheduled runs (actions/cache or an artifact), so a run
       the bank could not store is re-sent by the next one, as it is locally.
 - [ ] Run the Vercel streaming spike planned on 2026-10-01 (incremental delivery, 300 s cap, client
-      disconnect, coexistence with Vite, cold start) and record results in `docs/SPIKE.md`.
+      disconnect, coexistence with Vite, cold start) and record results in `docs/SPIKE.md`. Check
+      that WSGI `app` functions in `api/` stream line by line (the UI copes if they are buffered),
+      and that Vercel replaces `X-Forwarded-For` with the client's address.
 - [ ] Deploy the UI and API; set `maxDuration`; the agent's own time budget stays under it.
 - [ ] `.github/workflows/curator.yml`: daily cron plus `workflow_dispatch`.
 

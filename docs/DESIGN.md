@@ -34,14 +34,14 @@ runs on a schedule with no human trigger), and code that reads well to recruiter
    - Local first: everything runs on Vedant's machine against Supabase, and moves to the cloud in Session 7 (changed 2026-10-01).
    - The only costs are the domain, the Anthropic API (capped at $10 a month) and TypeSafe Jev (prepaid balance, EUR 5 at 2026-10-01; $0.042 per million input tokens, output free).
 9. **On-demand guardrails:**
-   - A cheap on-topic check. Candidate: a Jev yes/no question (about 0.2 s and a fraction of a cent per check), compared with a keyword filter in Session 6.
+   - A cheap on-topic check: two Jev yes/no questions in one request (is it astronomy or space; is it only a topic name, with no instructions or abuse), with the typed text passed as data. Measured 2026-10-04 on 44 labelled inputs: Jev 44/44, a keyword filter 18/44; about $0.00002 and 0.23 s a check (`python -m evals ontopic`).
    - Per-user limits, where a user is a salted hash of the IP address (never the raw IP, for GDPR). Decided 2026-10-01:
-     - 10 custom-topic agent runs a day per user (about $0.20 at most), resetting at midnight UTC. Bank questions do not count.
-     - 60 API requests an hour per user, across all endpoints (bank questions, reports, stats), against scraping and runaway scripts.
+     - 3 custom-topic agent runs a day per user, resetting at midnight UTC. Bank questions do not count. (Lowered from 10 on 2026-10-05 after the Session 6 code review: at 10, one visitor could use up the global daily cap of 10 runs.)
+     - 300 API requests an hour per user, across all endpoints (bank questions, reports, stats), against scraping and runaway scripts. (Raised from 60 on 2026-10-04: a 10-question run is about 21 requests, so 60 stopped players during their third run in an hour.)
      - Over a limit, custom topics fall back to the bank and other requests get HTTP 429 with a retry time.
-   - A daily global cap in runs and dollars that stays under the $10 limit. When it's exhausted, serve from the bank.
-   - Verified results are cached into the bank.
-   - The UI streams live agent steps.
+   - A global cap that stays under the $10 limit (set 2026-10-04): 10 live runs and $0.50 a day, and $4 a month for live runs, leaving room for the daily Curator. Each run reserves the most it can cost ($0.17) until it ends. When a cap is reached, serve from the bank.
+   - Live results are stored in the bank whatever the outcome. A published one is shown to everyone; one in review is shown only to the player who asked for it, labelled 'Not fully verified' with the checks' doubts, until Vedant approves it; a discarded one sends the player to the bank (decided 2026-10-04).
+   - The UI streams live agent steps as a terminal-style agent log, including each Jev claim check. For a quiz, the option checks show only Jev's confidence until the player answers, so the log cannot give the answer away.
 10. **Evidence tools** (built in Session 2):
     - `search_wikipedia`, `search_arxiv` (astro-ph), `search_nasa_images` (NASA Image Library), `nasa_apod` (read from the APOD pages, since the APOD API now returns placeholders), and `fetch_feed` (NASA news, NASA Science, ESA Space Science, ESA/Webb, ESA/Hubble). None needs a key.
     - `fetch_page`, limited to an allow-list: Wikipedia; NASA, ESA, STScI, Webb and Hubble sites; arXiv (abstract pages only), ESO, NOIRLab, the IAU; and popular science sites (Space.com, Sky & Telescope) at the lowest preference. Britannica was removed in Session 2 because it blocks the agent (HTTP 403).
@@ -136,5 +136,5 @@ Vedant then opens the folder in a new VS Code window and continues from `docs/HA
 - **Verifiers:** on the seeded-error set, report each layer's catch rate and false-reject rate, Haiku/Jev agreement and Jev's calibration. Targets are agreed with Vedant in Session 3; the combined gate must catch every planted wrong number and non-verbatim quote.
 - **Curator:** trigger the workflow manually (`workflow_dispatch`), confirm new `published` rows in Supabase and a `runs` row with step logs, and confirm that failed or borderline items land in the right status.
 - **UI:** run `pnpm dev` locally. Play each mode and difficulty, check that sources open and appear in that item's fetched set, and that Report hides an item after 2 reports.
-- **On-demand:** run a valid topic (steps stream, result is cached, the second request is instant), an off-topic query (rejected), an 11th custom topic in a day from the same user (falls back to the bank), and a 61st request in an hour (HTTP 429).
+- **On-demand:** run a valid topic (steps stream, result is cached, the second request is instant), an off-topic query (rejected), a 4th custom topic in a day from the same user (falls back to the bank), and a 301st request in an hour (HTTP 429).
 - **Cost check:** confirm Anthropic Console spend stays under $10 a month, the TypeSafe balance matches the Jev usage logged per run, and every other service is on a free tier.
