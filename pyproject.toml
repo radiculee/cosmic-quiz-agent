@@ -3,8 +3,17 @@ name = "cosmic-quiz-agent"
 version = "0.1.0"
 description = "An autonomous astronomy research agent behind a Learn / Quiz game."
 requires-python = ">=3.12"
-# Runtime dependencies are pinned in requirements.txt (Vercel reads that file);
-# dev tools are pinned in requirements-dev.txt.
+# Runtime dependencies, pinned. Vercel installs these (it reads pyproject.toml before
+# requirements.txt); pip installs the same pins from requirements.txt, for the Curator workflow
+# and local setup. tests/test_packaging.py fails if the two lists ever differ. Dev tools are
+# pinned in requirements-dev.txt.
+dependencies = [
+    "anthropic==1.11.0",
+    "httpx2==2.13.1",
+    "pydantic==2.13.5",
+    "python-dotenv==1.2.4",
+    "typesafe-sdk==0.7.2",
+]
 
 [tool.ruff]
 line-length = 100
