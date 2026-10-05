@@ -5,11 +5,13 @@ python -m evals seed RUN_DIR [--yes]
 python -m evals verify-seeded RUN_DIR [--workers N] [--yes]
 python -m evals report RUN_DIR
 python -m evals rejev RUN_DIR --criteria astro-1 [--workers N] [--yes]
+python -m evals ontopic [--yes]
 """
 
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -20,9 +22,10 @@ from agent.console import confirm, use_utf8_output
 from agent.gate import rescore, rescore_record
 from agent.llm import AnthropicProvider, LLMProvider
 from agent.schemas import ItemRecord
+from agent.topic_check import JevTopicJudge, keyword_judge
 from agent.verifiers import JevClient, make_jev, verify
 from agent.verify import code_check
-from evals import rejev
+from evals import ontopic, rejev
 from evals.report import write_report
 from evals.runner import estimate, new_run_dir, run_eval
 from evals.seeding import FAULT_TYPES, PER_FAULT, SeededItem, SeededResult, build_seeded_set
@@ -200,6 +203,43 @@ def command_rejev(args: argparse.Namespace, settings: Settings) -> int:
     return 0
 
 
+def command_ontopic(args: argparse.Namespace, settings: Settings) -> int:
+    cases = ontopic.CASES
+    if not confirm(
+        f"{len(cases)} Jev requests: under $0.002 on TypeSafe, nothing on Anthropic", args.yes
+    ):
+        return 1
+    if not os.environ.get("TYPESAFE_API_KEY", "").strip():
+        print("TYPESAFE_API_KEY is not set; nothing to check.")
+        return 1
+    jev = JevTopicJudge(
+        settings.jev_model, settings.jev_timeout_seconds, settings.jev_input_per_mtok
+    )
+    results = {
+        "keywords": ontopic.judge_all(cases, keyword_judge),
+        "jev": ontopic.judge_all(cases, jev.judge),
+    }
+    print(f"{'input':<58} {'want':<7} {'keywords':<9} {'jev':<7} on_topic  plain")
+    for kw, jv in zip(results["keywords"], results["jev"], strict=True):
+        want = "accept" if kw.case.accept else "reject"
+        scores = (
+            f"{jv.verdict.on_topic:8.2f} {jv.verdict.plain:6.2f}" if jv.verdict else "   (cleaning)"
+        )
+        print(
+            f"{kw.case.text[:57]:<58} {want:<7} {'ok' if kw.right else 'WRONG':<9} "
+            f"{'ok' if jv.right else 'WRONG':<7} {scores}"
+        )
+    for name, outcomes in results.items():
+        print(f"{name}: {ontopic.summary(outcomes)}")
+    cost = sum(o.verdict.cost_usd for o in results["jev"] if o.verdict)
+    seconds = [o.verdict.seconds for o in results["jev"] if o.verdict]
+    print(f"Jev cost ${cost:.5f}, median {sorted(seconds)[len(seconds) // 2]:.2f} s per check")
+    path = new_run_dir("ontopic") / "ontopic.json"
+    ontopic.write_results(path, results)
+    print(f"Saved {path}")
+    return 0
+
+
 def rescore_seeded(result: SeededResult) -> SeededResult:
     return result.model_copy(update={"verification": rescore(result.verification)})
 
@@ -239,6 +279,11 @@ def main(argv: list[str] | None = None) -> int:
     recheck.add_argument("--workers", type=int, default=4)
     recheck.add_argument("--yes", action="store_true")
 
+    on_topic = commands.add_parser(
+        "ontopic", help="Measure the custom-topic check: Jev against keywords (TypeSafe)."
+    )
+    on_topic.add_argument("--yes", action="store_true")
+
     args = parser.parse_args(argv)
     settings = load_settings()
     handlers = {
@@ -247,6 +292,7 @@ def main(argv: list[str] | None = None) -> int:
         "verify-seeded": command_verify_seeded,
         "report": command_report,
         "rejev": command_rejev,
+        "ontopic": command_ontopic,
     }
     return handlers[args.command](args, settings)
 
