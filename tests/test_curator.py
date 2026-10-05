@@ -28,7 +28,12 @@ from agent.store import (
 from agent.tools import ToolContext
 from agent.tools.feeds import parse_rss
 from curator import pipeline
-from curator.__main__ import _positive_float, _positive_int, _unfinished_news_topic
+from curator.__main__ import (
+    _positive_float,
+    _positive_int,
+    _unfinished_news_topic,
+    command_upkeep,
+)
 from curator.discover import NewsPick, build_prompt, choose, discover, read_news
 from curator.pipeline import (
     Budget,
@@ -420,3 +425,26 @@ def test_custom_topics_stay_out_of_the_news_prompt() -> None:
 
     assert "Comet news" in prompt and "Auroras" in prompt
     assert "Player typed topic" not in prompt
+
+
+def test_upkeep_stores_left_over_runs_and_retires_without_any_model(
+    tmp_path: Path,
+    settings: Settings,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    store = MemoryStore()
+    store.retired = 3
+    pending = tmp_path / "curator" / "pending"
+    pending.mkdir(parents=True)
+    payload = build_payload(record_with("published"), QUASARS, "curator", 1)
+    (pending / "left-over.json").write_text(payload.model_dump_json(), encoding="utf-8")
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)  # upkeep must not need it
+    monkeypatch.delenv("TYPESAFE_API_KEY", raising=False)
+
+    upkeep_settings = settings.model_copy(update={"runs_dir": str(tmp_path)})
+    status = command_upkeep(argparse.Namespace(), upkeep_settings, store)  # type: ignore[arg-type]
+
+    assert status == 0
+    assert len(store.payloads) == 1 and not list(pending.glob("*.json"))
+    assert "retired 3 stale item(s)" in capsys.readouterr().out

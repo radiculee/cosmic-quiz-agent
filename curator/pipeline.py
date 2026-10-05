@@ -214,6 +214,44 @@ class _Tally:
     typesafe_usd: float = 0.0
 
 
+def set_aside(
+    pending_dir: Path, path: Path, folder: str, reason: object, say: Callable[[str], None]
+) -> None:
+    """Move a pending payload out of the way, with the reason next to it, so it is kept for
+    inspection but never blocks or repeats in later runs."""
+    target = pending_dir / folder
+    target.mkdir(parents=True, exist_ok=True)
+    path.replace(target / path.name)
+    (target / f"{path.stem}.reason.txt").write_text(str(reason), encoding="utf-8")
+    say(f"  Set aside {path.name} in {target}: {reason}")
+
+
+def flush_pending(store: Store, pending_dir: Path, say: Callable[[str], None]) -> int:
+    """Send payloads left on disk by an earlier run that could not reach the bank. A file that
+    cannot be read goes to `corrupt/`, and one the bank refuses goes to `rejected/`, so neither
+    blocks or repeats in later runs. Free: no model calls."""
+    sent = 0
+    for path in sorted(pending_dir.glob("*.json")):
+        try:
+            payload = ItemPayload.model_validate_json(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as error:  # pydantic's ValidationError is a ValueError
+            set_aside(pending_dir, path, "corrupt", error, say)
+            continue
+        try:
+            store.record_item(payload)
+        except StoreError as error:
+            if error.permanent:  # the bank refuses this payload: sending it again cannot help
+                set_aside(pending_dir, path, "rejected", error, say)
+            else:
+                say(f"Still cannot store {path.name}: {error}")
+            continue
+        path.unlink()
+        sent += 1
+    if sent:
+        say(f"Stored {sent} run(s) left over from an earlier Curator run.")
+    return sent
+
+
 class Curator:
     """Plans, runs and stores the jobs for one Curator invocation."""
 
@@ -240,13 +278,7 @@ class Curator:
             self._say(message)
 
     def _set_aside(self, path: Path, folder: str, reason: object) -> None:
-        """Move a pending payload out of the way, with the reason next to it, so it is kept for
-        inspection but never blocks or repeats in later runs."""
-        target = self.pending_dir / folder
-        target.mkdir(parents=True, exist_ok=True)
-        path.replace(target / path.name)
-        (target / f"{path.stem}.reason.txt").write_text(str(reason), encoding="utf-8")
-        self.say(f"  Set aside {path.name} in {target}: {reason}")
+        set_aside(self.pending_dir, path, folder, reason, self.say)
 
     def _rescue(self, job: Job, record: ItemRecord, error: Exception) -> None:
         """Last resort when a finished job's result cannot be handled: keep the raw record."""
@@ -266,29 +298,7 @@ class Curator:
         return plan_jobs(topics, attempted)
 
     def flush_pending(self) -> int:
-        """Send payloads left on disk by an earlier run that could not reach the bank. A file
-        that cannot be read goes to `corrupt/`, and one the bank refuses goes to `rejected/`, so
-        neither blocks or repeats in later runs."""
-        sent = 0
-        for path in sorted(self.pending_dir.glob("*.json")):
-            try:
-                payload = ItemPayload.model_validate_json(path.read_text(encoding="utf-8"))
-            except (OSError, ValueError) as error:  # pydantic's ValidationError is a ValueError
-                self._set_aside(path, "corrupt", error)
-                continue
-            try:
-                self.store.record_item(payload)
-            except StoreError as error:
-                if error.permanent:  # the bank refuses this payload: sending it again cannot help
-                    self._set_aside(path, "rejected", error)
-                else:
-                    self.say(f"Still cannot store {path.name}: {error}")
-                continue
-            path.unlink()
-            sent += 1
-        if sent:
-            self.say(f"Stored {sent} run(s) left over from an earlier Curator run.")
-        return sent
+        return flush_pending(self.store, self.pending_dir, self.say)
 
     def _keep(self, payload: ItemPayload, job: Job) -> Path | None:
         """Write a payload to the pending folder: to a temporary file first, then renamed, so a

@@ -3,6 +3,7 @@
 python -m curator build [--topics N] [--cap USD] [--workers N] [--yes]
 python -m curator daily [--cap USD] [--workers N] [--yes]
 python -m curator review [--mode learn|quiz] [--difficulty easy|medium|hard]
+python -m curator upkeep
 
 Every paid run prints its cost estimate and asks before spending anything, unless --yes approves
 it in advance (as the scheduled run will). The cap is hard: work starts only if the most it can
@@ -14,6 +15,9 @@ build continues where it stopped. daily first finishes a recent news topic that 
 left incomplete; otherwise it picks one new topic from the NASA and ESA news feeds. Either way it
 runs the same pipeline and retires news items past their date. review shows each item the
 gate sent to review, with its sources, and publishes or discards it on your decision (free).
+upkeep does the free part of a daily run only: it stores runs an earlier run left on disk and
+retires news items past their date, with no model calls. The scheduled workflow runs it on days
+without a paid run, which also keeps the free database from pausing for inactivity.
 """
 
 from __future__ import annotations
@@ -42,6 +46,7 @@ from curator.pipeline import (
     Curator,
     Job,
     estimate,
+    flush_pending,
     job_cost_limit,
 )
 from curator.review import review
@@ -203,6 +208,14 @@ def command_daily(args: argparse.Namespace, settings: Settings, store: SupabaseS
     return 0
 
 
+def command_upkeep(args: argparse.Namespace, settings: Settings, store: SupabaseStore) -> int:
+    pending_dir = Path(settings.runs_dir) / "curator" / "pending"
+    flush_pending(store, pending_dir, print)
+    retired = store.retire_stale()
+    print(f"Upkeep: retired {retired} stale item(s). No model calls; nothing spent.")
+    return 0
+
+
 def command_review(args: argparse.Namespace, settings: Settings, store: SupabaseStore) -> int:
     items = [
         item
@@ -248,10 +261,16 @@ def main(argv: list[str] | None = None) -> int:
     queue = commands.add_parser("review", help="Publish or discard the items in review (free).")
     queue.add_argument("--mode", choices=get_args(Mode))
     queue.add_argument("--difficulty", choices=get_args(Difficulty))
+    commands.add_parser("upkeep", help="Store left-over runs and retire stale items (free).")
     args = parser.parse_args(argv)
 
     settings = load_settings()
-    handlers = {"build": command_build, "daily": command_daily, "review": command_review}
+    handlers = {
+        "build": command_build,
+        "daily": command_daily,
+        "review": command_review,
+        "upkeep": command_upkeep,
+    }
     try:
         with SupabaseStore.from_env() as store:
             return handlers[args.command](args, settings, store)
