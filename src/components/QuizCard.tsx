@@ -5,6 +5,7 @@ import type { AnswerScore } from "../game";
 import type { QuizAnswer, QuizQuestion } from "../types";
 import { CardActions } from "./CardActions";
 import { CardFrame } from "./CardFrame";
+import { Doubts } from "./Doubts";
 import { PointsPop } from "./PointsPop";
 import { QuizSourceCheck } from "./SourceCheckPanel";
 import { SourcesList } from "./SourcesList";
@@ -17,6 +18,8 @@ type AnswerState =
 
 interface QuizCardProps {
   question: QuizQuestion;
+  /** Unlocks the answer to a question from the player's own live run. */
+  revealToken?: string | undefined;
   /** Called once per answer with the seconds taken; returns the points it earned, if scored. */
   onAnswered: (correct: boolean, seconds: number) => AnswerScore | null;
   nextLabel: string;
@@ -24,7 +27,7 @@ interface QuizCardProps {
 }
 
 /** One question: pick an option, then see the answer, the explanation and its sources. */
-export function QuizCard({ question, onAnswered, nextLabel, onNext }: QuizCardProps) {
+export function QuizCard({ question, revealToken, onAnswered, nextLabel, onNext }: QuizCardProps) {
   const [state, setState] = useState<AnswerState>({ kind: "unanswered" });
   const shownAt = useRef(performance.now());
 
@@ -41,7 +44,7 @@ export function QuizCard({ question, onAnswered, nextLabel, onNext }: QuizCardPr
     const seconds = (performance.now() - shownAt.current) / 1000;
     setState({ kind: "checking", picked: index });
     try {
-      const answer = await fetchAnswer(question.id);
+      const answer = await fetchAnswer(question.id, revealToken);
       const score = onAnswered(index === answer.correct_index, seconds);
       setState({ kind: "answered", picked: index, answer, score });
     } catch {
@@ -69,7 +72,12 @@ export function QuizCard({ question, onAnswered, nextLabel, onNext }: QuizCardPr
   }
 
   return (
-    <CardFrame mode="quiz" difficulty={question.difficulty} topic={question.topic}>
+    <CardFrame
+      mode="quiz"
+      difficulty={question.difficulty}
+      topic={question.topic}
+      status={question.status}
+    >
       <p className="mt-4 text-xl leading-relaxed font-medium">{question.question}</p>
 
       <ol className="mt-6 space-y-3">
@@ -113,9 +121,15 @@ export function QuizCard({ question, onAnswered, nextLabel, onNext }: QuizCardPr
             </p>
             {score && <PointsPop score={score} />}
             <p className="mt-4 leading-relaxed text-ink/90">{answer.explanation}</p>
+            <Doubts doubts={answer.doubts} />
             <QuizSourceCheck check={answer.source_check} options={question.options} />
             <SourcesList sources={answer.sources} />
-            <CardActions itemId={question.id} nextLabel={nextLabel} onNext={onNext} />
+            <CardActions
+              itemId={question.id}
+              nextLabel={nextLabel}
+              onNext={onNext}
+              canReport={question.status === "published"}
+            />
           </>
         )}
       </div>

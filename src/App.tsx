@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { ApiError, fetchItem, fetchTopics } from "./api";
+import { ApiError, fetchItem, fetchTopics, streamResearch } from "./api";
+import { AgentLog, type LogLine, type LogOutcome } from "./components/AgentLog";
 import { BadgeChip } from "./components/BadgeChip";
 import { DiceIcon } from "./components/DiceIcon";
 import { LearnCard } from "./components/LearnCard";
@@ -36,6 +37,7 @@ import {
   MODES,
   type Mode,
   type QuizQuestion,
+  type ResearchEvent,
 } from "./types";
 import { useRunClock } from "./useRunClock";
 
@@ -49,7 +51,7 @@ type View =
   | { kind: "idle" }
   | { kind: "loading"; label: string }
   | { kind: "failed"; message: string; retry: () => void }
-  | { kind: "quiz"; question: QuizQuestion; number: number }
+  | { kind: "quiz"; question: QuizQuestion; number: number; revealToken?: string }
   | { kind: "learn"; item: LearnItem; newBadges: BadgeId[] }
   | {
       kind: "results";
@@ -95,7 +97,25 @@ function useProfile(): [Profile, (update: (profile: Profile) => [Profile, BadgeI
   return [profile, update];
 }
 
+/** A live run's agent log, kept on screen above the card it produced. */
+interface LiveLog {
+  /** A new log per run, so the panel (and its timer) starts afresh. */
+  id: number;
+  topic: string;
+  mode: Mode;
+  difficulty: Difficulty;
+  lines: LogLine[];
+  outcome: LogOutcome;
+}
+
+// The server cleans topics the same way (agent/topic_check.py); this only avoids a wasted call.
+const MIN_TOPIC_CHARS = 2;
+const MAX_TOPIC_CHARS = 80;
+
 function loadError(error: unknown): string {
+  if (error instanceof ApiError && error.status === 429) {
+    return error.message;
+  }
   return error instanceof ApiError && error.status === 404
     ? "There is no item for this topic at these settings yet."
     : "The question could not be loaded. Try again in a moment.";
@@ -109,6 +129,7 @@ export function App() {
   const [mode, setMode] = useState<Mode>("quiz");
   const [query, setQuery] = useState("");
   const [view, setView] = useState<View>({ kind: "idle" });
+  const [liveLog, setLiveLog] = useState<LiveLog | null>(null);
   const [run, setRun] = useState<Run | null>(null);
   const runRef = useRef<Run | null>(null);
   const runStart = useRef({ points: 0, badges: [] as BadgeId[] });
@@ -121,6 +142,11 @@ export function App() {
     [topicsState],
   );
   const status = topicStatus(topics, query, mode, difficulty);
+  const typed = query.trim().length;
+  const canResearch =
+    (status.kind === "unknown" || status.kind === "elsewhere") &&
+    typed >= MIN_TOPIC_CHARS &&
+    typed <= MAX_TOPIC_CHARS;
   const suggestions = useMemo(
     () => suggest(topics, query, mode, difficulty),
     [topics, query, mode, difficulty],
@@ -223,13 +249,13 @@ export function App() {
 
   // --- LEARN ----------------------------------------------------------------------------------
 
-  function loadLearn(topic: string) {
+  function loadLearn(topic: string, learnDifficulty: Difficulty = difficulty) {
     replaceRun(null);
     clock.reset();
     const signal = newRequest();
     setQuery(topic);
     setView({ kind: "loading", label: `Loading ${topic}...` });
-    fetchItem(topic, "learn", difficulty, profile.seenItems, signal)
+    fetchItem(topic, "learn", learnDifficulty, profile.seenItems, signal)
       .then((item) => {
         if (item.mode !== "learn") {
           throw new ApiError("expected a LEARN item");
@@ -239,8 +265,117 @@ export function App() {
       })
       .catch((error: unknown) => {
         if (!signal.aborted) {
-          setView({ kind: "failed", message: loadError(error), retry: () => loadLearn(topic) });
+          setView({
+            kind: "failed",
+            message: loadError(error),
+            retry: () => loadLearn(topic, learnDifficulty),
+          });
         }
+      });
+  }
+
+  // --- Custom topics, researched live -------------------------------------------------------
+
+  /** A live quiz question becomes question 1 of a run; the rest come from the bank. */
+  function startLiveRun(question: QuizQuestion, revealToken: string) {
+    const played = profile.played[question.difficulty];
+    const planned = planRun(topics, question.difficulty, question.topic, played);
+    runStart.current = { points: profile.points, badges: [] };
+    clock.reset();
+    replaceRun(planned);
+    setView({ kind: "quiz", question, number: 1, revealToken });
+    clock.start();
+  }
+
+  /** No live result: carry on from the bank at the same settings. */
+  function playFromBank(runMode: Mode, runDifficulty: Difficulty, topic?: string) {
+    const avoid = runMode === "quiz" ? profile.played[runDifficulty] : profile.learned;
+    const name = topic ?? randomTopic(topics, runMode, runDifficulty, "", Math.random, avoid)?.name;
+    if (!name) {
+      setView({ kind: "idle" });
+    } else if (runMode === "quiz") {
+      startRun(name, runDifficulty);
+    } else {
+      loadLearn(name, runDifficulty);
+    }
+  }
+
+  function research(topic: string) {
+    const runMode = mode;
+    const runDifficulty = difficulty;
+    replaceRun(null);
+    clock.reset();
+    const signal = newRequest();
+    setView({ kind: "idle" });
+    setLiveLog({
+      id: Date.now(),
+      topic,
+      mode: runMode,
+      difficulty: runDifficulty,
+      lines: [],
+      outcome: { kind: "running" },
+    });
+    viewRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    let ended = false;
+    const finish = (outcome: LogOutcome) => {
+      ended = true;
+      setLiveLog((log) => (log ? { ...log, outcome } : log));
+    };
+    const fallBack = (message: string, bankTopic?: string) => {
+      finish({ kind: "fallback", message });
+      playFromBank(runMode, runDifficulty, bankTopic);
+    };
+
+    const onEvent = (event: ResearchEvent) => {
+      switch (event.type) {
+        case "log": {
+          const line: LogLine = {
+            label: event.label,
+            detail: event.detail,
+            tone: event.tone,
+            verdict: event.verdict,
+          };
+          setLiveLog((log) => (log ? { ...log, lines: [...log.lines, line] } : log));
+          break;
+        }
+        case "rejected":
+          finish({ kind: "rejected", message: event.message });
+          break;
+        case "fallback":
+          fallBack(event.message, event.topic ?? undefined);
+          break;
+        case "error":
+          fallBack(`${event.message} Here is a question from the bank.`);
+          break;
+        case "result": {
+          const item = event.item;
+          finish({ kind: item.status === "review" ? "review" : "published" });
+          if (item.mode === "quiz" && event.reveal_token) {
+            startLiveRun(item, event.reveal_token);
+          } else if (item.mode === "learn") {
+            const earned = updateProfile((p) => afterLearn(p, item.id, item.topic));
+            setView({ kind: "learn", item, newBadges: earned });
+          }
+          break;
+        }
+      }
+    };
+
+    streamResearch(topic, runMode, runDifficulty, onEvent, signal)
+      .then(() => {
+        if (!ended && !signal.aborted) {
+          fallBack("The live run ended without a result. Here is a question from the bank.");
+        }
+      })
+      .catch((error: unknown) => {
+        if (signal.aborted || ended) {
+          return;
+        }
+        if (error instanceof ApiError && (error.status === 400 || error.status === 429)) {
+          finish({ kind: "rejected", message: error.message });
+          return;
+        }
+        fallBack("Live research is not available right now. Here is a question from the bank.");
       });
   }
 
@@ -254,9 +389,14 @@ export function App() {
   // --- Controls -------------------------------------------------------------------------------
 
   function start() {
+    if (canResearch) {
+      research(query.trim());
+      return;
+    }
     if (status.kind !== "ready") {
       return;
     }
+    setLiveLog(null);
     if (mode === "quiz") {
       startRun(status.topic.name, difficulty);
     } else {
@@ -275,6 +415,7 @@ export function App() {
   function changeSettings() {
     replaceRun(null);
     clock.reset();
+    setLiveLog(null);
     setView({ kind: "idle" });
     topRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
@@ -293,6 +434,7 @@ export function App() {
   }, [viewKey]);
 
   const lastQuestion = run !== null && run.results.length >= run.topics.length;
+  const researching = liveLog?.outcome.kind === "running";
 
   return (
     <main
@@ -330,6 +472,7 @@ export function App() {
           status={status}
           mode={mode}
           difficulty={difficulty}
+          tooLong={typed > MAX_TOPIC_CHARS}
           onRetry={retryTopics}
         />
       </div>
@@ -347,7 +490,9 @@ export function App() {
         <button
           type="button"
           onClick={start}
-          disabled={status.kind !== "ready" || view.kind === "loading"}
+          disabled={
+            (status.kind !== "ready" && !canResearch) || view.kind === "loading" || researching
+          }
           className="rounded-lg bg-teal px-12 py-4 font-pixel text-[11px] uppercase text-void transition-opacity hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal disabled:opacity-40"
         >
           Go
@@ -364,6 +509,18 @@ export function App() {
       </div>
 
       <div ref={viewRef} className="mt-10 w-full scroll-mt-6" aria-live="polite">
+        {liveLog && (
+          <div className="mb-6">
+            <AgentLog
+              key={liveLog.id}
+              topic={liveLog.topic}
+              mode={liveLog.mode}
+              difficulty={liveLog.difficulty}
+              lines={liveLog.lines}
+              outcome={liveLog.outcome}
+            />
+          </div>
+        )}
         {view.kind === "loading" && (
           <p className="text-center text-sm text-slate">{view.label}</p>
         )}
@@ -389,6 +546,7 @@ export function App() {
             />
             <QuizCard
               question={view.question}
+              revealToken={view.revealToken}
               onAnswered={(correct, seconds) => onAnswered(view.question, correct, seconds)}
               nextLabel={lastQuestion ? "See results" : "Next question"}
               onNext={nextQuestion}
@@ -438,11 +596,12 @@ interface HintProps {
   status: ReturnType<typeof topicStatus>;
   mode: Mode;
   difficulty: Difficulty;
+  tooLong: boolean;
   onRetry: () => void;
 }
 
-/** One line under the topic box explaining why GO is or is not available. */
-function Hint({ state, status, mode, difficulty, onRetry }: HintProps) {
+/** One line under the topic box explaining what GO will do, or why it is not available. */
+function Hint({ state, status, mode, difficulty, tooLong, onRetry }: HintProps) {
   const base = "mt-3 min-h-5 text-sm";
   if (state.kind === "loading") {
     return <p className={`${base} text-slate`}>Loading topics...</p>;
@@ -457,11 +616,14 @@ function Hint({ state, status, mode, difficulty, onRetry }: HintProps) {
       </p>
     );
   }
+  if (tooLong) {
+    return <p className={`${base} text-rust`}>Keep the topic under 80 characters.</p>;
+  }
   if (status.kind === "unknown") {
     return (
       <p className={`${base} text-slate`}>
-        Not in the bank yet. Custom topics are coming soon; for now, pick one from the list or try
-        a random topic.
+        Not in the bank yet. GO researches it live: the agent reads and checks its sources in
+        about 20 seconds.
       </p>
     );
   }
@@ -470,7 +632,7 @@ function Hint({ state, status, mode, difficulty, onRetry }: HintProps) {
     return (
       <p className={`${base} text-slate`}>
         {status.topic.name} has no {mode.toUpperCase()} item at {difficulty.toUpperCase()} yet.
-        {others ? ` Try ${others}.` : ""}
+        GO researches one live{others ? `, or try ${others}` : ""}.
       </p>
     );
   }

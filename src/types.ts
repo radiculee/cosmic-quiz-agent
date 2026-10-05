@@ -5,11 +5,13 @@ export const VERDICTS = ["supports", "contradicts", "says_nothing"] as const;
 export type Difficulty = (typeof DIFFICULTIES)[number];
 export type Mode = (typeof MODES)[number];
 export type Verdict = (typeof VERDICTS)[number];
+/** "review" items come only from the player's own live run and are labelled as not verified. */
+export type ShownStatus = "published" | "review";
 
 /** A topic in the bank and the difficulties with at least one published item, per mode. */
 export interface BankTopic {
   name: string;
-  kind: "evergreen" | "news";
+  kind: "evergreen" | "news" | "custom";
   learn: Difficulty[];
   quiz: Difficulty[];
 }
@@ -42,6 +44,7 @@ export interface QuizQuestion {
   topic: string;
   question: string;
   options: string[];
+  status: ShownStatus;
 }
 
 export interface QuizAnswer {
@@ -50,6 +53,8 @@ export interface QuizAnswer {
   explanation: string;
   sources: Source[];
   source_check: SourceCheck;
+  /** Why the checks held a live item back; sent with the answer so it cannot spoil it. */
+  doubts: string[];
 }
 
 export interface LearnItem {
@@ -60,6 +65,37 @@ export interface LearnItem {
   explanation: string;
   sources: Source[];
   source_check: SourceCheck;
+  status: ShownStatus;
+  doubts: string[];
 }
 
 export type Item = QuizQuestion | LearnItem;
+
+/** A quiz question from a live run, with the token that unlocks its answer. */
+export interface LiveQuestion {
+  question: QuizQuestion;
+  revealToken: string;
+}
+
+export type Tone = "info" | "ok" | "warn";
+
+/** Events streamed by /api/research (agent/ondemand.py). */
+export type ResearchEvent =
+  | {
+      type: "log";
+      label: string;
+      detail: string;
+      tone: Tone;
+      verdict: Verdict | null;
+      confidence: number | null;
+      seconds: number;
+    }
+  | { type: "rejected"; message: string }
+  | {
+      type: "fallback";
+      reason: "in_bank" | "limit" | "unavailable" | "discarded";
+      message: string;
+      topic: string | null;
+    }
+  | { type: "result"; item: Item; reveal_token: string | null }
+  | { type: "error"; message: string };

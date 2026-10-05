@@ -63,6 +63,14 @@ describe("runs", () => {
     expect(run.repeats).toBe(false);
   });
 
+  it("puts a custom topic first and fills the run from the bank", () => {
+    const run = planRun(TOPICS.slice(0, 4), "easy", "Black holes", [], () => 0.5);
+
+    expect(run.topics[0]).toBe("Black holes");
+    expect(run.topics).toHaveLength(5);
+    expect(new Set(run.topics).size).toBe(5);
+  });
+
   it("repeats played topics only when it must, and says so", () => {
     const few = TOPICS.slice(0, 4);
     const run = planRun(few, "easy", "Topic 1", ["Topic 2"], () => 0.5);

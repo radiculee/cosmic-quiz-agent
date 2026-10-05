@@ -8,6 +8,8 @@ import {
   type OptionCheck,
   type QuizAnswer,
   type QuizQuestion,
+  type ResearchEvent,
+  type ShownStatus,
   type Source,
   type SourceCheck,
   VERDICTS,
@@ -45,11 +47,15 @@ function isDifficulty(value: unknown): value is Difficulty {
   return isString(value) && (DIFFICULTIES as readonly string[]).includes(value);
 }
 
+function isShownStatus(value: unknown): value is ShownStatus {
+  return value === "published" || value === "review";
+}
+
 function isBankTopic(value: unknown): value is BankTopic {
   return (
     isRecord(value) &&
     isString(value.name) &&
-    (value.kind === "evergreen" || value.kind === "news") &&
+    (value.kind === "evergreen" || value.kind === "news" || value.kind === "custom") &&
     isListOf(value.learn, isDifficulty) &&
     isListOf(value.quiz, isDifficulty)
   );
@@ -86,7 +92,8 @@ function isQuizQuestion(value: unknown): value is QuizQuestion {
     isDifficulty(value.difficulty) &&
     isString(value.topic) &&
     isString(value.question) &&
-    isListOf(value.options, isString)
+    isListOf(value.options, isString) &&
+    isShownStatus(value.status)
   );
 }
 
@@ -99,7 +106,9 @@ function isLearnItem(value: unknown): value is LearnItem {
     isString(value.topic) &&
     isString(value.explanation) &&
     isListOf(value.sources, isSource) &&
-    isSourceCheck(value.source_check)
+    isSourceCheck(value.source_check) &&
+    isShownStatus(value.status) &&
+    isListOf(value.doubts, isString)
   );
 }
 
@@ -110,8 +119,45 @@ function isQuizAnswer(value: unknown): value is QuizAnswer {
     isNumber(value.correct_index) &&
     isString(value.explanation) &&
     isListOf(value.sources, isSource) &&
-    isSourceCheck(value.source_check)
+    isSourceCheck(value.source_check) &&
+    isListOf(value.doubts, isString)
   );
+}
+
+const TONES: readonly unknown[] = ["info", "ok", "warn"];
+const FALLBACK_REASONS: readonly unknown[] = ["in_bank", "limit", "unavailable", "discarded"];
+
+function isResearchEvent(value: unknown): value is ResearchEvent {
+  if (!isRecord(value)) {
+    return false;
+  }
+  switch (value.type) {
+    case "log":
+      return (
+        isString(value.label) &&
+        isString(value.detail) &&
+        TONES.includes(value.tone) &&
+        (value.verdict === null || (VERDICTS as readonly unknown[]).includes(value.verdict)) &&
+        (value.confidence === null || isNumber(value.confidence)) &&
+        isNumber(value.seconds)
+      );
+    case "rejected":
+    case "error":
+      return isString(value.message);
+    case "fallback":
+      return (
+        FALLBACK_REASONS.includes(value.reason) &&
+        isString(value.message) &&
+        (value.topic === null || isString(value.topic))
+      );
+    case "result":
+      return (
+        (isQuizQuestion(value.item) || isLearnItem(value.item)) &&
+        (value.reveal_token === null || isString(value.reveal_token))
+      );
+    default:
+      return false;
+  }
 }
 
 // --- Requests ---------------------------------------------------------------------------------
@@ -160,9 +206,18 @@ export async function fetchItem(
   throw new ApiError("/api/item answered in an unexpected shape");
 }
 
-/** The answer to a quiz item, fetched once the player has answered. */
-export async function fetchAnswer(id: number, signal?: AbortSignal): Promise<QuizAnswer> {
-  const body = await request(`/api/reveal?id=${id}`, signalOnly(signal));
+/** The answer to a quiz item, fetched once the player has answered. A live item needs the
+ * token its run gave out. */
+export async function fetchAnswer(
+  id: number,
+  revealToken?: string,
+  signal?: AbortSignal,
+): Promise<QuizAnswer> {
+  const query = new URLSearchParams({ id: String(id) });
+  if (revealToken) {
+    query.set("token", revealToken);
+  }
+  const body = await request(`/api/reveal?${query.toString()}`, signalOnly(signal));
   if (isQuizAnswer(body)) {
     return body;
   }
@@ -177,4 +232,71 @@ export async function reportItem(id: number, reason: string): Promise<boolean> {
     body: JSON.stringify({ id, reason: reason.trim() || null }),
   });
   return isRecord(body) && body.already === true;
+}
+
+/** Split text into complete lines and the unfinished remainder (a stream can end mid-line). */
+export function takeLines(buffer: string): [string[], string] {
+  const parts = buffer.split("\n");
+  const rest = parts.pop() ?? "";
+  return [parts.filter((line) => line.trim() !== ""), rest];
+}
+
+/**
+ * Research a custom topic live. Each event the server streams is checked and passed to
+ * `onEvent` as it arrives; the promise settles when the stream ends. Events of an unknown type
+ * are skipped, so an older page keeps working against a newer server.
+ */
+export async function streamResearch(
+  topic: string,
+  mode: Mode,
+  difficulty: Difficulty,
+  onEvent: (event: ResearchEvent) => void,
+  signal?: AbortSignal,
+): Promise<void> {
+  const response = await fetch("/api/research", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ topic, mode, difficulty }),
+    ...signalOnly(signal),
+  });
+  if (!response.ok || !response.body) {
+    let message = `HTTP ${response.status}`;
+    try {
+      const body: unknown = await response.json();
+      if (isRecord(body) && isString(body.error)) {
+        message = body.error;
+      }
+    } catch {
+      // Keep the status as the message.
+    }
+    throw new ApiError(message, response.status);
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  const handle = (line: string) => {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(line);
+    } catch {
+      return;
+    }
+    if (isResearchEvent(parsed)) {
+      onEvent(parsed);
+    }
+  };
+  for (;;) {
+    const { done, value } = await reader.read();
+    buffer += decoder.decode(value, { stream: !done });
+    const [lines, rest] = takeLines(buffer);
+    lines.forEach(handle);
+    buffer = rest;
+    if (done) {
+      break;
+    }
+  }
+  if (buffer.trim()) {
+    handle(buffer);
+  }
 }

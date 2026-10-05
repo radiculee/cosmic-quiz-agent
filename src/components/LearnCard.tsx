@@ -1,6 +1,7 @@
 import type { LearnItem } from "../types";
 import { CardFrame } from "./CardFrame";
 import { CardActions } from "./CardActions";
+import { Doubts } from "./Doubts";
 import { LearnSourceCheck } from "./SourceCheckPanel";
 import { SourcesList } from "./SourcesList";
 
@@ -8,15 +9,21 @@ import { SourcesList } from "./SourcesList";
 export function LearnCard({ item, onNext }: { item: LearnItem; onNext: () => void }) {
   const paragraphs = item.explanation.split(/\n+/).filter((text) => text.trim());
   return (
-    <CardFrame mode="learn" difficulty={item.difficulty} topic={item.topic}>
+    <CardFrame mode="learn" difficulty={item.difficulty} topic={item.topic} status={item.status}>
       <div className="mt-5 space-y-4 text-lg leading-relaxed text-ink/90">
         {paragraphs.map((text, index) => (
           <p key={index}>{text}</p>
         ))}
       </div>
+      <Doubts doubts={item.doubts} />
       <LearnSourceCheck check={item.source_check} />
       <SourcesList sources={item.sources} />
-      <CardActions itemId={item.id} nextLabel="Another topic" onNext={onNext} />
+      <CardActions
+        itemId={item.id}
+        nextLabel="Another topic"
+        onNext={onNext}
+        canReport={item.status === "published"}
+      />
     </CardFrame>
   );
 }

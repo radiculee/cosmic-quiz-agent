@@ -131,7 +131,8 @@ function shuffled<T>(items: readonly T[], random: () => number): T[] {
 
 /**
  * The topics for a new QUIZ run: the chosen topic first, then topics this browser has not played
- * at this difficulty, then (only if needed) ones it has. No topic appears twice.
+ * at this difficulty, then (only if needed) ones it has. No topic appears twice. The first topic
+ * may be a custom one researched live, which is not in the bank yet.
  */
 export function planRun(
   topics: readonly BankTopic[],
@@ -151,8 +152,7 @@ export function planRun(
     others.filter((topic) => playedSet.has(topic.name)),
     random,
   );
-  const length = Math.min(RUN_LENGTH, playable.length);
-  const rest = [...fresh, ...seen].slice(0, Math.max(0, length - 1)).map((topic) => topic.name);
+  const rest = [...fresh, ...seen].slice(0, RUN_LENGTH - 1).map((topic) => topic.name);
   const chosen = [first, ...rest];
   const firstIsRepeat = playedSet.has(first);
   return {
