@@ -326,8 +326,11 @@ with `python -m curator review`, seeing their sources before publishing.
 Review queue cleared 2026-10-03 on Vedant's instruction: the 35 items held only by Haiku's
 explanation doubts were published, then the last 3 as well, to be cleaned up later. Bank: 163
 published, 0 review, 16 discarded. The gate rule for new items is unchanged.
-- [ ] Re-check items 100 (Jev: possibly contradicted), 136 (LIGO: announcement date and a
-      verifier misquote) and 165 (Voyager: power-supply date) against their sources.
+- [x] Re-check items 100 (Jev: possibly contradicted), 136 (LIGO: announcement date and a
+      verifier misquote) and 165 (Voyager: power-supply date) against their sources. Approved by
+      Vedant on 2026-10-05; they stay published. The same day he approved item 183 ("Black
+      holes", the first live run, held for review), so the queue is empty: 166 published,
+      0 review, 16 discarded.
 
 ---
 
@@ -495,15 +498,29 @@ Decisions to ask:
   through the provider interface, or are disabled publicly.
 - Curator schedule (time of day, frequency).
 
+Decided 2026-10-05:
+- Live runs on the deployed site stay on Claude with the Session 6 caps (3 a day per visitor;
+  10 and $0.50 a day, $4 a month overall).
+- The Curator runs daily at 06:17 UTC. Paid `daily` runs start on 2026-11-01: about $7.35 of
+  October's $10 is spent (about $2.30 before the bank build, $4.98 on it, $0.07 on live runs),
+  and 26 daily runs at about $0.17 would pass the limit around 21 October, which would stop live
+  runs too. Until then the schedule runs `python -m curator upkeep` (new, free: stores left-over
+  runs, retires stale items, no model calls), which also keeps Supabase's free tier from pausing.
+  One manual `daily` run (about $0.17) is made now for the gate.
+- Workflow actions are pinned to release commits (checkout v7.0.1, setup-python v7.0.0, cache
+  v6.1.0), since the job holds API keys. Secrets go in as Production-only Vercel variables and
+  GitHub Actions secrets, with separate Anthropic keys per environment.
+
 Claude Code:
-- [ ] Keep `runs/curator/pending/` between scheduled runs (actions/cache or an artifact), so a run
+- [x] Keep `runs/curator/pending/` between scheduled runs (actions/cache or an artifact), so a run
       the bank could not store is re-sent by the next one, as it is locally.
 - [ ] Run the Vercel streaming spike planned on 2026-10-01 (incremental delivery, 300 s cap, client
       disconnect, coexistence with Vite, cold start) and record results in `docs/SPIKE.md`. Check
       that WSGI `app` functions in `api/` stream line by line (the UI copes if they are buffered),
       and that Vercel replaces `X-Forwarded-For` with the client's address.
 - [ ] Deploy the UI and API; set `maxDuration`; the agent's own time budget stays under it.
-- [ ] `.github/workflows/curator.yml`: daily cron plus `workflow_dispatch`.
+- [x] `.github/workflows/curator.yml`: daily cron plus `workflow_dispatch` (a choice of `daily`
+      or `upkeep`); `vercel.json` (Vite build, Python functions at 300 s, lean bundles).
 
 Gate (Vedant): the production URL works; a manual workflow run adds rows to Supabase.
 
