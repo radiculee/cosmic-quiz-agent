@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from agent.bank import BankReader
 from agent.rest import StoreError
-from agent.web import ApiRequest, ApiResponse, error_response, json_response, make_handler
+from agent.web import ApiRequest, ApiResponse, error_response, json_response, make_app
 
 # The bank changes at most once a day (the Curator), so a short edge cache is safe.
 CACHE_SECONDS = 300
@@ -25,4 +25,4 @@ def handle(request: ApiRequest) -> ApiResponse:
     return json_response(body, cache_seconds=CACHE_SECONDS)
 
 
-handler = make_handler(handle)
+app = make_app(handle)

@@ -6,8 +6,6 @@ looked at. A visitor is a salted hash of their IP address (IP_HASH_SALT), never 
 
 from __future__ import annotations
 
-import os
-
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from agent.bank import BankReader
@@ -18,9 +16,8 @@ from agent.web import (
     ApiResponse,
     error_response,
     json_response,
-    make_handler,
+    make_app,
     read_json,
-    salted_hash,
 )
 
 
@@ -38,8 +35,7 @@ def handle(request: ApiRequest) -> ApiResponse:
         body = ReportBody.model_validate(read_json(request))
     except ValidationError:
         return error_response(400, "Send the item's id, and optionally a short reason.")
-    salt = os.environ.get("IP_HASH_SALT", "").strip()
-    if not salt or not request.client_ip:
+    if not request.visitor:  # no IP_HASH_SALT configured: reports cannot be told apart
         return error_response(503, "Reports are not available right now.")
     reason = (body.reason or "").strip() or None
     try:
@@ -47,10 +43,10 @@ def handle(request: ApiRequest) -> ApiResponse:
             if not bank.is_published(body.id):
                 return error_response(404, "There is no such item.")
         with SupabaseStore.from_env() as store:
-            added = store.add_report(body.id, salted_hash(request.client_ip, salt), reason)
+            added = store.add_report(body.id, request.visitor, reason)
     except StoreError:
         return error_response(503, "The question bank is not reachable right now.")
     return json_response({"reported": True, "already": not added})
 
 
-handler = make_handler(handle)
+app = make_app(handle)

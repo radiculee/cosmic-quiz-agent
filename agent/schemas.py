@@ -224,6 +224,8 @@ class Step(BaseModel):
     summary: str
     seconds: float
     tool: str | None = None
+    # A tool call's arguments as the model sent them (the live log shows the query or URL).
+    arguments: dict[str, object] | None = None
     usage: Usage | None = None
     is_error: bool = False
 

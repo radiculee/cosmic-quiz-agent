@@ -59,9 +59,8 @@ def _print_now(message: str) -> None:
 
 
 def job_cost_limit(settings: Settings) -> float:
-    """The most one job can spend on Anthropic: the agent run's limit plus the verifier's. Both
-    are checked in code before every call, so this is a bound, not an estimate."""
-    return settings.max_run_cost_usd + settings.max_verifier_cost_usd
+    """The most one job can spend on Anthropic (see `Settings.max_job_cost_usd`)."""
+    return settings.max_job_cost_usd
 
 
 @dataclass(frozen=True)

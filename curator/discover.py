@@ -121,7 +121,9 @@ def build_prompt(items: Sequence[FeedItem], existing_topics: Sequence[TopicRef])
         f"Summary: {item.summary}\n</item>"
         for item in items
     )
-    recent = existing_topics[:RECENT_TOPICS_IN_PROMPT]
+    # Players' custom topics are left out: they are not news, and their text is player-typed.
+    recent = [topic for topic in existing_topics if topic.kind != "custom"]
+    recent = recent[:RECENT_TOPICS_IN_PROMPT]
     existing = "\n".join(f"- {topic.name}" for topic in recent) or "- (none yet)"
     return (
         f"<news>\n{listed}\n</news>\n\nExisting topics (do not repeat these):\n{existing}\n\n"

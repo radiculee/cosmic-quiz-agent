@@ -22,6 +22,7 @@ from uuid import UUID, uuid4
 import httpx2
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
 
+from agent.limits import LimitSettings, RequestCount, RunSlot
 from agent.rest import RETRIES, RestClient, parse
 from agent.rest import StoreError as StoreError
 from agent.schemas import (
@@ -37,8 +38,10 @@ from agent.schemas import (
     Verification,
 )
 
-TopicKind = Literal["evergreen", "news"]
+# Custom topics are typed by players and researched on demand (migration 004).
+TopicKind = Literal["evergreen", "news", "custom"]
 RunSource = Literal["curator", "on_demand"]
+OnDemandOutcome = Literal["published", "review", "discarded", "failed"]
 CuratorTrigger = Literal["build", "daily"]
 CheckLayer = Literal["code", "haiku", "jev"]
 CheckKind = Literal["citation", "number", "correct_answer", "distractor", "sentence", "explanation"]
@@ -477,6 +480,8 @@ _ID_ROWS = TypeAdapter(list[_IdRow])
 _TOPICS = TypeAdapter(list[TopicRef])
 _COUNT = TypeAdapter(int)
 _REVIEW_ITEMS = TypeAdapter(list[ReviewItem])
+_REQUEST_COUNT = TypeAdapter(RequestCount)
+_RUN_SLOT = TypeAdapter(RunSlot)
 _REVIEW_SELECT = (
     "id,mode,difficulty,question,options,correct_index,explanation,code_problems,haiku_reasons,"
     "jev_reasons,jev_criteria,jev_threshold,created_at,topics(name,kind),sources(ordinal,url,quote),"
@@ -606,6 +611,59 @@ class SupabaseStore:
                 return False
             raise
         return True
+
+    def hit_request_limit(self, user_hash: str, limit: int) -> RequestCount:
+        """Count one API request for a visitor in the current hour. Sent once: a retry could
+        count the same request twice."""
+        reply = self._rest.send(
+            "POST", "/rpc/hit_request_limit", json={"p_user_hash": user_hash, "p_limit": limit}
+        )
+        return parse(_REQUEST_COUNT, reply, "hit_request_limit")
+
+    def begin_on_demand_run(
+        self,
+        user_hash: str,
+        topic: str,
+        mode: Mode,
+        difficulty: Difficulty,
+        reserve_usd: float,
+        limits: LimitSettings,
+    ) -> RunSlot:
+        """Start a live run if the visitor's daily limit and the global caps allow it, reserving
+        `reserve_usd` against the caps until `finish_on_demand_run`. Sent once."""
+        reply = self._rest.send(
+            "POST",
+            "/rpc/begin_on_demand_run",
+            json={
+                "p_user_hash": user_hash,
+                "p_topic": topic,
+                "p_mode": mode,
+                "p_difficulty": difficulty,
+                "p_reserve_usd": round(reserve_usd, 6),
+                "p_user_day_runs": limits.user_runs_per_day,
+                "p_day_runs": limits.runs_per_day,
+                "p_day_usd": limits.usd_per_day,
+                "p_month_usd": limits.usd_per_month,
+            },
+        )
+        return parse(_RUN_SLOT, reply, "begin_on_demand_run")
+
+    def finish_on_demand_run(
+        self, slot_id: int, spent_usd: float, outcome: OnDemandOutcome, run_id: int | None
+    ) -> None:
+        """Record how a live run ended and what it cost. Only the first call counts, so it is
+        safe to retry."""
+        self._rest.send(
+            "POST",
+            "/rpc/finish_on_demand_run",
+            json={
+                "p_id": slot_id,
+                "p_spent_usd": round(spent_usd, 6),
+                "p_outcome": outcome,
+                "p_run_id": run_id,
+            },
+            retries=RETRIES,
+        )
 
     def retire_stale(self) -> int:
         return parse(_COUNT, self._rest.send("POST", "/rpc/retire_stale", json={}), "retire_stale")

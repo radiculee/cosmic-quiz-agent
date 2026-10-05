@@ -13,7 +13,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from agent.bank import BankReader
 from agent.rest import StoreError
 from agent.schemas import Difficulty, Mode
-from agent.web import ApiRequest, ApiResponse, error_response, json_response, make_handler
+from agent.web import ApiRequest, ApiResponse, error_response, json_response, make_app
 
 # The browser sends every item it has shown (up to 500, src/profile.ts) so they are skipped.
 MAX_EXCLUDED = 500
@@ -52,4 +52,4 @@ def handle(request: ApiRequest) -> ApiResponse:
     return json_response(item.model_dump(mode="json"))
 
 
-handler = make_handler(handle)
+app = make_app(handle)

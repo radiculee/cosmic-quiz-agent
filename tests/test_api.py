@@ -4,15 +4,27 @@ from __future__ import annotations
 
 import io
 import json
-from email.message import Message
+from collections.abc import Iterator
+from wsgiref.types import WSGIApplication
+from wsgiref.util import setup_testing_defaults
 
 import httpx2
 import pytest
 
 from agent.bank import BankReader, _ItemIndexRow, summarize
+from agent.limits import RequestCount
 from agent.rest import PAGE_SIZE, RestClient, StoreError
 from agent.store import SupabaseStore
-from agent.web import ApiRequest, ApiResponse, Handle, json_response, make_handler, salted_hash
+from agent.web import (
+    ApiRequest,
+    ApiResponse,
+    StreamResponse,
+    json_response,
+    make_app,
+    salted_hash,
+    sign,
+    verify_signature,
+)
 from api import item, report, reveal, topics
 from dev.api_server import dispatch
 
@@ -103,47 +115,149 @@ def test_topics_endpoint_reports_an_unreachable_bank(monkeypatch: pytest.MonkeyP
     assert topics.handle(ApiRequest(method="POST", path="/api/topics")).status == 405
 
 
-def test_dev_server_routes_and_404s() -> None:
-    assert dispatch(ApiRequest(method="GET", path="/api/nope")).status == 404
-
-
-def serve(handle: Handle, path: str, headers: dict[str, str] | None = None) -> tuple[str, bytes]:
-    """Run one GET through the adapter class without a socket."""
-    handler_class = make_handler(handle)
-    handler = handler_class.__new__(handler_class)
-    handler.command, handler.path, handler.request_version = "GET", path, "HTTP/1.1"
-    message = Message()
+def call(
+    app: WSGIApplication,
+    path: str,
+    *,
+    method: str = "GET",
+    query: str = "",
+    body: bytes = b"",
+    headers: dict[str, str] | None = None,
+    remote: str = "10.0.0.1",
+) -> tuple[str, dict[str, str], bytes]:
+    """Run one request through a WSGI app without a socket: (status, headers, body)."""
+    environ: dict[str, object] = {}
+    setup_testing_defaults(environ)
+    environ.update(
+        {
+            "REQUEST_METHOD": method,
+            "PATH_INFO": path,
+            "QUERY_STRING": query,
+            "REMOTE_ADDR": remote,
+            "CONTENT_LENGTH": str(len(body)),
+            "wsgi.input": io.BytesIO(body),
+        }
+    )
     for name, value in (headers or {}).items():
-        message[name] = value
-    handler.headers = message
-    handler.rfile, handler.wfile = io.BytesIO(b""), io.BytesIO()
-    handler.client_address = ("10.0.0.1", 5000)
-    handler.requestline = f"GET {path} HTTP/1.1"
-    handler.do_GET()
-    raw = handler.wfile.getvalue()
-    head, _, body = raw.partition(b"\r\n\r\n")
-    return head.decode(), body
+        environ["HTTP_" + name.upper().replace("-", "_")] = value
+    started: dict[str, object] = {}
+
+    def start_response(status: str, response_headers: list[tuple[str, str]], *_: object) -> None:
+        started["status"], started["headers"] = status, dict(response_headers)
+
+    chunks = list(app(environ, start_response))  # type: ignore[arg-type]
+    return str(started["status"]), started["headers"], b"".join(chunks)  # type: ignore[return-value]
 
 
-def test_adapter_passes_query_and_forwarded_address_and_hides_crashes() -> None:
+def test_dev_server_routes_and_404s() -> None:
+    status, _, body = call(dispatch, "/api/nope")
+    assert status.startswith("404") and json.loads(body) == {"error": "No API route /api/nope."}
+
+
+def test_adapter_passes_query_and_last_forwarded_address_and_hides_crashes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("IP_HASH_SALT", "pepper")
     seen: list[ApiRequest] = []
 
     def echo(request: ApiRequest) -> ApiResponse:
         seen.append(request)
         return json_response({"ok": True})
 
-    head, body = serve(echo, "/api/x?mode=quiz", {"X-Forwarded-For": "203.0.113.9, 10.0.0.1"})
+    app = make_app(echo, counter=None)
+    # A client can put anything in X-Forwarded-For; the proxy appends the real address last.
+    status, headers, body = call(
+        app, "/api/x", query="mode=quiz", headers={"X-Forwarded-For": "1.1.1.1, 203.0.113.9"}
+    )
 
-    assert "200" in head.splitlines()[0] and "Cache-Control: no-store" in head
+    assert status.startswith("200") and headers["Cache-Control"] == "no-store"
     assert json.loads(body) == {"ok": True}
     assert seen[0].query == {"mode": "quiz"} and seen[0].client_ip == "203.0.113.9"
+    assert seen[0].visitor == salted_hash("203.0.113.9", "pepper")
+    assert call(app, "/api/x")[0].startswith("200") and seen[1].client_ip == "10.0.0.1"
 
     def crash(_request: ApiRequest) -> ApiResponse:
         raise RuntimeError("secret detail")
 
-    head, body = serve(crash, "/api/x")
-    assert "500" in head.splitlines()[0]
+    status, _, body = call(make_app(crash, counter=None), "/api/x")
+    assert status.startswith("500")
     assert b"secret detail" not in body
+
+
+def test_adapter_refuses_a_visitor_over_the_hourly_limit(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("IP_HASH_SALT", "pepper")
+    counted: list[str] = []
+
+    def counter(visitor: str) -> RequestCount | None:
+        counted.append(visitor)
+        return RequestCount(allowed=len(counted) <= 2, count=len(counted), retry_after=1500)
+
+    app = make_app(lambda _request: json_response({"ok": True}), counter=counter)
+    statuses = [call(app, "/api/x")[0][:3] for _ in range(3)]
+    status, headers, body = call(app, "/api/x")
+
+    assert statuses == ["200", "200", "429"]
+    assert status.startswith("429") and headers["Retry-After"] == "1500"
+    assert json.loads(body)["error"] == "Too many requests this hour. Try again in 25 minutes."
+
+    # A store that cannot count (None) never blocks, and nothing is counted without a salt.
+    assert (
+        call(make_app(lambda _r: json_response({}), counter=lambda _v: None), "/x")[0][:3] == "200"
+    )
+    monkeypatch.delenv("IP_HASH_SALT")
+    before = len(counted)
+    call(app, "/api/x")
+    assert len(counted) == before
+
+
+def test_adapter_streams_events_as_lines_and_ends_a_broken_stream_cleanly() -> None:
+    def events() -> Iterator[object]:
+        yield {"type": "log", "label": "one"}
+        yield {"type": "log", "label": "two"}
+        raise RuntimeError("secret detail")
+
+    app = make_app(lambda _request: StreamResponse(events()), counter=None)
+    status, headers, body = call(app, "/api/research", method="POST")
+
+    lines = [json.loads(line) for line in body.decode().splitlines()]
+    assert status.startswith("200")
+    assert headers["Content-Type"].startswith("application/x-ndjson")
+    assert [line.get("label") for line in lines[:2]] == ["one", "two"]
+    assert lines[2]["type"] == "error" and "secret" not in body.decode()
+
+
+def test_closing_a_stream_early_closes_the_events_it_was_sending() -> None:
+    finished: list[str] = []
+
+    def events() -> Iterator[object]:
+        try:
+            yield {"type": "log", "label": "one"}
+            yield {"type": "log", "label": "two"}
+        finally:
+            finished.append("closed")
+
+    app = make_app(lambda _request: StreamResponse(events()), counter=None)
+    environ: dict[str, object] = {}
+    setup_testing_defaults(environ)
+    body = app(environ, lambda *_: None)  # type: ignore[arg-type]
+    chunks = iter(body)
+    first = next(chunks)
+    body.close()  # type: ignore[attr-defined]  # the client left: the server closes the body
+
+    assert json.loads(first)["label"] == "one"
+    assert finished == ["closed"]
+
+
+def test_signed_tokens_need_the_salt_and_the_same_value(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("IP_HASH_SALT", "pepper")
+    token = sign("reveal", "7")
+    assert verify_signature("reveal", "7", token)
+    assert not verify_signature("reveal", "8", token)
+    assert not verify_signature("report", "7", token)
+    monkeypatch.setenv("IP_HASH_SALT", "other")
+    assert not verify_signature("reveal", "7", token)
+    monkeypatch.delenv("IP_HASH_SALT")
+    assert not verify_signature("reveal", "7", token)
 
 
 # --- Items, answers and reports ------------------------------------------------------------------
@@ -299,26 +413,18 @@ def test_report_hashes_the_visitor_and_needs_a_published_item(
             return len(stored) == 1
 
     monkeypatch.setattr(SupabaseStore, "from_env", classmethod(lambda cls: FakeStore()))
-    monkeypatch.setenv("IP_HASH_SALT", "pepper")
     body = json.dumps({"id": 7, "reason": "  wrong date  "}).encode()
 
-    first = report.handle(ApiRequest("POST", "/api/report", body=body, client_ip="203.0.113.9"))
-    second = report.handle(ApiRequest("POST", "/api/report", body=body, client_ip="203.0.113.9"))
+    visitor = salted_hash("203.0.113.9", "pepper")
+    first = report.handle(ApiRequest("POST", "/api/report", body=body, visitor=visitor))
+    second = report.handle(ApiRequest("POST", "/api/report", body=body, visitor=visitor))
 
     assert first.body == {"reported": True, "already": False}
     assert second.body == {"reported": True, "already": True}
-    assert stored[0] == (7, salted_hash("203.0.113.9", "pepper"), "wrong date")
-    assert "203.0.113.9" not in stored[0][1]
-    assert (
-        report.handle(ApiRequest("POST", "/api/report", body=b"{bad", client_ip="1.2.3.4")).status
-        == 400
-    )
-
-    monkeypatch.delenv("IP_HASH_SALT")
-    assert (
-        report.handle(ApiRequest("POST", "/api/report", body=body, client_ip="1.2.3.4")).status
-        == 503
-    )
+    assert stored[0] == (7, visitor, "wrong date")
+    assert report.handle(ApiRequest("POST", "/api/report", body=b"{bad", visitor="v")).status == 400
+    # Without a salt the adapter cannot tell visitors apart, so reports are refused.
+    assert report.handle(ApiRequest("POST", "/api/report", body=body, visitor="")).status == 503
 
 
 def test_salted_hash_depends_on_the_salt() -> None:

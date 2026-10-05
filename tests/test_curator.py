@@ -29,7 +29,7 @@ from agent.tools import ToolContext
 from agent.tools.feeds import parse_rss
 from curator import pipeline
 from curator.__main__ import _positive_float, _positive_int, _unfinished_news_topic
-from curator.discover import NewsPick, choose, discover, read_news
+from curator.discover import NewsPick, build_prompt, choose, discover, read_news
 from curator.pipeline import (
     Budget,
     Curator,
@@ -407,3 +407,16 @@ def test_cli_numbers_must_be_positive() -> None:
         _positive_int("0")
     with pytest.raises(argparse.ArgumentTypeError):
         _positive_float("-1")
+
+
+def test_custom_topics_stay_out_of_the_news_prompt() -> None:
+    topics = [
+        TopicRef(name="Player typed topic", kind="custom"),
+        TopicRef(name="Comet news", kind="news"),
+        TopicRef(name="Auroras", kind="evergreen"),
+    ]
+
+    prompt = build_prompt([], topics)
+
+    assert "Comet news" in prompt and "Auroras" in prompt
+    assert "Player typed topic" not in prompt

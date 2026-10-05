@@ -132,6 +132,12 @@ class Settings(BaseModel):
     def price(self) -> ModelPrice:
         return PRICES[self.model]
 
+    @property
+    def max_job_cost_usd(self) -> float:
+        """The most one job (an agent run plus the Haiku verifier) can spend on Anthropic. Both
+        limits are checked in code before every call, so this is a bound, not an estimate."""
+        return self.max_run_cost_usd + self.max_verifier_cost_usd
+
 
 def load_settings() -> Settings:
     """Load `.env` (if present) and build settings, applying supported overrides."""

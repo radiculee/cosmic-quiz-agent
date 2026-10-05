@@ -364,6 +364,7 @@ def _run_tool(call: ToolCall, tools: dict[str, Tool], ctx: ToolContext, run: _Ru
             summary=f"{call.name}({_preview(call.arguments)}) -> {status}",
             seconds=round(time.monotonic() - started, 2),
             tool=call.name,
+            arguments=call.arguments,
             is_error=is_error,
         )
     )
