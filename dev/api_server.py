@@ -21,7 +21,7 @@ from wsgiref.types import StartResponse, WSGIApplication, WSGIEnvironment
 from dotenv import load_dotenv
 
 from agent.console import use_utf8_output
-from api import item, report, research, reveal, spike, topics
+from api import item, report, research, reveal, topics
 
 ROUTES: dict[str, WSGIApplication] = {
     "/api/topics": topics.app,
@@ -29,7 +29,6 @@ ROUTES: dict[str, WSGIApplication] = {
     "/api/reveal": reveal.app,
     "/api/report": report.app,
     "/api/research": research.app,
-    "/api/spike": spike.app,  # Session 7 spike only
 }
 DEFAULT_PORT = 8787
 

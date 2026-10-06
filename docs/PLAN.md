@@ -514,11 +514,14 @@ Decided 2026-10-05:
 Claude Code:
 - [x] Keep `runs/curator/pending/` between scheduled runs (actions/cache or an artifact), so a run
       the bank could not store is re-sent by the next one, as it is locally.
-- [ ] Run the Vercel streaming spike planned on 2026-10-01 (incremental delivery, 300 s cap, client
+- [x] Run the Vercel streaming spike planned on 2026-10-01 (incremental delivery, 300 s cap, client
       disconnect, coexistence with Vite, cold start) and record results in `docs/SPIKE.md`. Check
       that WSGI `app` functions in `api/` stream line by line (the UI copes if they are buffered),
       and that Vercel replaces `X-Forwarded-For` with the client's address.
-- [ ] Deploy the UI and API; set `maxDuration`; the agent's own time budget stays under it.
+- [x] Deploy the UI and API; set `maxDuration`; the agent's own time budget stays under it.
+      Live at https://cosmic-quiz-agent.vercel.app (2026-10-06). Spike results, the two
+      deployment fixes (dependencies read from pyproject.toml; the Anthropic key's name) and the
+      move to the `dub1` region are in `docs/SPIKE.md`.
 - [x] `.github/workflows/curator.yml`: daily cron plus `workflow_dispatch` (a choice of `daily`
       or `upkeep`); `vercel.json` (Vite build, Python functions at 300 s, lean bundles).
 

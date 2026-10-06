@@ -106,3 +106,27 @@ fetched page, and asks the writer to keep numbers in the form the source uses. A
 would also pass TypeSafe's suggested 0.8 auto-accept threshold, so the threshold alone would not
 have caught it.
 
+
+## Session 7 - Vercel deployment spike (2026-10-06)
+
+Questions planned on 2026-10-01 for running the API on Vercel (Hobby, Fluid compute), answered
+against the production deployment with a temporary streaming probe (`api/spike.py`, removed
+afterwards) and two live runs. Cost: about $0.05 on Anthropic.
+
+| Question | Result |
+| --- | --- |
+| Do WSGI `app` functions in `api/` stream? | Yes, line by line: a one-line-a-second stream arrived one line a second (chunked transfer). Live runs streamed every step as it happened. |
+| What does the 300-second limit do to a stream? | Vercel closed it at exactly 300 s, after the line at 299 s, with no error: to the client it looks like a normal end. The UI already treats a stream that ends without a result as a fallback to the bank. Live runs take 20 to 45 s; the agent's own budget is 120 s. |
+| If the player leaves mid-run, is the paid run still stored and settled? | Yes. A live run disconnected 1.3 s in, right after its reservation, was stored (run 190) and settled at its real cost ($0.025 of the $0.17 reserved) 16 s later. Closing the stream waits for the run, and Vercel keeps the invocation alive meanwhile, so `wait_until` is not needed. |
+| Can a visitor choose the address their limits are counted against? | No. A request with forged `X-Forwarded-For` and `X-Real-IP` headers was seen from its real address: Vercel replaces the header, and the app takes its last entry. |
+| Cold start | About 1 s for the first request after a deploy; `/api/topics` repeats come from the edge cache in about 0.04 s. |
+| Region | Functions ran in `iad1` (Washington) while Supabase is in AWS eu-west-1 (Ireland; the database host's IPv6 address is in AWS's eu-west-1 range). `/api/item`, which makes two database calls, took a median 0.88 s. Moved to `dub1` (Dublin) in `vercel.json`. |
+
+Deployment problems found and fixed:
+- Every function failed with `No module named 'pydantic'`: when `pyproject.toml` has a
+  `[project]` table, Vercel installs from it and ignores `requirements.txt`, and ours listed no
+  dependencies. Both now list the same pins, checked by `tests/test_packaging.py`, and
+  `.python-version` pins Python 3.12.
+- Live research answered 503 because the Anthropic key was stored under another name
+  (`ANTHROPIC_COSMIC_QUIZ_VERCEL_API_KEY`); the SDK and the configuration check read
+  `ANTHROPIC_API_KEY`. Renamed in Vercel and redeployed (variables are read at deploy time).
