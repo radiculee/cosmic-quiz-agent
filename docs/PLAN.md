@@ -526,6 +526,20 @@ Claude Code:
       or `upkeep`); `vercel.json` (Vite build, Python functions at 300 s, lean bundles).
 
 Gate (Vedant): the production URL works; a manual workflow run adds rows to Supabase.
+- [ ] Not yet passed; session paused 2026-10-06. Done: the production URL works (Vedant played a
+      full run; live custom topics work, 0.23 s median API time in dub1), and a manual `daily`
+      run (curator run 4, $0.145) added a news topic with 6 items. Open before the gate:
+  - The GitHub secret `TYPESAFE_API_KEY` was rejected by TypeSafe (401), so every Jev check in
+    that run failed and all 6 items (189 to 194, "White dwarf planets in second-generation
+    systems") went to review with no Jev checks. Vedant re-entered the secret on 2026-10-06 and
+    chose to re-check them: `python -m curator rejev` (new) re-runs Jev on items whose Jev check
+    failed, from the page text stored with each run, re-applies the gate, and stores the result
+    through `apply_jev_recheck` (migration 005), which keeps `reviewed_at` for human decisions.
+    It is run once from GitHub Actions (`rejev` choice), which also proves the new key works.
+  - Also in review: live runs 186 (Olympus Mons: explanation calls it the largest volcano;
+    the source says tied with Rheasilvia as the tallest mountain), 187 (Tidal locking) and 188
+    (Space oceans).
+  - The scheduled run at 06:17 UTC is the free `upkeep` until 2026-11-01 and does not use Jev.
 
 ---
 
