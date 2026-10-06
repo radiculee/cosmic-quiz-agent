@@ -4,6 +4,7 @@ python -m curator build [--topics N] [--cap USD] [--workers N] [--yes]
 python -m curator daily [--cap USD] [--workers N] [--yes]
 python -m curator review [--mode learn|quiz] [--difficulty easy|medium|hard]
 python -m curator upkeep
+python -m curator rejev [--yes]
 
 Every paid run prints its cost estimate and asks before spending anything, unless --yes approves
 it in advance (as the scheduled run will). The cap is hard: work starts only if the most it can
@@ -18,6 +19,9 @@ gate sent to review, with its sources, and publishes or discards it on your deci
 upkeep does the free part of a daily run only: it stores runs an earlier run left on disk and
 retires news items past their date, with no model calls. The scheduled workflow runs it on days
 without a paid run, which also keeps the free database from pausing for inactivity.
+rejev re-runs Jev on items the gate sent to review because their Jev check failed (an outage or
+a wrong key), from the page text stored with each run, and applies the same gate rule again.
+It costs a fraction of a cent on TypeSafe and nothing on Anthropic.
 """
 
 from __future__ import annotations
@@ -31,11 +35,13 @@ from typing import get_args
 
 from agent.config import JEV_COST_PER_ITEM, Settings, load_settings
 from agent.console import confirm, use_utf8_output
+from agent.gate import decide
 from agent.llm import AnthropicProvider
 from agent.schemas import Difficulty, Mode
 from agent.store import CuratorSummary, StoreError, SupabaseStore, TopicRef
 from agent.tools import ToolContext, make_http_client
 from agent.verifiers import make_jev
+from agent.verifiers.jev import verify_with_jev
 from curator.discover import MAX_COST_USD as DISCOVERY_MAX_COST_USD
 from curator.discover import discover, read_news
 from curator.pipeline import (
@@ -216,6 +222,44 @@ def command_upkeep(args: argparse.Namespace, settings: Settings, store: Supabase
     return 0
 
 
+def command_rejev(args: argparse.Namespace, settings: Settings, store: SupabaseStore) -> int:
+    targets = store.jev_recheck_targets()
+    if not targets:
+        print("No item is waiting on a failed Jev check.")
+        return 0
+    estimate = (
+        f"{len(targets)} Jev requests: under ${len(targets) * JEV_COST_PER_ITEM:.3f} on TypeSafe, "
+        "nothing on Anthropic"
+    )
+    if not confirm(estimate, args.yes):
+        return 1
+    jev = make_jev(settings)
+    if jev is None:
+        print("TYPESAFE_API_KEY is not set; nothing to re-check.")
+        return 1
+    failed = 0
+    spent = 0.0
+    for target in targets:
+        record = target.record
+        answer = record.run.answer
+        label = f"item {target.item_id} {record.run.mode} {record.run.difficulty} {target.topic}"
+        if answer is None or record.verification is None or not target.pages:
+            print(f"{label}: nothing to re-check (no answer, verification or stored pages)")
+            failed += 1
+            continue
+        report = verify_with_jev(answer, target.pages, jev, settings)
+        if report.verdict == "error":
+            print(f"{label}: Jev failed again: {report.reasons[0] if report.reasons else ''}")
+            failed += 1
+            continue
+        status = decide(record.verification.model_copy(update={"jev": report}))
+        store.apply_jev_recheck(target.item_id, status, report)
+        spent += report.cost_usd
+        print(f"{label}: Jev {report.verdict} -> {status} (${report.cost_usd:.5f})")
+    print(f"Re-checked {len(targets) - failed} of {len(targets)}. Spent: TypeSafe ${spent:.6f}.")
+    return 1 if failed else 0
+
+
 def command_review(args: argparse.Namespace, settings: Settings, store: SupabaseStore) -> int:
     items = [
         item
@@ -262,6 +306,10 @@ def main(argv: list[str] | None = None) -> int:
     queue.add_argument("--mode", choices=get_args(Mode))
     queue.add_argument("--difficulty", choices=get_args(Difficulty))
     commands.add_parser("upkeep", help="Store left-over runs and retire stale items (free).")
+    rejev = commands.add_parser(
+        "rejev", help="Re-run Jev on items whose Jev check failed (TypeSafe, under a cent)."
+    )
+    rejev.add_argument("--yes", action="store_true", help="Approve the cost in advance.")
     args = parser.parse_args(argv)
 
     settings = load_settings()
@@ -270,6 +318,7 @@ def main(argv: list[str] | None = None) -> int:
         "daily": command_daily,
         "review": command_review,
         "upkeep": command_upkeep,
+        "rejev": command_rejev,
     }
     try:
         with SupabaseStore.from_env() as store:

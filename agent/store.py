@@ -29,6 +29,7 @@ from agent.schemas import (
     CodeCheck,
     Difficulty,
     ItemRecord,
+    JevReport,
     LayerVerdict,
     Mode,
     Outcome,
@@ -263,21 +264,25 @@ def verifier_rows(verification: Verification, answer: QuizItem | None) -> list[C
             ClaimCheckRow(layer="haiku", kind="explanation", claim=problem, verdict="problem")
             for problem in haiku.explanation_problems
         ]
-    jev = verification.jev
-    if jev is not None:
-        rows += [
-            ClaimCheckRow(
-                layer="jev",
-                kind=check.kind,
-                claim=check.claim,
-                verdict=check.verdict,
-                confidence=check.confidence,
-                probabilities=check.probabilities,
-                model=jev.model,
-            )
-            for check in jev.checks
-        ]
+    if verification.jev is not None:
+        rows += jev_rows(verification.jev)
     return rows
+
+
+def jev_rows(jev: JevReport) -> list[ClaimCheckRow]:
+    """Layer 3 results as one row per claim."""
+    return [
+        ClaimCheckRow(
+            layer="jev",
+            kind=check.kind,
+            claim=check.claim,
+            verdict=check.verdict,
+            confidence=check.confidence,
+            probabilities=check.probabilities,
+            model=jev.model,
+        )
+        for check in jev.checks
+    ]
 
 
 def build_item(record: ItemRecord) -> ItemRow | None:
@@ -457,6 +462,44 @@ class ReviewItem(BaseModel):
     topics: ReviewTopic
     sources: list[ReviewSource]
     claim_checks: list[ReviewCheck] = Field(default_factory=list)
+
+
+class JevRecheck(BaseModel):
+    """An item the gate sent to review because its Jev check failed, with what a re-check needs:
+    the run's stored record (the answer and the other layers' results) and the page text it
+    cited."""
+
+    model_config = ConfigDict(frozen=True)
+
+    item_id: int
+    topic: str
+    record: ItemRecord
+    pages: dict[str, str]
+
+
+class _TopicName(BaseModel):
+    name: str
+
+
+class _RunRecord(BaseModel):
+    record: ItemRecord
+
+
+class _RecheckRow(BaseModel):
+    id: int
+    run_id: int
+    topics: _TopicName
+    runs: _RunRecord
+
+
+class _PageRow(BaseModel):
+    run_id: int
+    url: str
+    page_text: str
+
+
+_RECHECK_ROWS = TypeAdapter(list[_RecheckRow])
+_PAGE_ROWS = TypeAdapter(list[_PageRow])
 
 
 class ReviewStore(Protocol):
@@ -663,6 +706,71 @@ class SupabaseStore:
                 "p_run_id": run_id,
             },
             retries=RETRIES,
+        )
+
+    def jev_recheck_targets(self) -> list[JevRecheck]:
+        """Items in review whose Jev check failed (an outage or a wrong key), oldest first."""
+        reply = self._rest.send(
+            "GET",
+            "/items",
+            params={
+                "select": "id,run_id,topics(name),runs(record)",
+                "status": "eq.review",
+                "jev_verdict": "eq.error",
+                "order": "id.asc",
+            },
+            retries=RETRIES,
+        )
+        rows = parse(_RECHECK_ROWS, reply, "reading items to re-check")
+        if not rows:
+            return []
+        run_ids = ",".join(str(row.run_id) for row in rows)
+        pages = parse(
+            _PAGE_ROWS,
+            self._rest.read_all(
+                "/cited_pages",
+                {
+                    "select": "run_id,url,page_text",
+                    "run_id": f"in.({run_ids})",
+                    "order": "run_id,url",
+                },
+            ),
+            "reading cited pages",
+        )
+        by_run: dict[int, dict[str, str]] = {}
+        for page in pages:
+            by_run.setdefault(page.run_id, {})[page.url] = page.page_text
+        return [
+            JevRecheck(
+                item_id=row.id,
+                topic=row.topics.name,
+                record=row.runs.record,
+                pages=by_run.get(row.run_id, {}),
+            )
+            for row in rows
+        ]
+
+    def apply_jev_recheck(self, item_id: int, status: Status, jev: JevReport) -> None:
+        """Store a re-check's Jev results and the gate's new status in one transaction
+        (migration 005). Sent once: it refuses an item that is no longer in review."""
+        self._rest.send(
+            "POST",
+            "/rpc/apply_jev_recheck",
+            json={
+                "p_item_id": item_id,
+                "p_status": status,
+                "p_jev": {
+                    "verdict": jev.verdict,
+                    "reasons": list(jev.reasons),
+                    "model": jev.model,
+                    "criteria": jev.criteria,
+                    "threshold": jev.threshold,
+                    "input_tokens": jev.input_tokens,
+                    "cost_usd": round(jev.cost_usd, 8),
+                    "seconds": jev.seconds,
+                    "checks": [row.model_dump(mode="json") for row in jev_rows(jev)],
+                },
+            },
         )
 
     def retire_stale(self) -> int:

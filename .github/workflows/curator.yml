@@ -2,8 +2,9 @@
 #
 # Every day at 06:17 UTC, after the previous day's NASA and ESA news and away from GitHub's busy
 # top of the hour. From DAILY_FROM it runs `daily` (about $0.17 on Anthropic, capped at $0.40);
-# before that, and whenever chosen by hand, it runs `upkeep`, which is free. Either way the bank
-# gets a request every day, so Supabase's free tier never pauses it for inactivity.
+# before that it runs `upkeep`, which is free. Either way the bank gets a request every day, so
+# Supabase's free tier never pauses it for inactivity. A manual run can choose either, or `rejev`,
+# which re-runs failed Jev checks for under a cent.
 #
 # Runs the bank could not store wait on disk in runs/curator/pending/ and are sent by the next
 # run; the cache below carries that folder from one run to the next.
@@ -16,9 +17,9 @@ on:
   workflow_dispatch:
     inputs:
       command:
-        description: "daily (paid: about $0.17, capped at $0.40) or upkeep (free)"
+        description: "daily (paid: about $0.17, capped at $0.40), upkeep (free) or rejev (re-run failed Jev checks: under a cent on TypeSafe)"
         type: choice
-        options: [daily, upkeep]
+        options: [daily, upkeep, rejev]
         default: daily
 
 # One Curator at a time, and a queued one waits instead of cancelling a run that is spending.
@@ -80,11 +81,11 @@ jobs:
           SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
           COMMAND: ${{ steps.choose.outputs.command }}
         run: |
-          if [ "$COMMAND" = "daily" ]; then
-            python -m curator daily --yes
-          else
-            python -m curator upkeep
-          fi
+          case "$COMMAND" in
+            daily) python -m curator daily --yes ;;
+            rejev) python -m curator rejev --yes ;;
+            *) python -m curator upkeep ;;
+          esac
 
       - name: Keep runs that could not be stored for the next run
         if: always()
