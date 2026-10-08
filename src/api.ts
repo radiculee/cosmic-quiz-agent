@@ -6,6 +6,7 @@ import {
   type LearnItem,
   type Mode,
   type OptionCheck,
+  type Quota,
   type QuizAnswer,
   type QuizQuestion,
   type ResearchEvent,
@@ -124,6 +125,17 @@ function isQuizAnswer(value: unknown): value is QuizAnswer {
   );
 }
 
+function isQuota(value: unknown): value is Quota {
+  return (
+    isRecord(value) &&
+    isNumber(value.remaining) &&
+    isNumber(value.limit) &&
+    isString(value.resets_at) &&
+    !Number.isNaN(Date.parse(value.resets_at)) &&
+    typeof value.global_open === "boolean"
+  );
+}
+
 const TONES: readonly unknown[] = ["info", "ok", "warn"];
 const FALLBACK_REASONS: readonly unknown[] = ["in_bank", "limit", "unavailable", "discarded"];
 
@@ -222,6 +234,15 @@ export async function fetchAnswer(
     return body;
   }
   throw new ApiError("/api/reveal answered in an unexpected shape");
+}
+
+/** How many live runs this visitor has left today, and whether live research is open at all. */
+export async function fetchQuota(signal?: AbortSignal): Promise<Quota> {
+  const body = await request("/api/quota", signalOnly(signal));
+  if (isQuota(body)) {
+    return body;
+  }
+  throw new ApiError("/api/quota answered in an unexpected shape");
 }
 
 /** Report an item. Resolves to true if this visitor had already reported it. */

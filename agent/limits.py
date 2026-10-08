@@ -6,6 +6,7 @@ across serverless instances; the numbers are passed in from here, so they live i
 
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -51,6 +52,61 @@ class RunSlot(BaseModel):
     ok: bool
     id: int | None = None
     limit: LimitName | None = None
+
+
+class OnDemandUsage(BaseModel):
+    """Live runs so far, counted as `begin_on_demand_run` counts them: by start time in UTC, and
+    a run that has not ended at its reservation."""
+
+    model_config = ConfigDict(frozen=True)
+
+    visitor_runs_today: int = Field(ge=0)
+    runs_today: int = Field(ge=0)
+    usd_today: float = Field(ge=0)
+    usd_this_month: float = Field(ge=0)
+
+
+class Quota(BaseModel):
+    """What the web page shows before a live run is spent (GET /api/quota)."""
+
+    model_config = ConfigDict(frozen=True)
+
+    remaining: int = Field(ge=0)
+    limit: int = Field(gt=0)
+    # When the visitor's daily count starts again: the next midnight UTC.
+    resets_at: datetime
+    # Whether the global caps would let a run start now. Off when today's runs or budget, or the
+    # month's budget, are used up.
+    global_open: bool
+
+
+def day_start(now: datetime) -> datetime:
+    """Midnight UTC at the start of `now`'s day, as the database's limits count days."""
+    return now.astimezone(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
+
+
+def month_start(now: datetime) -> datetime:
+    return day_start(now).replace(day=1)
+
+
+def quota(usage: OnDemandUsage, limits: LimitSettings, reserve_usd: float, now: datetime) -> Quota:
+    """The visitor's quota. The global check repeats `begin_on_demand_run`'s (migration 004), so
+    the page says "paused" exactly when a run would be refused; the database still decides."""
+
+    def fits(spent: float, cap: float) -> bool:
+        # Rounded as the reservation is sent to the database, so float noise cannot tip it.
+        return round(spent + reserve_usd, 6) <= cap
+
+    return Quota(
+        remaining=max(0, limits.user_runs_per_day - usage.visitor_runs_today),
+        limit=limits.user_runs_per_day,
+        resets_at=day_start(now) + timedelta(days=1),
+        global_open=(
+            usage.runs_today < limits.runs_per_day
+            and fits(usage.usd_today, limits.usd_per_day)
+            and fits(usage.usd_this_month, limits.usd_per_month)
+        ),
+    )
 
 
 LIMIT_MESSAGES: dict[LimitName, str] = {

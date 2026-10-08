@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { findTopic, randomTopic, suggest, topicStatus } from "./topics";
+import { filterTopics, findTopic, randomTopic, suggest, topicStatus } from "./topics";
 import type { BankTopic } from "./types";
 
 const TOPICS: BankTopic[] = [
@@ -28,6 +28,24 @@ describe("suggest", () => {
 
   it("shows everything playable for an empty query", () => {
     expect(suggest(TOPICS, "", "learn", "easy")).toHaveLength(3);
+  });
+});
+
+describe("filterTopics", () => {
+  it("lists every match for the grid, with no cap", () => {
+    const many: BankTopic[] = Array.from({ length: 12 }, (_, i) => ({
+      name: `Nebula ${String(i).padStart(2, "0")}`,
+      kind: "evergreen",
+      learn: ["easy"],
+      quiz: [],
+    }));
+    expect(filterTopics(many, "neb", "learn", "easy")).toHaveLength(12);
+    expect(suggest(many, "neb", "learn", "easy")).toHaveLength(8);
+    expect(filterTopics(TOPICS, "", "learn", "easy").map((t) => t.name)).toEqual([
+      "Dark energy",
+      "Magnetars",
+      "Quasars",
+    ]);
   });
 });
 

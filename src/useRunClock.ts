@@ -5,7 +5,9 @@ export interface RunClock {
   elapsed: number;
   running: boolean;
   start: () => void;
-  pause: () => void;
+  /** Stop counting; returns the milliseconds counted so far, so a caller can time a run at the
+   * moment it ends without waiting for a render. */
+  pause: () => number;
   reset: () => void;
 }
 
@@ -18,6 +20,7 @@ export function useRunClock(): RunClock {
   const [since, setSince] = useState<number | null>(null);
   const [now, setNow] = useState(() => performance.now());
   const sinceRef = useRef<number | null>(null);
+  const countedRef = useRef(0);
 
   useEffect(() => {
     if (since === null) return;
@@ -37,14 +40,17 @@ export function useRunClock(): RunClock {
   const pause = useCallback(() => {
     const started = sinceRef.current;
     if (started !== null) {
-      setCounted((total) => total + performance.now() - started);
+      countedRef.current += performance.now() - started;
+      setCounted(countedRef.current);
       sinceRef.current = null;
       setSince(null);
     }
+    return countedRef.current;
   }, []);
 
   const reset = useCallback(() => {
     sinceRef.current = null;
+    countedRef.current = 0;
     setSince(null);
     setCounted(0);
   }, []);

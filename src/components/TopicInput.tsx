@@ -6,6 +6,7 @@ interface TopicInputProps {
   value: string;
   suggestions: BankTopic[];
   disabled: boolean;
+  placeholder?: string;
   onChange: (value: string) => void;
   /** Enter with no suggestion highlighted: start the round. */
   onSubmit: () => void;
@@ -15,7 +16,14 @@ interface TopicInputProps {
  * The topic box: a combobox that suggests bank topics as the player types. Arrow keys move
  * through the suggestions, Enter picks the highlighted one (or starts the round), Escape closes.
  */
-export function TopicInput({ value, suggestions, disabled, onChange, onSubmit }: TopicInputProps) {
+export function TopicInput({
+  value,
+  suggestions,
+  disabled,
+  placeholder = "Pick a topic, e.g. Black holes",
+  onChange,
+  onSubmit,
+}: TopicInputProps) {
   const listId = useId();
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(-1);
@@ -66,7 +74,7 @@ export function TopicInput({ value, suggestions, disabled, onChange, onSubmit }:
         aria-activedescendant={showList && active >= 0 ? `${listId}-${active}` : undefined}
         autoComplete="off"
         spellCheck={false}
-        placeholder="Pick a topic, e.g. Black holes"
+        placeholder={placeholder}
         value={value}
         disabled={disabled}
         onChange={(event) => {

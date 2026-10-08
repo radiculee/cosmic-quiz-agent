@@ -1,11 +1,14 @@
 /**
- * The game rules: points, streaks, the run clock's speed bonus, ranks, badges and how a run
- * picks its topics. Pure functions, so every rule is unit-tested (game.test.ts).
+ * The game rules: points, streaks, the run clock's speed bonus, ranks, run lengths and how a run
+ * picks its topics. Pure functions, so every rule is unit-tested (game.test.ts). Trophies are in
+ * trophies.ts.
  */
 import { isPlayable } from "./topics";
 import type { BankTopic, Difficulty } from "./types";
 
-export const RUN_LENGTH = 10;
+/** A quiz run is 10, 30 or 60 questions, each on a different topic. */
+export const RUN_LENGTHS = [10, 30, 60] as const;
+export type RunLength = (typeof RUN_LENGTHS)[number];
 
 // --- Points -----------------------------------------------------------------------------------
 
@@ -78,22 +81,6 @@ export function rankFor(points: number): RankProgress {
   return { name: current.name, next: { name: next.name, points: next.points }, progress };
 }
 
-// --- Badges -----------------------------------------------------------------------------------
-
-export const BADGES = [
-  { id: "first-light", name: "First light", how: "Answer a question correctly." },
-  { id: "hot-streak", name: "Hot streak", how: "Answer 5 questions in a row correctly." },
-  { id: "perfect-run", name: "Perfect run", how: "Finish a run with 10 out of 10." },
-  { id: "hard-mode", name: "Hard mode", how: "Finish a perfect run on HARD." },
-  { id: "speed-runner", name: "Speed runner", how: "Finish a 10-question run in under 2 minutes." },
-  { id: "explorer", name: "Explorer", how: "Learn 10 different topics in LEARN mode." },
-] as const;
-
-export type BadgeId = (typeof BADGES)[number]["id"];
-
-export const SPEED_RUNNER_SECONDS = 120;
-export const EXPLORER_TOPICS = 10;
-
 // --- Runs -------------------------------------------------------------------------------------
 
 export interface AnswerResult {
@@ -129,32 +116,67 @@ function shuffled<T>(items: readonly T[], random: () => number): T[] {
   return copy;
 }
 
+/** How many topics have a quiz question at this difficulty: the longest run the bank can fill
+ * without repeating a topic. */
+export function quizTopicCount(topics: readonly BankTopic[], difficulty: Difficulty): number {
+  return topics.filter((topic) => isPlayable(topic, "quiz", difficulty)).length;
+}
+
 /**
- * The topics for a new QUIZ run: the chosen topic first, then topics this browser has not played
- * at this difficulty, then (only if needed) ones it has. No topic appears twice. The first topic
- * may be a custom one researched live, which is not in the bank yet.
+ * The run length to play: `wanted` if the bank has that many topics at the difficulty, otherwise
+ * the longest one it can fill, or null if it cannot fill even the shortest.
+ */
+export function availableLength(topicCount: number, wanted: RunLength): RunLength | null {
+  const fitting = RUN_LENGTHS.filter((length) => length <= topicCount);
+  if (fitting.includes(wanted)) {
+    return wanted;
+  }
+  return fitting.at(-1) ?? null;
+}
+
+/**
+ * Why some run lengths cannot be picked at a difficulty, or null if all can: "HARD: 23 of 30
+ * questions so far. 30 and 60 open as the bank grows."
+ */
+export function lengthNote(difficulty: Difficulty, topicCount: number): string | null {
+  const closed = RUN_LENGTHS.filter((length) => length > topicCount);
+  const first = closed[0];
+  const last = closed.at(-1);
+  if (first === undefined || last === undefined) {
+    return null;
+  }
+  const lengths =
+    closed.length === 1 ? String(first) : `${closed.slice(0, -1).join(", ")} and ${last}`;
+  const verb = closed.length === 1 ? "opens" : "open";
+  return (
+    `${difficulty.toUpperCase()}: ${topicCount} of ${first} questions so far. ` +
+    `${lengths} ${verb} as the bank grows.`
+  );
+}
+
+/**
+ * The topics for a new QUIZ run of `length` questions: topics this browser has not played at
+ * this difficulty first, in random order, then (only if needed) ones it has. No topic appears
+ * twice, so a run is shorter than `length` only if the bank has fewer topics.
  */
 export function planRun(
   topics: readonly BankTopic[],
   difficulty: Difficulty,
-  first: string,
+  length: RunLength,
   played: readonly string[],
   random: () => number = Math.random,
 ): Run {
   const playable = topics.filter((topic) => isPlayable(topic, "quiz", difficulty));
-  const others = playable.filter((topic) => topic.name !== first);
   const playedSet = new Set(played);
   const fresh = shuffled(
-    others.filter((topic) => !playedSet.has(topic.name)),
+    playable.filter((topic) => !playedSet.has(topic.name)),
     random,
   );
   const seen = shuffled(
-    others.filter((topic) => playedSet.has(topic.name)),
+    playable.filter((topic) => playedSet.has(topic.name)),
     random,
   );
-  const rest = [...fresh, ...seen].slice(0, RUN_LENGTH - 1).map((topic) => topic.name);
-  const chosen = [first, ...rest];
-  const firstIsRepeat = playedSet.has(first);
+  const chosen = [...fresh, ...seen].slice(0, length).map((topic) => topic.name);
   return {
     difficulty,
     topics: chosen,
@@ -162,7 +184,7 @@ export function planRun(
     streak: 0,
     bestStreak: 0,
     points: 0,
-    repeats: firstIsRepeat || rest.some((name) => playedSet.has(name)),
+    repeats: chosen.some((name) => playedSet.has(name)),
   };
 }
 
@@ -188,6 +210,8 @@ export function answerInRun(
   };
 }
 
+/** Every question answered. A run the player ended early is not finished, so it earns no
+ * full-run trophies (its points are already counted, answer by answer). */
 export function isRunFinished(run: Run): boolean {
   return run.results.length >= run.topics.length;
 }
@@ -196,16 +220,9 @@ export function runCorrect(run: Run): number {
   return run.results.filter((result) => result.correct).length;
 }
 
-/** Badges a finished run earns. */
-export function runBadges(run: Run, seconds: number): BadgeId[] {
-  const perfect = run.topics.length === RUN_LENGTH && runCorrect(run) === RUN_LENGTH;
-  const earned: BadgeId[] = [];
-  if (perfect) earned.push("perfect-run");
-  if (perfect && run.difficulty === "hard") earned.push("hard-mode");
-  if (run.topics.length === RUN_LENGTH && seconds < SPEED_RUNNER_SECONDS) {
-    earned.push("speed-runner");
-  }
-  return earned;
+/** Share of the answered questions that were right, 0 when none were answered. */
+export function runAccuracy(run: Run): number {
+  return run.results.length === 0 ? 0 : runCorrect(run) / run.results.length;
 }
 
 /** "1:23.4" from milliseconds. */

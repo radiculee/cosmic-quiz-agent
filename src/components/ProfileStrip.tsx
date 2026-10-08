@@ -1,15 +1,16 @@
-import { BADGES, rankFor } from "../game";
+import { rankFor } from "../game";
 import type { Profile } from "../profile";
-import { BadgeChip } from "./BadgeChip";
+import { TrophyShelf } from "./TrophyShelf";
 
 const NUMBER = new Intl.NumberFormat("en-IE");
 
-/** The player's rank, progress to the next one, and badges. Kept in this browser. */
-export function ProfileStrip({ profile }: { profile: Profile }) {
+/** The player's rank, progress to the next one, and (on the home page) the trophy shelf. Kept in
+ * this browser. */
+export function ProfileStrip({ profile, shelf = false }: { profile: Profile; shelf?: boolean }) {
   const rank = rankFor(profile.points);
   const percent = Math.round(rank.progress * 100);
   return (
-    <section aria-label="Your progress" className="w-full max-w-xl">
+    <section aria-label="Your progress" className="w-full">
       <div className="flex items-baseline justify-between gap-4">
         <p className="font-heading text-lg font-bold">
           <span className="sr-only">Rank: </span>
@@ -28,18 +29,21 @@ export function ProfileStrip({ profile }: { profile: Profile }) {
         aria-valuenow={percent}
         aria-label={rank.next ? `Progress to ${rank.next.name}` : "Top rank reached"}
       >
-        <div className="h-full bg-teal transition-[width] duration-700" style={{ width: `${percent}%` }} />
+        <div
+          className="h-full bg-teal transition-[width] duration-700 motion-reduce:transition-none"
+          style={{ width: `${percent}%` }}
+        />
       </div>
       <p className="mt-2 text-xs text-slate">
         {rank.next ? `Next rank: ${rank.next.name}` : "Top rank reached."}
         {profile.answered > 0 &&
           ` · ${profile.correct}/${profile.answered} correct · best streak ${profile.bestStreak}`}
       </p>
-      <ul className="mt-4 flex flex-wrap gap-2" aria-label="Badges">
-        {BADGES.map((badge) => (
-          <BadgeChip key={badge.id} id={badge.id} earned={profile.badges.includes(badge.id)} />
-        ))}
-      </ul>
+      {shelf && (
+        <div className="mt-5">
+          <TrophyShelf trophies={profile.trophies} />
+        </div>
+      )}
     </section>
   );
 }

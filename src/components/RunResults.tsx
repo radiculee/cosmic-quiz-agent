@@ -1,5 +1,6 @@
-import { type BadgeId, formatClock, rankFor, type Run, runCorrect } from "../game";
-import { BadgeChip } from "./BadgeChip";
+import { formatClock, isRunFinished, rankFor, type Run, runAccuracy, runCorrect } from "../game";
+import { type Award, trophy } from "../trophies";
+import { TrophyIcon } from "./TrophyIcon";
 
 const NUMBER = new Intl.NumberFormat("en-IE");
 
@@ -8,28 +9,34 @@ interface RunResultsProps {
   elapsed: number;
   pointsBefore: number;
   pointsAfter: number;
-  newBadges: BadgeId[];
+  /** Everything earned during the run, already shown in the pop-up; listed again as a recap. */
+  awards: readonly Award[];
   onPlayAgain: () => void;
   onChangeSettings: () => void;
 }
 
-/** The end of a run: score, time, points, rank progress, new badges and a recap. */
+/**
+ * The end of a run: score, time, points, rank progress, new trophies and a recap. A run ended
+ * early shows the questions answered so far; it earns no full-run trophies.
+ */
 export function RunResults({
   run,
   elapsed,
   pointsBefore,
   pointsAfter,
-  newBadges,
+  awards,
   onPlayAgain,
   onChangeSettings,
 }: RunResultsProps) {
+  const finished = isRunFinished(run);
   const correct = runCorrect(run);
-  const total = run.topics.length;
+  const answered = run.results.length;
   const before = rankFor(pointsBefore);
   const after = rankFor(pointsAfter);
+  const trophies = awards.flatMap((award) => (award.kind === "trophy" ? [award] : []));
   const stats: [string, string][] = [
     ["Points", `+${NUMBER.format(run.points)}`],
-    ["Accuracy", `${Math.round((correct / Math.max(total, 1)) * 100)}%`],
+    ["Accuracy", `${Math.round(runAccuracy(run) * 100)}%`],
     ["Best streak", String(run.bestStreak)],
     ["Time", formatClock(elapsed)],
   ];
@@ -37,12 +44,18 @@ export function RunResults({
   return (
     <article className="pixel-border w-full rounded-sm bg-surface/70 px-5 py-8 text-center sm:px-8">
       <p className="font-pixel text-[9px] uppercase text-slate">
-        Run complete / {run.difficulty}
+        {finished ? "Run complete" : "Run ended"} / {run.difficulty}
       </p>
       <p className="mt-4 font-heading text-6xl font-bold">
-        <span className={correct === total ? "text-gold" : "text-teal"}>{correct}</span>
-        <span className="text-slate">/{total}</span>
+        <span className={finished && correct === answered ? "text-gold" : "text-teal"}>{correct}</span>
+        <span className="text-slate">/{answered}</span>
       </p>
+      {!finished && (
+        <p className="mt-3 text-sm text-slate">
+          {answered} of {run.topics.length} questions answered. Points count; full-run trophies
+          need every question.
+        </p>
+      )}
 
       <dl className="mx-auto mt-8 grid max-w-md grid-cols-2 gap-4 sm:grid-cols-4">
         {stats.map(([label, value]) => (
@@ -67,13 +80,19 @@ export function RunResults({
         )}
       </p>
 
-      {newBadges.length > 0 && (
+      {trophies.length > 0 && (
         <div className="mt-6">
-          <p className="font-pixel text-[8px] uppercase text-slate">New badges</p>
-          <ul className="mt-3 flex flex-wrap justify-center gap-2">
-            {newBadges.map((id) => (
-              <BadgeChip key={id} id={id} earned />
-            ))}
+          <p className="font-pixel text-[8px] uppercase text-slate">New trophies</p>
+          <ul className="mt-3 flex flex-wrap justify-center gap-3">
+            {trophies.map((award) => {
+              const label = `${trophy(award.id).name}: ${award.tier}`;
+              return (
+                <li key={`${award.id}-${award.tier}`} title={label}>
+                  <TrophyIcon glyph={award.id} tone={award.tier} />
+                  <span className="sr-only">{label}</span>
+                </li>
+              );
+            })}
           </ul>
         </div>
       )}

@@ -99,3 +99,13 @@ export type ResearchEvent =
     }
   | { type: "result"; item: Item; reveal_token: string | null }
   | { type: "error"; message: string };
+
+/** The visitor's live runs left today (GET /api/quota, api/quota.py). */
+export interface Quota {
+  remaining: number;
+  limit: number;
+  /** ISO time in UTC when the visitor's daily count starts again. */
+  resets_at: string;
+  /** Whether the global caps would let a live run start now. */
+  global_open: boolean;
+}

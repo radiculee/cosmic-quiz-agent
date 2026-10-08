@@ -1,16 +1,29 @@
 /**
  * The player's profile, kept in this browser only (no accounts, see DESIGN.md): all-time points
- * and answers, badges, and what has been seen or played, so questions and topics do not repeat.
- * Every update is a pure function; reading and writing storage never throws.
+ * and answers, trophy tiers, finished and live runs, and what has been seen or played, so
+ * questions and topics do not repeat. Every update is a pure function returning the new profile
+ * and what it earned; reading and writing storage never throws.
+ *
+ * Version 2 (2026-10-08) replaced badges with tiered trophies. A version 1 profile is read once
+ * and carried over: every badge becomes the same trophy at bronze. The version 1 entry is left
+ * as it was.
  */
+import { type AnswerScore, type Run } from "./game";
 import {
-  type AnswerScore,
-  BADGES,
-  type BadgeId,
-  EXPLORER_TOPICS,
-  type Run,
-  runBadges,
-} from "./game";
+  answerReached,
+  type Award,
+  learnReached,
+  liveReached,
+  rankUp,
+  runReached,
+  TIERS,
+  type Tier,
+  TROPHY_IDS,
+  type TrophyId,
+  type TrophyTiers,
+  upgrades,
+  withAwards,
+} from "./trophies";
 import type { Difficulty } from "./types";
 
 export interface Profile {
@@ -18,7 +31,11 @@ export interface Profile {
   answered: number;
   correct: number;
   bestStreak: number;
-  badges: BadgeId[];
+  trophies: TrophyTiers;
+  /** Quiz runs answered to the last question. */
+  finishedRuns: number;
+  /** Live runs on the web page that produced a result. */
+  liveRuns: number;
   /** Item ids shown in this browser, newest first; sent to the API so they are skipped. */
   seenItems: number[];
   /** Topics played in QUIZ, per difficulty, newest first. */
@@ -32,26 +49,33 @@ export const EMPTY_PROFILE: Profile = {
   answered: 0,
   correct: 0,
   bestStreak: 0,
-  badges: [],
+  trophies: {},
+  finishedRuns: 0,
+  liveRuns: 0,
   seenItems: [],
   played: { easy: [], medium: [], hard: [] },
   learned: [],
 };
 
 export const SEEN_LIMIT = 500;
-const STORAGE_KEY = "cosmic-quiz:profile:v1";
-const BADGE_IDS = new Set<string>(BADGES.map((badge) => badge.id));
+export const STORAGE_KEY = "cosmic-quiz:profile:v2";
+export const V1_STORAGE_KEY = "cosmic-quiz:profile:v1";
+const TROPHY_SET = new Set<string>(TROPHY_IDS);
+const TIER_SET = new Set<string>(TIERS);
 
 function remember<T>(list: readonly T[], value: T, limit: number = SEEN_LIMIT): T[] {
   return [value, ...list.filter((entry) => entry !== value)].slice(0, limit);
 }
 
-function withBadges(profile: Profile, earned: readonly BadgeId[]): [Profile, BadgeId[]] {
-  const fresh = earned.filter((id) => !profile.badges.includes(id));
-  return fresh.length === 0 ? [profile, []] : [{ ...profile, badges: [...profile.badges, ...fresh] }, fresh];
+/** Apply what an update reached: new trophy tiers, then a rank-up if the points crossed one. */
+function settle(before: Profile, after: Profile, reached: TrophyTiers): [Profile, Award[]] {
+  const awards = upgrades(after.trophies, reached);
+  const rank = rankUp(before.points, after.points);
+  const profile = awards.length > 0 ? { ...after, trophies: withAwards(after.trophies, awards) } : after;
+  return [profile, rank ? [...awards, rank] : awards];
 }
 
-/** After a quiz answer. Returns the new profile and any badges it just earned. */
+/** After a quiz answer. `streak` includes this answer. */
 export function afterAnswer(
   profile: Profile,
   difficulty: Difficulty,
@@ -60,7 +84,7 @@ export function afterAnswer(
   score: AnswerScore,
   correct: boolean,
   streak: number,
-): [Profile, BadgeId[]] {
+): [Profile, Award[]] {
   const updated: Profile = {
     ...profile,
     points: profile.points + score.total,
@@ -70,25 +94,33 @@ export function afterAnswer(
     seenItems: remember(profile.seenItems, itemId),
     played: { ...profile.played, [difficulty]: remember(profile.played[difficulty], topic) },
   };
-  const earned: BadgeId[] = [];
-  if (correct) earned.push("first-light");
-  if (streak >= 5) earned.push("hot-streak");
-  return withBadges(updated, earned);
+  return settle(profile, updated, answerReached(updated.correct, streak));
 }
 
-/** After a finished run: the run's badges. */
-export function afterRun(profile: Profile, run: Run, seconds: number): [Profile, BadgeId[]] {
-  return withBadges(profile, runBadges(run, seconds));
+/** After the last question of a run, timed by the run clock. A run ended early changes nothing:
+ * its answers were already counted one by one, and it earns no full-run trophies. */
+export function afterRun(profile: Profile, run: Run, seconds: number): [Profile, Award[]] {
+  const reached = runReached(run, seconds);
+  if (Object.keys(reached).length === 0) {
+    return [profile, []];
+  }
+  return settle(profile, { ...profile, finishedRuns: profile.finishedRuns + 1 }, reached);
 }
 
 /** After reading a LEARN item. */
-export function afterLearn(profile: Profile, itemId: number, topic: string): [Profile, BadgeId[]] {
+export function afterLearn(profile: Profile, itemId: number, topic: string): [Profile, Award[]] {
   const updated: Profile = {
     ...profile,
     seenItems: remember(profile.seenItems, itemId),
     learned: remember(profile.learned, topic),
   };
-  return withBadges(updated, updated.learned.length >= EXPLORER_TOPICS ? ["explorer"] : []);
+  return settle(profile, updated, learnReached(updated.learned.length));
+}
+
+/** After a live run on the web page produced a result (published or held for review). */
+export function afterLiveRun(profile: Profile): [Profile, Award[]] {
+  const updated: Profile = { ...profile, liveRuns: profile.liveRuns + 1 };
+  return settle(profile, updated, liveReached(updated.liveRuns));
 }
 
 // --- Storage ----------------------------------------------------------------------------------
@@ -109,35 +141,101 @@ function field(source: object, key: string): unknown {
   return (source as Record<string, unknown>)[key];
 }
 
-/** The saved profile, keeping every valid field; a fresh one if there is none or storage is
- * blocked (private windows). */
-export function loadProfile(storage: Pick<Storage, "getItem"> | undefined): Profile {
-  let saved: unknown;
+function isRecord(value: unknown): value is object {
+  return typeof value === "object" && value !== null;
+}
+
+function isTrophyId(value: string): value is TrophyId {
+  return TROPHY_SET.has(value);
+}
+
+function isTier(value: unknown): value is Tier {
+  return typeof value === "string" && TIER_SET.has(value);
+}
+
+/** Version 2 trophies: an object of trophy id to tier, keeping only valid pairs. */
+function trophiesOf(value: unknown): TrophyTiers {
+  const tiers: TrophyTiers = {};
+  if (isRecord(value)) {
+    for (const [id, tier] of Object.entries(value)) {
+      if (isTrophyId(id) && isTier(tier)) {
+        tiers[id] = tier;
+      }
+    }
+  }
+  return tiers;
+}
+
+/** Version 1 badges: a list of ids, each now the trophy of the same name at bronze. */
+function trophiesFromBadges(value: unknown): TrophyTiers {
+  const tiers: TrophyTiers = {};
+  for (const id of stringList(value)) {
+    if (isTrophyId(id)) {
+      tiers[id] = "bronze";
+    }
+  }
+  return tiers;
+}
+
+/** A saved entry as an object, or null if it is missing, corrupt or storage is blocked. */
+function read(storage: Pick<Storage, "getItem">, key: string): object | null {
   try {
-    saved = JSON.parse(storage?.getItem(STORAGE_KEY) ?? "null");
+    const saved: unknown = JSON.parse(storage.getItem(key) ?? "null");
+    return isRecord(saved) ? saved : null;
   } catch {
-    return EMPTY_PROFILE;
+    return null;
   }
-  if (typeof saved !== "object" || saved === null) {
-    return EMPTY_PROFILE;
-  }
+}
+
+/** The fields both versions share, keeping every valid one. */
+function common(saved: object): Omit<Profile, "trophies" | "finishedRuns" | "liveRuns"> {
   const count = (key: string) => {
     const value = field(saved, key);
     return isCount(value) ? value : 0;
   };
   const played = field(saved, "played");
   const playedFor = (difficulty: Difficulty) =>
-    typeof played === "object" && played !== null ? stringList(field(played, difficulty)) : [];
+    isRecord(played) ? stringList(field(played, difficulty)) : [];
   return {
     points: count("points"),
     answered: count("answered"),
     correct: Math.min(count("correct"), count("answered")),
     bestStreak: count("bestStreak"),
-    badges: stringList(field(saved, "badges")).filter((id): id is BadgeId => BADGE_IDS.has(id)),
     seenItems: countList(field(saved, "seenItems")).slice(0, SEEN_LIMIT),
     played: { easy: playedFor("easy"), medium: playedFor("medium"), hard: playedFor("hard") },
     learned: stringList(field(saved, "learned")),
   };
+}
+
+/** The saved profile: version 2 if there is one, else version 1 carried over, else a fresh one
+ * (also when storage is blocked, as in some private windows, or the entry is corrupt). */
+export function loadProfile(storage: Pick<Storage, "getItem"> | undefined): Profile {
+  if (!storage) {
+    return EMPTY_PROFILE;
+  }
+  const saved = read(storage, STORAGE_KEY);
+  if (saved) {
+    const count = (key: string) => {
+      const value = field(saved, key);
+      return isCount(value) ? value : 0;
+    };
+    return {
+      ...common(saved),
+      trophies: trophiesOf(field(saved, "trophies")),
+      finishedRuns: count("finishedRuns"),
+      liveRuns: count("liveRuns"),
+    };
+  }
+  const old = read(storage, V1_STORAGE_KEY);
+  if (old) {
+    return {
+      ...common(old),
+      trophies: trophiesFromBadges(field(old, "badges")),
+      finishedRuns: 0,
+      liveRuns: 0,
+    };
+  }
+  return EMPTY_PROFILE;
 }
 
 /** Save the profile; silently skipped when storage is blocked or full. */

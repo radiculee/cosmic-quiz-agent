@@ -1,0 +1,37 @@
+import { PATHS } from "../router";
+import { GitHubIcon } from "./GitHubIcon";
+import { Link } from "./Link";
+
+// The repo is private until Session 10 (docs/PLAN.md), so until then the icon links to the
+// author's profile, where visitors never meet a 404. It switches to the repo when that goes public.
+const GITHUB_URL = "https://github.com/radiculee";
+const GITHUB_LABEL = "Vedant Gaikwad on GitHub (opens in a new tab)";
+
+/** The slim bar on every page (not sticky). Inner pages link home from the name on the left; the
+ * home page has the big title instead. */
+export function SiteHeader({ showHomeLink }: { showHomeLink: boolean }) {
+  return (
+    <header className="mx-auto flex h-14 w-full max-w-3xl items-center justify-between px-4">
+      {showHomeLink ? (
+        <Link
+          to={PATHS.home}
+          className="font-heading text-base font-bold uppercase tracking-tight text-ink hover:text-teal focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-teal"
+        >
+          Cosmic Quiz
+        </Link>
+      ) : (
+        <span />
+      )}
+      <a
+        href={GITHUB_URL}
+        target="_blank"
+        rel="noopener noreferrer"
+        aria-label={GITHUB_LABEL}
+        title="GitHub"
+        className="rounded-sm p-1 text-slate transition-colors hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal"
+      >
+        <GitHubIcon />
+      </a>
+    </header>
+  );
+}

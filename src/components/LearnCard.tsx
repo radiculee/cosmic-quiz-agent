@@ -6,7 +6,15 @@ import { LearnSourceCheck } from "./SourceCheckPanel";
 import { SourcesList } from "./SourcesList";
 
 /** A LEARN explanation with the pages it is based on. */
-export function LearnCard({ item, onNext }: { item: LearnItem; onNext: () => void }) {
+export function LearnCard({
+  item,
+  onNext,
+  nextLabel = "Another topic",
+}: {
+  item: LearnItem;
+  onNext: () => void;
+  nextLabel?: string;
+}) {
   const paragraphs = item.explanation.split(/\n+/).filter((text) => text.trim());
   return (
     <CardFrame mode="learn" difficulty={item.difficulty} topic={item.topic} status={item.status}>
@@ -20,7 +28,7 @@ export function LearnCard({ item, onNext }: { item: LearnItem; onNext: () => voi
       <SourcesList sources={item.sources} />
       <CardActions
         itemId={item.id}
-        nextLabel="Another topic"
+        nextLabel={nextLabel}
         onNext={onNext}
         canReport={item.status === "published"}
       />

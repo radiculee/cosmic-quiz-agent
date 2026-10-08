@@ -78,8 +78,8 @@ class RejectedEvent(BaseModel):
 
 
 class FallbackEvent(BaseModel):
-    """No live result: the player is served from the bank instead. `topic` is set when the bank
-    already has this topic at this mode and difficulty."""
+    """No live result: the page offers the bank instead, which is free. `topic` is set when the
+    bank already has this topic at this mode and difficulty."""
 
     model_config = ConfigDict(frozen=True)
 
@@ -261,7 +261,9 @@ def research(job: LiveJob, services: Services) -> Generator[ResearchEvent]:
 def _unavailable() -> FallbackEvent:
     return FallbackEvent(
         reason="unavailable",
-        message="Live research is not available right now. Here is a question from the bank.",
+        message=(
+            "Live research is not available right now. Topics in the bank are still free to play."
+        ),
     )
 
 
@@ -315,7 +317,7 @@ def _run_and_store(
                     reason="discarded",
                     message=(
                         "The agent could not back an answer with its sources this time. "
-                        "Here is a question from the bank instead."
+                        "Topics in the bank are still free to play."
                     ),
                 )
             )

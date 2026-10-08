@@ -18,10 +18,10 @@ export function isPlayable(topic: BankTopic, mode: Mode, difficulty: Difficulty)
 }
 
 /**
- * Suggestions for what the player has typed: topics playable at this mode and difficulty whose
- * name contains the query, those starting with it first, then alphabetical.
+ * Topics playable at this mode and difficulty whose name contains the query (every one for an
+ * empty query): those starting with it first, then alphabetical.
  */
-export function suggest(
+export function filterTopics(
   topics: readonly BankTopic[],
   query: string,
   mode: Mode,
@@ -35,8 +35,17 @@ export function suggest(
       const aStarts = normalize(a.name).startsWith(wanted) ? 0 : 1;
       const bStarts = normalize(b.name).startsWith(wanted) ? 0 : 1;
       return aStarts - bStarts || a.name.localeCompare(b.name);
-    })
-    .slice(0, MAX_SUGGESTIONS);
+    });
+}
+
+/** Suggestions for what the player has typed: the first few of `filterTopics`. */
+export function suggest(
+  topics: readonly BankTopic[],
+  query: string,
+  mode: Mode,
+  difficulty: Difficulty,
+): BankTopic[] {
+  return filterTopics(topics, query, mode, difficulty).slice(0, MAX_SUGGESTIONS);
 }
 
 /**

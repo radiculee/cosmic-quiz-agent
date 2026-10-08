@@ -22,7 +22,14 @@ from uuid import UUID, uuid4
 import httpx2
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
 
-from agent.limits import LimitSettings, RequestCount, RunSlot
+from agent.limits import (
+    LimitSettings,
+    OnDemandUsage,
+    RequestCount,
+    RunSlot,
+    day_start,
+    month_start,
+)
 from agent.rest import RETRIES, RestClient, parse
 from agent.rest import StoreError as StoreError
 from agent.schemas import (
@@ -518,6 +525,17 @@ class _IdRow(BaseModel):
     id: int
 
 
+class _UsageRow(BaseModel):
+    started_at: datetime
+    reserved_usd: float
+    spent_usd: float | None
+
+    @property
+    def counted_usd(self) -> float:
+        """What the caps count: the real cost once the run has ended, its reservation until then."""
+        return self.reserved_usd if self.spent_usd is None else self.spent_usd
+
+
 _ATTEMPTED = TypeAdapter(list[_AttemptedJob])
 _ID_ROWS = TypeAdapter(list[_IdRow])
 _TOPICS = TypeAdapter(list[TopicRef])
@@ -525,6 +543,7 @@ _COUNT = TypeAdapter(int)
 _REVIEW_ITEMS = TypeAdapter(list[ReviewItem])
 _REQUEST_COUNT = TypeAdapter(RequestCount)
 _RUN_SLOT = TypeAdapter(RunSlot)
+_USAGE_ROWS = TypeAdapter(list[_UsageRow])
 _REVIEW_SELECT = (
     "id,mode,difficulty,question,options,correct_index,explanation,code_problems,haiku_reasons,"
     "jev_reasons,jev_criteria,jev_threshold,created_at,topics(name,kind),sources(ordinal,url,quote),"
@@ -690,6 +709,43 @@ class SupabaseStore:
             },
         )
         return parse(_RUN_SLOT, reply, "begin_on_demand_run")
+
+    def on_demand_usage(self, user_hash: str, now: datetime) -> OnDemandUsage:
+        """Live runs so far today (the visitor's and everyone's) and this month, for the quota.
+        Two small reads: the visitor's own runs today (at most the daily limit), and every run
+        this month (at most the daily run cap for each day so far). No visitor hash leaves the
+        database in either."""
+        day = day_start(now)
+        mine = self._rest.send(
+            "GET",
+            "/on_demand_runs",
+            params={
+                "select": "id",
+                "user_hash": f"eq.{user_hash}",
+                "started_at": f"gte.{day.isoformat()}",
+            },
+            retries=RETRIES,
+        )
+        visitor_runs = parse(_ID_ROWS, mine, "reading the visitor's live runs")
+        rows = parse(
+            _USAGE_ROWS,
+            self._rest.read_all(
+                "/on_demand_runs",
+                {
+                    "select": "started_at,reserved_usd,spent_usd",
+                    "started_at": f"gte.{month_start(now).isoformat()}",
+                    "order": "id",
+                },
+            ),
+            "reading this month's live runs",
+        )
+        today = [row for row in rows if row.started_at >= day]
+        return OnDemandUsage(
+            visitor_runs_today=len(visitor_runs),
+            runs_today=len(today),
+            usd_today=sum(row.counted_usd for row in today),
+            usd_this_month=sum(row.counted_usd for row in rows),
+        )
 
     def finish_on_demand_run(
         self, slot_id: int, spent_usd: float, outcome: OnDemandOutcome, run_id: int | None
