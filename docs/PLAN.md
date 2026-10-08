@@ -72,6 +72,7 @@ decisions. Each is marked "Changed 2026-10-08 by Vedant" where it is recorded.
 | Session order | Session 8 Launch, then v2 | Session 8 pages and trophies; Session 9 analytics; Session 10 security audit, public repo, domain and launch; then v2 (the newsletter) |
 | Repo | Private | Public with an MIT licence in Session 10, after a security audit and a secret scan of the whole history |
 | Domain (`CLAUDE.md` hard rule 1) | Its own domain, the one other paid item | `cosmic.vedantgaikwad.ie`, a subdomain of Vedant's existing domain, so there is nothing new to buy |
+| Live research (`DESIGN.md` decision 9; second grill-me, later the same day) | One item per run; 3 runs a day per visitor, 10 a day for everyone | A search makes 4 items (the explanation and a question at each level); 2 searches a day per visitor, 4 a day for everyone; the dollar caps unchanged |
 
 ---
 
@@ -608,6 +609,8 @@ Decided 2026-10-08 (grill-me session):
   - A topic already in the bank at those settings links to Learn or Quiz instead of spending a run.
   - It keeps the limit of 3 a day per hashed IP. The page shows "2 of 3 left today, resets at
     01:00 Irish time", plus a notice when the global cap is reached.
+  - Changed later on 2026-10-08 by Vedant: a search now makes a whole topic. See "The web page
+    makes whole topics" below.
 
 Decisions to ask:
 - The trophy list with its bronze / silver / gold thresholds (a proposal is shown).
@@ -668,19 +671,119 @@ Claude Code:
       Driven in headless Chrome against the local servers: a v1 profile carried over, a perfect
       EASY 10 with both pop-ups (focus on Continue, Esc closes), End run, Back and Forward, deep
       links, the Learn-to-web-page link, a bank question played free on the web page, and 404.
+- [x] Committed (`366cddd`, docs `7b5cfd2`) and pushed on 2026-10-08. Production serves every
+      deep link and `/api/quota`. Note for the gate: "Black holes" has questions but no LEARN
+      explanation, so use `/learn/quasars` for the shared-link check.
+
+### The web page makes whole topics (changed later on 2026-10-08 by Vedant)
+Vedant asked that a search on the web page also produce quiz questions at every level. Decided in
+a second grill-me session on 2026-10-08, folded into Session 8 before its gate:
+1. **Scope:** a search makes 4 items: the LEARN explanation at the chosen level, plus a QUIZ
+   question at EASY, MEDIUM and HARD. All four go to the bank.
+2. **Controls:** the LEARN/QUIZ switch is removed. The difficulty switch sets the explanation's
+   level and which question is shown first.
+3. **Pipeline:** 4 separate agent runs, the Curator's evaluated pipeline unchanged, each finding
+   sources suited to its level (DESIGN.md decision 13). About $0.12 a search. A shared research
+   pass was turned down: a new agent path, the same sources for every level, and not covered by
+   the Session 3 evals.
+4. **Limits:** the money caps are unchanged ($0.50 a day and $4 a month for live research, so
+   the $10 Anthropic limit holds). A search counts once: 2 a day per visitor (was 3 live runs),
+   and 4 searches a day for everyone (was 10 live runs). The page shows "1 of 2 left today".
+5. **Run order:** one run at a time, so only $0.17 is ever reserved for a search: the explanation
+   first (shown at about 20 s), then the question at the chosen level (about 40 s), then the
+   other two while the player reads (about 80 s in all). No run starts after about 3 minutes,
+   so a slow search may skip a background question rather than pass Vercel's 300 s limit.
+6. **Display:** all 3 questions can be answered on the page, each labelled with its difficulty:
+   the chosen level first, then "Next: MEDIUM question" and so on as the runs finish.
+7. **Failures:** every run goes ahead (the search is already counted). A discarded item is
+   reported in the agent log and skipped; if the explanation fails, the page goes straight to
+   the questions. Items in review are shown to the player with their doubts, as before.
+8. **Topics already in the bank:** only the missing items are made (the explanation at the
+   chosen level, and questions at levels without one). What the bank has is shown free
+   alongside. If nothing is missing, the search is free and does not count.
+9. **Scoring:** Web researcher counts searches that produced something, not items. The
+   explanation counts towards Explorer. Each question scores like a quiz answer on its own, with
+   no streak across the three.
+10. **Plan:** part of Session 8, built in a new session, then one gate for everything.
+
+Vedant prepares: paste `supabase/migrations/006_live_searches.sql` into the Supabase SQL editor
+when it is ready (as for 004 and 005).
+
+Decided while building it (2026-10-08, flagged by Claude Code and chosen by Vedant):
+- **Late runs get a shorter agent budget.** The 3-minute start cutoff alone does not keep a search
+  under Vercel's 300 s: the agent's budget is 120 s a run, plus the verifiers, so a run started
+  at 180 s could still be going at 300 s and be lost with its $0.17 left reserved. A run now gets
+  the full 120 s, or less if it starts late: what is left before 280 s, minus 40 s for the
+  verifiers and the save. Runs that start in the first two minutes (every typical search, about
+  80 s in all) keep the full evaluated budget; one that starts at the cutoff gets 60 s.
+- **The caps stay as decided.** A run starts only if today's spend plus its $0.17 reservation
+  fits $0.50, so at about $0.10 to $0.12 a search the day's 4th search usually makes only 1 or 2
+  items, or cannot start (the page then says live research is paused for everyone). 4 is a
+  ceiling; the money rules do not change.
+
+Claude Code (next session):
+- [x] Migration `006_live_searches.sql`: live runs carry a search id; `begin_on_demand_run`
+      counts searches (2 a day per visitor, 4 a day for everyone) and keeps counting each run's
+      reservation against the dollar caps; a later run of a search already counted is not
+      counted again. `supabase/schema.sql` updated to match. (Session 9's `agent_stats`
+      migration becomes 007.) Built as `on_demand_runs.search_id`, the id of the run that opened
+      the search (null on that run, which is the one counted), and an 11-argument
+      `begin_on_demand_run` that also checks a later run joins the same visitor's search, that
+      its earlier runs have ended, and that it has fewer than 4 runs. The 9-argument version from
+      004 stays until this is deployed, so the live site keeps working; 007 drops it.
+- [x] `agent/limits.py`, `agent/store.py` and `api/quota.py`: the limits and the quota in
+      searches, so the page shows "1 of 2 left today".
+- [x] `agent/ondemand.py` and `api/research.py`: a request takes a topic and a difficulty (no
+      mode). The search works out the missing items, runs the on-topic check once, then the runs
+      one at a time on the worker thread, each reserving and settling its own cost, with no run
+      started after about 3 minutes. Every event says which item it belongs to, a quiz question
+      comes with its own reveal token, and closing the page still finishes and stores the search.
+      The stream starts with a `plan` event (each item, live or from the bank); a `missed` event
+      reports an item discarded, failed or not started; `BankReader.coverage` replaces `has_item`.
+- [x] `src/pages/ExplorePage.tsx`, `src/api.ts` and `src/types.ts`: no LEARN/QUIZ switch; the
+      explanation, then the questions labelled with their difficulty, with a next button as each
+      background question arrives; bank items shown free alongside; scoring and trophies as
+      decided above. Also `src/search.ts` (the search's slots, pure and tested), the agent log
+      grouped by item, `searchStatus` in `src/topics.ts` (new, partly in the bank, or complete
+      and free), and `explorePath` without a mode.
+- [x] Docs: DESIGN.md decisions 4 and 9 (done 2026-10-08, with this record).
+- [x] Tests with the scripted fake model (no paid calls), then typecheck, build, pytest, ruff and
+      mypy --strict, and a drive of the page against the local servers. 268 Python tests (one
+      search runs through the real loop and verifiers with the scripted model and fake Jev) and
+      73 TypeScript tests. Driven in headless Chrome against Vite and a scratchpad copy of the
+      API with the agent runs, the on-topic check and the limits store faked (nothing spent,
+      nothing written to Supabase): 39 checks passed, among them a full search with an item left
+      out and one in review, a bank topic with gaps, the limit after 2 searches, a free complete
+      topic, a deep link, and a page closed mid-search whose 4 runs were still stored and
+      settled. The real local server served a complete topic's search for free; `/api/quota`
+      answers 503 until 006 is applied.
 
 Vedant, optional, before the gate: run `python -m curator review` for items 186, 187, 188 and
 193. Publishing 193 takes MEDIUM quiz questions from 26 to 27.
 
 Gate (Vedant): run `pnpm dev` and `python -m dev.api_server` and check:
 - every card, plus Back, Forward and deep links;
-- the Learn grid, search and a shared `/learn/<slug>` link;
+- the Learn grid, search and a shared `/learn/<slug>` link (for example `/learn/quasars`);
 - Quiz 10 on each difficulty and 30 on EASY, the disabled 30/60 messages, and End run;
 - trophy pop-ups, including carry-over of existing badges, and `/trophies`;
-- the web page counter going 3 to 2, and the limit message;
+- the web page: one search shows the explanation and 3 questions labelled with their difficulty;
+  the counter goes from 2 to 1 and the limit message appears after 2 searches; a bank topic
+  with a gap (for example "Black holes", which has no explanation) fills only the gap. Two real
+  searches cost about $0.24;
 - the GitHub icon.
 
-After commit and push, check deep links on production.
+After commit and push, check the web page and deep links on production.
+
+Gate progress (2026-10-08):
+- [x] Vedant applied migration 006 in the SQL editor. Checked: the new `begin_on_demand_run`
+      refused to join a search that does not exist and inserted nothing, and the quota read
+      counts searches against the real table. The deployed site kept working through the 004
+      function: two Antimatter runs on production after the migration were published.
+- [ ] The web page's live searches. Locally the on-topic check failed with HTTP 401 (the
+      `TYPESAFE_API_KEY` in the local `.env` is rejected; production's works), which stopped the
+      search before anything was reserved. Vedant chose to test the searches on production
+      instead of replacing the local key. The production runs made earlier on 2026-10-08 count
+      as searches, so the search check there starts after 01:00 Irish time.
 
 ---
 
@@ -692,7 +795,8 @@ Decided 2026-10-08:
 - A button on `/explore` opens a full-screen panel at `/explore/stats`. Back closes it.
 - Two tabs:
   - **This run:** model calls, tools, pages by domain, tokens, cost, step timings and Jev checks
-    for the live run just made.
+    for the search just made (up to 4 runs since the later 2026-10-08 change; to settle in
+    Session 9 whether the tab shows the search as a whole or run by run).
   - **The agent:** the groups below, filterable by mode, difficulty and Curator vs live.
 - Charts are hand-written SVG (no chart library). The stats are public, including dollar spend.
   Only aggregates leave the database.
@@ -708,9 +812,12 @@ What "The agent" tab can show (the 2026-10-01 list, grouped under the 2026-10-08
 
 Data and serving (changed 2026-10-08 by Vedant; it was aggregated SQL views refreshed after each
 Curator run):
-- Migration `006_agent_stats.sql`: a `security definer` function (`set search_path = ''`),
+- Migration `007_agent_stats.sql` (006 is the web page's searches, Session 8): a
+  `security definer` function (`set search_path = ''`),
   `agent_stats(p_mode, p_difficulty, p_source)`, that returns aggregates only, as jsonb. Only it
   is granted to anon; `runs` stays private, so salted IP hashes and step logs stay server-side.
+  007 also drops the 9-argument `begin_on_demand_run` from 004, which 006 left in place for the
+  site deployed before the searches change.
 - `api/stats.py`, edge-cached for about 10 minutes.
 - The live run's `result` event gains a `stats` object, built from `RunResult` and the
   verification in `agent/ondemand.py`.
@@ -826,3 +933,21 @@ Vedant: the analytics page, the other v2 feature, moved into v1 as Session 9.)
   from the stored page text, and 5 were published ($0.0011 on TypeSafe). Gate passed: Vedant
   played the white-dwarf topic on the live site. Bank: 171 published, 4 review (186, 187, 188,
   193), 16 discarded. 250 tests. Next: Session 8 (pages, router and trophies).
+- 2026-10-08 - Session 8 (in progress): closed Session 7; recorded the grill-me decisions
+  (Sessions 8 to 10, the analytics page into v1, the public repo with MIT, the subdomain) in
+  PLAN.md, DESIGN.md and CLAUDE.md. Built pages and a History-API router, tiered trophies with a
+  pop-up, quiz runs of 10/30/60 with End run, profile v2 (v1 badges become bronze) and
+  `/api/quota`, after Vedant approved the trophy list (Speed runner needs 70% right) and a mock.
+  58 TypeScript and 258 Python tests. Committed and pushed; production serves the deep links.
+  A second grill-me then changed the web page: a search makes the explanation and a question at
+  each level, 2 searches a day per visitor and 4 for everyone, one run at a time (see "The web
+  page makes whole topics" under Session 8). Next: a new session builds that change (migration
+  006 first), then the Session 8 gate.
+- 2026-10-08 - Session 8 (continued): built the searches change. Migration 006 (a search id on
+  live runs; the daily limits count searches, the dollar caps every run), the limits and quota
+  in searches, `agent/ondemand.py` as a search of up to 4 runs one at a time with a plan event
+  and per-item events, and the web page without the LEARN/QUIZ switch. Two conflicts flagged and
+  decided by Vedant: late runs get a shorter agent budget so a search ends under 300 s, and the
+  caps stay (the day's 4th search may end early). 268 Python and 73 TypeScript tests; a no-cost
+  drive of the page passed 39 checks. No paid calls. Next: Vedant pastes 006, then the Session 8
+  gate.

@@ -19,7 +19,7 @@ runs on a schedule with no human trigger), and code that reads well to recruiter
    - Home (`/`): Learn and Quiz as two large cards, "Try a new topic from the web" as a smaller card showing the visitor's live runs left today, then the rank, points and a trophy shelf.
    - Learn (`/learn`, `/learn/<topic-slug>`): a difficulty switch, a searchable grid of bank topics (read ones ticked) and Random. Each topic's explanation and sources has its own URL.
    - Quiz (`/quiz`): a difficulty and a run of 10, 30 or 60 questions, each on a different random topic (unplayed first). A length is offered only when the bank has that many topics at that difficulty.
-   - The web page (`/explore`): a typed topic researched live (decision 9), shown on the page as one explanation or one question. "Analytics for nerds" opens from it at `/explore/stats` (`docs/PLAN.md` Session 9).
+   - The web page (`/explore`): a typed topic researched live (decision 9). A search makes the explanation at the chosen level and a question at each level, all shown on the page and stored in the bank (changed later on 2026-10-08 by Vedant; it was one explanation or one question). "Analytics for nerds" opens from it at `/explore/stats` (`docs/PLAN.md` Session 9).
    - Trophies (`/trophies`): tiered bronze, silver and gold trophies, which replace the v1 badges and pop up when earned.
    - A slim header on every page with a GitHub link. Routing is a hand-rolled History-API router, with no routing library.
 5. **Modes:**
@@ -45,10 +45,11 @@ runs on a schedule with no human trigger), and code that reads well to recruiter
 9. **On-demand guardrails:**
    - A cheap on-topic check: two Jev yes/no questions in one request (is it astronomy or space; is it only a topic name, with no instructions or abuse), with the typed text passed as data. Measured 2026-10-04 on 44 labelled inputs: Jev 44/44, a keyword filter 18/44; about $0.00002 and 0.23 s a check (`python -m evals ontopic`).
    - Per-user limits, where a user is a salted hash of the IP address (never the raw IP, for GDPR). Decided 2026-10-01:
-     - 3 custom-topic agent runs a day per user, resetting at midnight UTC. Bank questions do not count. (Lowered from 10 on 2026-10-05 after the Session 6 code review: at 10, one visitor could use up the global daily cap of 10 runs.)
+     - 2 searches a day per user, resetting at midnight UTC. A search is up to 4 agent runs, one at a time: the explanation at the chosen level and a question at each level, only for items the bank does not already have. Bank questions do not count. (Changed 2026-10-08 by Vedant; it was 3 custom-topic runs of one item each, lowered from 10 on 2026-10-05 after the Session 6 code review, since at 10 one visitor could use up the global daily cap.)
      - 300 API requests an hour per user, across all endpoints (bank questions, reports, stats), against scraping and runaway scripts. (Raised from 60 on 2026-10-04: a 10-question run is about 21 requests, so 60 stopped players during their third run in an hour.)
      - Over a limit, custom topics fall back to the bank and other requests get HTTP 429 with a retry time.
-   - A global cap that stays under the $10 limit (set 2026-10-04): 10 live runs and $0.50 a day, and $4 a month for live runs, leaving room for the daily Curator. Each run reserves the most it can cost ($0.17) until it ends. When a cap is reached, serve from the bank.
+   - A global cap that stays under the $10 limit (set 2026-10-04): 4 searches and $0.50 a day, and $4 a month for live runs, leaving room for the daily Curator. Each run reserves the most it can cost ($0.17) until it ends; a search runs one at a time, so it never reserves more than that. When a cap is reached, serve from the bank. (Changed 2026-10-08 by Vedant: the daily count was 10 live runs; a search costs about $0.12.) Since a run starts only if today's spend plus its reservation fits $0.50, 4 searches is a ceiling: the day's 4th search usually makes 1 or 2 items, or cannot start. Kept as is (decided 2026-10-08).
+   - No run of a search starts after 3 minutes, and a run that starts after about 2 minutes gets a shorter agent time budget (what is left before 280 s, minus 40 s for the verifiers and the save), so a search always ends inside Vercel's 300 s (decided 2026-10-08).
    - Live results are stored in the bank whatever the outcome. A published one is shown to everyone; one in review is shown only to the player who asked for it, labelled 'Not fully verified' with the checks' doubts, until Vedant approves it; a discarded one sends the player to the bank (decided 2026-10-04).
    - The UI streams live agent steps as a terminal-style agent log, including each Jev claim check. For a quiz, the option checks show only Jev's confidence until the player answers, so the log cannot give the answer away.
 10. **Evidence tools** (built in Session 2):
@@ -102,7 +103,7 @@ agent/                 Python package (shared core)
   bank.py              public reads with the publishable key: topics, items, answers, source check
   limits.py            the on-demand guardrails' numbers, and the visitor's quota
   topic_check.py       the on-topic check for typed topics (Jev)
-  ondemand.py          a guarded live run, streamed as events
+  ondemand.py          a guarded live search (up to 4 runs, one at a time), streamed as events
   web.py               HTTP layer for api/: handle(ApiRequest) -> ApiResponse, WSGI app per function
 curator/               build (initial bank) and daily (news) runs: discover -> research -> draft ->
                        verify -> publish / review / discard -> retire, under a dollar cap
@@ -118,12 +119,13 @@ evals/                 fixed topic set + scoring script
 src/                   Vite + React UI: router.ts (History-API router), pages/ (home, Learn, Quiz,
                        the web page, trophies), game.ts (points, streaks, ranks, runs), trophies.ts
                        (tiers and what was just earned), profile.ts (progress in localStorage),
-                       components/
+                       search.ts (a live search's items as the web page shows them), components/
 supabase/schema.sql    topics, items, sources, claim_checks (per-claim results of all three layers,
                        incl. Jev verdict, confidence, probabilities and model version), runs,
                        curator_runs, cited_pages, reports, rate_limits, on_demand_runs
                        (+ subscribers in v2)
-supabase/migrations/   numbered changes after schema.sql (006 adds agent_stats() in Session 9)
+supabase/migrations/   numbered changes after schema.sql (006 the web page's searches, Session 8;
+                       007 adds agent_stats() in Session 9)
 .github/workflows/curator.yml   daily cron + manual dispatch
 LICENSE                MIT (Session 10, when the repo goes public)
 ```
