@@ -10,22 +10,35 @@ import { TopicInput } from "../components/TopicInput";
 import { type AnswerScore, scoreAnswer } from "../game";
 import { afterAnswer, afterLearn, afterLiveRun } from "../profile";
 import { GLOBAL_CAP_NOTICE, quotaLine } from "../quota";
-import { learnTopicPath, navigate, PATHS, useLocation, usePageTitle } from "../router";
-import { suggest, type TopicStatus, topicStatus } from "../topics";
+import { PATHS, useLocation, usePageTitle } from "../router";
+import {
+  ended,
+  explanationSlot,
+  fromPlan,
+  itemLabel,
+  madeAnything,
+  missed,
+  nextOpen,
+  questionSlots,
+  resolved,
+  type Search,
+  type Slot,
+  started,
+  summarize,
+  summaryLine,
+} from "../search";
+import { type SearchStatus, searchStatus, suggestAny } from "../topics";
 import type { Award } from "../trophies";
 import {
   DIFFICULTIES,
   type Difficulty,
-  type LearnItem,
-  MODES,
-  type Mode,
+  type Item,
   type QuizQuestion,
   type ResearchEvent,
 } from "../types";
 import { useQuota } from "../useQuota";
 import { loadedTopics, type TopicsState } from "../useTopics";
 import {
-  LoadFailed,
   loadError,
   MAX_TOPIC_CHARS,
   MIN_TOPIC_CHARS,
@@ -34,42 +47,34 @@ import {
   PRIMARY_BUTTON,
 } from "./common";
 
-/** What shows under the form. */
-type View =
-  | { kind: "idle" }
-  | { kind: "loading"; label: string }
-  | { kind: "failed"; message: string; retry: () => void }
-  | { kind: "learn"; item: LearnItem }
-  | { kind: "quiz"; question: QuizQuestion; revealToken?: string | undefined }
-  | { kind: "fallback"; topic: string | null; mode: Mode; difficulty: Difficulty };
-
-/** A live run's agent log, kept on screen above what it produced. */
+/** A search's agent log. `outcome` is set when the search was refused or cut short; otherwise
+ * the log ends with a summary of what the search made. */
 interface LiveLog {
-  /** A new log per run, so the panel (and its timer) starts afresh. */
+  /** A new log per search, so the panel and its timer start afresh. */
   id: number;
   topic: string;
-  mode: Mode;
   difficulty: Difficulty;
   lines: LogLine[];
-  outcome: LogOutcome;
-}
-
-function isMode(value: string | null): value is Mode {
-  return (MODES as readonly (string | null)[]).includes(value);
+  outcome: LogOutcome | null;
 }
 
 function isDifficulty(value: string | null): value is Difficulty {
   return (DIFFICULTIES as readonly (string | null)[]).includes(value);
 }
 
+const ENDED_EARLY = "The search ended before this was made.";
+const UNAVAILABLE = "Live research is not available right now.";
+
 /**
- * The web page: a topic not in the bank is researched live by the agent, with its steps
- * streamed as a log, and the result (one explanation or one question) shown here with its
- * sources and source check. Each visitor has 3 live runs a day. A topic the bank already has is
- * free: LEARN links to it, and QUIZ plays its question here without a live run.
+ * The web page: a search researches a topic live and makes the whole of it, one agent run at a
+ * time: the explanation at the chosen level, then a question at each level, the chosen level
+ * first (docs/PLAN.md Session 8, "The web page makes whole topics"). Steps stream as an agent
+ * log; each item is shown as it is ready, with its sources and source check. What the bank
+ * already has is shown alongside, free, and a topic the bank has in full uses no search. Each
+ * visitor has 2 searches a day.
  *
- * The address can carry the form's values (`?topic=...&mode=...&difficulty=...`, from the Learn
- * page's "research it live" link); it only fills the form, so a link can never spend a run.
+ * The address can carry the form's values (`?topic=...&difficulty=...`, from the Learn page's
+ * "research it live" link); it only fills the form, so a link can never spend a search.
  */
 export function ExplorePage({
   topicsState,
@@ -84,25 +89,27 @@ export function ExplorePage({
   const location = useLocation();
   const [initial] = useState(() => {
     const params = location.searchParams;
-    const mode = params.get("mode");
     const level = params.get("difficulty");
     return {
       // As long as the server accepts (api/research.py); the hint asks for less than that.
       topic: (params.get("topic") ?? "").slice(0, 200),
-      mode: isMode(mode) ? mode : "learn",
       difficulty: isDifficulty(level) ? level : null,
     };
   });
   const [query, setQuery] = useState(initial.topic);
-  const [mode, setMode] = useState<Mode>(initial.mode);
-  const [view, setView] = useState<View>({ kind: "idle" });
-  const [liveLog, setLiveLog] = useState<LiveLog | null>(null);
+  const [search, setSearch] = useState<Search | null>(null);
+  const [log, setLog] = useState<LiveLog | null>(null);
+  const [streaming, setStreaming] = useState(false);
+  const [questionAt, setQuestionAt] = useState(0);
+  const [answered, setAnswered] = useState<ReadonlySet<number>>(new Set());
   const [quotaState, refreshQuota] = useQuota();
   const request = useRef<AbortController | null>(null);
   const viewRef = useRef<HTMLDivElement>(null);
-  // A live question's Web researcher trophy waits until it is answered, so no pop-up covers an
-  // unanswered question.
+  // Trophies wait while a question is waiting for its answer, so no pop-up covers it.
   const deferred = useRef<Award[]>([]);
+  const awaitingAnswer = useRef(false);
+  // A search counts once towards Web researcher, with its first live item.
+  const counted = useRef(false);
 
   useEffect(() => {
     if (initial.difficulty) {
@@ -110,7 +117,7 @@ export function ExplorePage({
     }
   }, [initial.difficulty, setDifficulty]);
 
-  // Leaving the page closes the stream (the server still finishes and stores a started run) and
+  // Leaving the page closes the stream (the server still finishes and stores the search) and
   // shows anything still held back.
   useEffect(
     () => () => {
@@ -124,21 +131,45 @@ export function ExplorePage({
   );
 
   const topics = loadedTopics(topicsState);
-  const status = topicStatus(topics, query, mode, difficulty);
-  const suggestions = useMemo(
-    () => suggest(topics, query, mode, difficulty),
-    [topics, query, mode, difficulty],
-  );
+  const status = searchStatus(topics, query, difficulty);
+  const suggestions = useMemo(() => suggestAny(topics, query), [topics, query]);
   const quota = quotaState.kind === "loaded" ? quotaState.quota : null;
   const typed = query.trim().length;
-  const wantsLive =
-    (status.kind === "unknown" || status.kind === "elsewhere") &&
-    typed >= MIN_TOPIC_CHARS &&
-    typed <= MAX_TOPIC_CHARS;
-  // If the quota cannot be read, the server still enforces every limit when a run starts.
+  const sized = typed >= MIN_TOPIC_CHARS && typed <= MAX_TOPIC_CHARS;
+  // If the quota cannot be read, the server still enforces every limit when a search starts.
   const liveAllowed = quota === null || (quota.remaining > 0 && quota.global_open);
-  const busy = view.kind === "loading" || liveLog?.outcome.kind === "running";
-  const canGo = !busy && (status.kind === "ready" || (wantsLive && liveAllowed));
+  // A topic the bank has in part is always allowed: its bank items are shown even when the
+  // search itself is refused.
+  const canGo =
+    !streaming &&
+    sized &&
+    (status.kind === "complete" ||
+      status.kind === "partial" ||
+      (status.kind === "new" && liveAllowed));
+
+  const questions = search ? questionSlots(search) : [];
+  const current = nextOpen(questions, questionAt);
+  const currentSlot = current === null ? undefined : questions[current];
+  const currentQuestion =
+    currentSlot?.state.kind === "ready" && currentSlot.state.item.mode === "quiz"
+      ? currentSlot.state.item
+      : null;
+  const currentToken = currentSlot?.state.kind === "ready" ? currentSlot.state.revealToken : undefined;
+  const awaiting = currentQuestion !== null && !answered.has(currentQuestion.id);
+  useEffect(() => {
+    awaitingAnswer.current = awaiting;
+  }, [awaiting]);
+
+  function award(awards: readonly Award[]) {
+    if (awards.length === 0) {
+      return;
+    }
+    if (awaitingAnswer.current) {
+      deferred.current = [...deferred.current, ...awards];
+    } else {
+      celebrate(awards);
+    }
+  }
 
   function newRequest(): AbortSignal {
     request.current?.abort();
@@ -146,135 +177,137 @@ export function ExplorePage({
     return request.current.signal;
   }
 
-  function scrollToResult() {
-    viewRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-  }
-
-  /** A topic the bank has at QUIZ and this difficulty: play its question here, free. */
-  function playBankQuestion(topic: string, level: Difficulty) {
-    const signal = newRequest();
-    setLiveLog(null);
-    deferred.current = [];
-    setView({ kind: "loading", label: `Loading ${topic}...` });
-    fetchItem(topic, "quiz", level, profile.seenItems, signal)
-      .then((item) => {
-        if (item.mode !== "quiz") {
-          throw new ApiError("expected a quiz item");
-        }
-        setView({ kind: "quiz", question: item });
-        scrollToResult();
-      })
-      .catch((error: unknown) => {
-        if (!signal.aborted) {
-          setView({
-            kind: "failed",
-            message: loadError(error),
-            retry: () => playBankQuestion(topic, level),
-          });
-        }
-      });
+  /** What the bank already has is loaded here, free: an explanation read counts for Explorer. */
+  function loadBankItems(planned: Search, signal: AbortSignal) {
+    const seen = profile.seenItems;
+    for (const slot of planned.slots) {
+      if (slot.source !== "bank") {
+        continue;
+      }
+      fetchItem(planned.topic, slot.mode, slot.difficulty, seen, signal)
+        .then((item) => {
+          setSearch((s) => (s?.id === planned.id ? resolved(s, slot.key, item) : s));
+          if (item.mode === "learn") {
+            award(updateProfile((p) => afterLearn(p, item.id, item.topic)));
+          }
+        })
+        .catch((error: unknown) => {
+          if (!signal.aborted) {
+            setSearch((s) => (s?.id === planned.id ? missed(s, slot.key, loadError(error)) : s));
+          }
+        });
+    }
   }
 
   function research(topic: string) {
-    const runMode = mode;
-    const runDifficulty = difficulty;
+    const level = difficulty;
     const signal = newRequest();
-    deferred.current = [];
-    setView({ kind: "idle" });
-    setLiveLog({
-      id: Date.now(),
-      topic,
-      mode: runMode,
-      difficulty: runDifficulty,
-      lines: [],
-      outcome: { kind: "running" },
-    });
-    scrollToResult();
-    let ended = false;
-    const finish = (outcome: LogOutcome) => {
-      ended = true;
-      setLiveLog((log) => (log ? { ...log, outcome } : log));
+    const searchId = Date.now();
+    const patch = (change: (s: Search) => Search) =>
+      setSearch((s) => (s?.id === searchId ? change(s) : s));
+    const addLine = (line: LogLine) =>
+      setLog((l) => (l ? { ...l, lines: [...l.lines, line] } : l));
+    const stop = (outcome: LogOutcome, message: string) => {
+      setLog((l) => (l ? { ...l, outcome } : l));
+      patch((s) => ended(s, message));
     };
-    const fallBack = (message: string, bankTopic: string | null = null) => {
-      finish({ kind: "fallback", message });
-      setView({ kind: "fallback", topic: bankTopic, mode: runMode, difficulty: runDifficulty });
+
+    deferred.current = [];
+    counted.current = false;
+    setSearch(null);
+    setQuestionAt(0);
+    setAnswered(new Set());
+    setLog({ id: searchId, topic, difficulty: level, lines: [], outcome: null });
+    setStreaming(true);
+    viewRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+
+    const onLiveItem = (item: Item) => {
+      const awards: Award[] = [];
+      if (!counted.current) {
+        counted.current = true;
+        awards.push(...updateProfile(afterLiveRun));
+      }
+      if (item.mode === "learn") {
+        awards.push(...updateProfile((p) => afterLearn(p, item.id, item.topic)));
+      }
+      award(awards);
     };
 
     const onEvent = (event: ResearchEvent) => {
       switch (event.type) {
+        case "plan": {
+          const planned = fromPlan(searchId, event.topic, event.items);
+          setSearch(planned);
+          if (event.items.some((item) => item.source === "live")) {
+            setLog((l) => (l ? { ...l, topic: event.topic } : l));
+          } else {
+            setLog(null); // the bank has the whole topic: no agent runs
+          }
+          loadBankItems(planned, signal);
+          break;
+        }
         case "log": {
-          const line: LogLine = {
+          const key = event.key;
+          if (key !== null) {
+            patch((s) => started(s, key));
+          }
+          addLine({
+            key,
             label: event.label,
             detail: event.detail,
             tone: event.tone,
             verdict: event.verdict,
-          };
-          setLiveLog((log) => (log ? { ...log, lines: [...log.lines, line] } : log));
+          });
           break;
         }
+        case "result":
+          patch((s) => resolved(s, event.key, event.item, event.reveal_token ?? undefined));
+          onLiveItem(event.item);
+          break;
+        case "missed":
+          patch((s) => missed(s, event.key, event.message));
+          addLine({
+            key: event.key,
+            label: "Left out",
+            detail: event.message,
+            tone: "warn",
+            verdict: null,
+          });
+          break;
         case "rejected":
-          finish({ kind: "rejected", message: event.message });
+          stop({ kind: "rejected", message: event.message }, event.message);
           break;
         case "fallback":
-          fallBack(event.message, event.topic);
-          break;
         case "error":
-          fallBack(event.message);
+          stop({ kind: "fallback", message: event.message }, event.message);
           break;
-        case "result": {
-          const item = event.item;
-          finish({ kind: item.status === "review" ? "review" : "published" });
-          const live = updateProfile(afterLiveRun);
-          if (item.mode === "learn") {
-            setView({ kind: "learn", item });
-            celebrate([...live, ...updateProfile((p) => afterLearn(p, item.id, item.topic))]);
-          } else if (event.reveal_token) {
-            deferred.current = live;
-            setView({ kind: "quiz", question: item, revealToken: event.reveal_token });
-          } else {
-            celebrate(live);
-          }
-          break;
-        }
       }
     };
 
-    streamResearch(topic, runMode, runDifficulty, onEvent, signal)
-      .then(() => {
-        if (!ended && !signal.aborted) {
-          fallBack("The live run ended without a result.");
-        }
-      })
+    streamResearch(topic, level, onEvent, signal)
       .catch((error: unknown) => {
-        if (signal.aborted || ended) {
+        if (signal.aborted) {
           return;
         }
         if (error instanceof ApiError && (error.status === 400 || error.status === 429)) {
-          finish({ kind: "rejected", message: error.message });
+          stop({ kind: "rejected", message: error.message }, error.message);
           return;
         }
-        fallBack("Live research is not available right now.");
+        stop({ kind: "fallback", message: UNAVAILABLE }, UNAVAILABLE);
       })
       .finally(() => {
         if (!signal.aborted) {
+          patch((s) => (s.ended ? s : ended(s, ENDED_EARLY)));
+          setStreaming(false);
           refreshQuota();
         }
       });
   }
 
   function go() {
-    if (!canGo) {
-      return;
+    if (canGo) {
+      research(query.trim());
     }
-    if (status.kind === "ready") {
-      if (mode === "learn") {
-        navigate(learnTopicPath(status.topic.name));
-      } else {
-        playBankQuestion(status.topic.name, difficulty);
-      }
-      return;
-    }
-    research(query.trim());
   }
 
   /** One question on its own: scored like a quiz answer, with no streak and no run. */
@@ -284,6 +317,8 @@ export function ExplorePage({
     const awards = updateProfile((p) =>
       afterAnswer(p, question.difficulty, question.id, question.topic, score, correct, streak),
     );
+    setAnswered((ids) => new Set(ids).add(question.id));
+    awaitingAnswer.current = false;
     celebrate([...deferred.current, ...awards]);
     deferred.current = [];
     return score;
@@ -291,17 +326,28 @@ export function ExplorePage({
 
   function startOver() {
     request.current?.abort();
-    setView({ kind: "idle" });
-    setLiveLog(null);
+    setStreaming(false);
+    setSearch(null);
+    setLog(null);
     setQuery("");
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
+
+  const logOutcome: LogOutcome | null = log
+    ? (log.outcome ?? (search?.ended ? searchOutcome(search) : { kind: "running" }))
+    : null;
+  const explanation = search ? explanationSlot(search) : undefined;
+  const showItems =
+    search !== null &&
+    (!search.ended ||
+      search.slots.some((slot) => slot.source === "bank" || slot.state.kind === "ready"));
 
   return (
     <div className="flex flex-col items-center">
       <PageHeading title="Explore">
         Research a topic that is not in the bank yet. The agent reads NASA, ESA, arXiv and
-        Wikipedia live, then checks what it wrote against the pages it read.
+        Wikipedia live, writes an explanation and a question at each level, and checks each
+        against the pages it read.
       </PageHeading>
 
       <div className="mt-10 flex flex-col items-center gap-5">
@@ -311,7 +357,6 @@ export function ExplorePage({
           value={difficulty}
           onChange={setDifficulty}
         />
-        <SegmentedControl label="Mode" options={MODES} value={mode} onChange={setMode} />
       </div>
 
       <div className="mt-10 w-full max-w-xl">
@@ -326,7 +371,6 @@ export function ExplorePage({
         <Hint
           state={topicsState}
           status={status}
-          mode={mode}
           difficulty={difficulty}
           tooLong={typed > MAX_TOPIC_CHARS}
           onRetry={retryTopics}
@@ -348,74 +392,178 @@ export function ExplorePage({
       )}
 
       <div ref={viewRef} className="mt-10 w-full scroll-mt-6" aria-live="polite">
-        {liveLog && (
-          <div className="mb-6">
+        {log && logOutcome && (
+          <div className="mb-8">
             <AgentLog
-              key={liveLog.id}
-              topic={liveLog.topic}
-              mode={liveLog.mode}
-              difficulty={liveLog.difficulty}
-              lines={liveLog.lines}
-              outcome={liveLog.outcome}
+              key={log.id}
+              topic={log.topic}
+              difficulty={log.difficulty}
+              lines={log.lines}
+              outcome={logOutcome}
             />
           </div>
         )}
-        {view.kind === "loading" && <p className="text-center text-sm text-slate">{view.label}</p>}
-        {view.kind === "failed" && <LoadFailed message={view.message} onRetry={view.retry} />}
-        {view.kind === "learn" && (
-          <LearnCard item={view.item} onNext={startOver} nextLabel="Another new topic" />
+
+        {search && showItems && (
+          <div className="space-y-10">
+            {explanation && (
+              <section aria-label="Explanation">
+                <SlotTag slot={explanation} />
+                {explanation.state.kind === "ready" && explanation.state.item.mode === "learn" ? (
+                  <LearnCard item={explanation.state.item} />
+                ) : (
+                  <SlotNote slot={explanation} />
+                )}
+              </section>
+            )}
+
+            <section aria-label="Questions">
+              <QuestionStrip slots={questions} current={current} answered={answered} />
+              {currentSlot && current !== null ? (
+                <div className="mt-4">
+                  <SlotTag slot={currentSlot} />
+                  {currentQuestion ? (
+                    <QuizCard
+                      key={currentSlot.key}
+                      question={currentQuestion}
+                      revealToken={currentToken}
+                      onAnswered={(correct, seconds) =>
+                        onAnswered(currentQuestion, correct, seconds)
+                      }
+                      {...nextButton(questions, current, () => setQuestionAt(current + 1), startOver)}
+                    />
+                  ) : (
+                    <SlotNote slot={currentSlot} />
+                  )}
+                </div>
+              ) : (
+                <p className="mt-6 text-center">
+                  <button
+                    type="button"
+                    onClick={startOver}
+                    className={`${PRIMARY_BUTTON} px-6 py-3.5 text-[10px]`}
+                  >
+                    Another new topic
+                  </button>
+                </p>
+              )}
+            </section>
+          </div>
         )}
-        {view.kind === "quiz" && (
-          <QuizCard
-            question={view.question}
-            revealToken={view.revealToken}
-            onAnswered={(correct, seconds) => onAnswered(view.question, correct, seconds)}
-            nextLabel="Another new topic"
-            onNext={startOver}
-          />
-        )}
-        {view.kind === "fallback" && (
-          <Fallback
-            topic={view.topic}
-            mode={view.mode}
-            onPlay={() => view.topic && playBankQuestion(view.topic, view.difficulty)}
-          />
-        )}
+
+        {search?.ended && !showItems && logOutcome?.kind !== "rejected" && <BankLinks />}
+        {!search && logOutcome?.kind === "fallback" && <BankLinks />}
       </div>
     </div>
   );
 }
 
-/** No live result: the bank is free, so offer it. */
-function Fallback({
-  topic,
-  mode,
-  onPlay,
+function searchOutcome(search: Search): LogOutcome {
+  const summary = summarize(search);
+  const message = summaryLine(summary);
+  return madeAnything(search) ? { kind: "done", message } : { kind: "nothing", message };
+}
+
+/** The question card's next button: the next question once it is ready, or a new topic. */
+function nextButton(
+  questions: readonly Slot[],
+  current: number,
+  onNextQuestion: () => void,
+  onNewTopic: () => void,
+): { nextLabel: string; onNext: () => void; nextDisabled: boolean } {
+  const next = nextOpen(questions, current + 1);
+  const slot = next === null ? undefined : questions[next];
+  if (!slot) {
+    return { nextLabel: "Another new topic", onNext: onNewTopic, nextDisabled: false };
+  }
+  const label = itemLabel(slot.key);
+  if (slot.state.kind === "ready") {
+    return { nextLabel: `Next: ${label}`, onNext: onNextQuestion, nextDisabled: false };
+  }
+  const coming = slot.state.kind === "loading" ? "loading" : "researching";
+  return { nextLabel: `${label}: ${coming}`, onNext: onNextQuestion, nextDisabled: true };
+}
+
+/** Over each item shown: where it comes from. */
+function SlotTag({ slot }: { slot: Slot }) {
+  if (slot.state.kind !== "ready") {
+    return null;
+  }
+  return (
+    <p className="mb-3 font-pixel text-[8px] uppercase text-slate">
+      {slot.source === "bank" ? "From the bank, free" : "Researched just now"}
+    </p>
+  );
+}
+
+/** An item that is not shown (yet): on its way, or left out and why. */
+function SlotNote({ slot }: { slot: Slot }) {
+  const label = itemLabel(slot.key);
+  const text = {
+    waiting: `The ${label} is next in line. It appears here when it is ready.`,
+    researching: `The agent is researching the ${label}. It appears here when it is ready.`,
+    loading: `Loading the ${label} from the bank...`,
+    ready: "",
+    missed: `The ${label} was left out. ${slot.state.kind === "missed" ? slot.state.message : ""}`,
+  }[slot.state.kind];
+  return (
+    <p
+      className={`pixel-border rounded-sm bg-surface/50 px-5 py-4 text-sm ${
+        slot.state.kind === "missed" ? "text-slate" : "text-ink/90"
+      }`}
+    >
+      {text}
+    </p>
+  );
+}
+
+/** The three questions, in the order they are played, and where each one is. */
+function QuestionStrip({
+  slots,
+  current,
+  answered,
 }: {
-  topic: string | null;
-  mode: Mode;
-  onPlay: () => void;
+  slots: readonly Slot[];
+  current: number | null;
+  answered: ReadonlySet<number>;
 }) {
+  function state(slot: Slot): string {
+    switch (slot.state.kind) {
+      case "ready":
+        return answered.has(slot.state.item.id) ? "answered" : "ready";
+      case "missed":
+        return "left out";
+      case "loading":
+        return "loading";
+      case "researching":
+        return "researching";
+      case "waiting":
+        return "waiting";
+    }
+  }
+  return (
+    <div className="flex flex-wrap items-baseline gap-x-5 gap-y-2">
+      <h2 className="font-heading text-xl font-bold">Questions</h2>
+      <ol className="flex flex-wrap gap-x-4 gap-y-1">
+        {slots.map((slot, index) => (
+          <li
+            key={slot.key}
+            aria-current={index === current ? "step" : undefined}
+            className={`pixel-bullet font-pixel text-[8px] uppercase ${
+              index === current ? "text-teal" : "text-slate"
+            }`}
+          >
+            {slot.difficulty} <span className="text-ink/60">{state(slot)}</span>
+          </li>
+        ))}
+      </ol>
+    </div>
+  );
+}
+
+/** Nothing to show from this search: the bank is free, so offer it. */
+function BankLinks() {
   const link = "text-teal underline underline-offset-4 hover:text-ink";
-  if (topic && mode === "learn") {
-    return (
-      <p className="text-center text-sm text-ink/90">
-        <Link to={learnTopicPath(topic)} className={link}>
-          Read {topic} in Learn
-        </Link>
-        , free.
-      </p>
-    );
-  }
-  if (topic) {
-    return (
-      <p className="text-center">
-        <button type="button" onClick={onPlay} className={`${PRIMARY_BUTTON} px-6 py-3.5 text-[10px]`}>
-          Play its question, free
-        </button>
-      </p>
-    );
-  }
   return (
     <p className="text-center text-sm text-ink/90">
       <Link to={PATHS.learn} className={link}>
@@ -432,22 +580,21 @@ function Fallback({
 
 interface HintProps {
   state: TopicsState;
-  status: TopicStatus;
-  mode: Mode;
+  status: SearchStatus;
   difficulty: Difficulty;
   tooLong: boolean;
   onRetry: () => void;
 }
 
 /** One line under the topic box: what GO will do, or why it is not available. */
-function Hint({ state, status, mode, difficulty, tooLong, onRetry }: HintProps) {
-  const base = "mt-3 min-h-5 text-sm";
+function Hint({ state, status, difficulty, tooLong, onRetry }: HintProps) {
+  const base = "mt-3 min-h-5 text-sm text-slate";
   if (state.kind === "loading") {
-    return <p className={`${base} text-slate`}>Loading topics...</p>;
+    return <p className={base}>Loading topics...</p>;
   }
   if (state.kind === "failed") {
     return (
-      <p className={`${base} text-slate`}>
+      <p className={base}>
         Could not load the topics.{" "}
         <button type="button" onClick={onRetry} className="text-teal underline underline-offset-4">
           Try again
@@ -458,44 +605,35 @@ function Hint({ state, status, mode, difficulty, tooLong, onRetry }: HintProps) 
   if (tooLong) {
     return <p className={`${base} text-rust`}>Keep the topic under {MAX_TOPIC_CHARS} characters.</p>;
   }
+  const level = difficulty.toUpperCase();
   switch (status.kind) {
     case "empty":
       return (
-        <p className={`${base} text-slate`}>
-          Any astronomy or space topic. The agent researches it in about 20 seconds.
+        <p className={base}>
+          Any astronomy or space topic. The agent writes the explanation at {level} in about 20
+          seconds, then a question at each level.
         </p>
       );
-    case "unknown":
+    case "new":
       return (
-        <p className={`${base} text-slate`}>
-          Not in the bank yet. GO researches it live: the agent reads and checks its sources in
-          about 20 seconds.
+        <p className={base}>
+          Not in the bank yet. GO uses one search: the explanation at {level} first, then a
+          question at each level, about 80 seconds in all.
         </p>
       );
-    case "elsewhere": {
-      const others = status.difficulties.map((level) => level.toUpperCase()).join(" or ");
+    case "partial":
       return (
-        <p className={`${base} text-slate`}>
-          {status.topic.name} has no {mode.toUpperCase()} item at {difficulty.toUpperCase()} yet.
-          GO researches one live{others ? `, or try ${others}` : ""}.
+        <p className={base}>
+          {status.topic.name} is in the bank, but not all of it. GO makes only the{" "}
+          {status.missing === 1 ? "missing item" : `${status.missing} missing items`} with one
+          search; the rest is shown free.
         </p>
       );
-    }
-    case "ready":
-      return mode === "learn" ? (
-        <p className={`${base} text-slate`}>
-          Already in the bank, so it is free:{" "}
-          <Link
-            to={learnTopicPath(status.topic.name)}
-            className="text-teal underline underline-offset-4 hover:text-ink"
-          >
-            read it in Learn
-          </Link>
-          .
-        </p>
-      ) : (
-        <p className={`${base} text-slate`}>
-          Already in the bank, so GO plays its question here for free, without a live run.
+    case "complete":
+      return (
+        <p className={base}>
+          {status.topic.name} is in the bank at every level, so GO shows it here for free and
+          uses no search.
         </p>
       );
   }

@@ -1,22 +1,31 @@
-"""Custom topics researched live: the guardrails, the run, and the events streamed to the player.
+"""Live searches on the web page: the guardrails, the runs, and the events streamed to the player.
 
+A search makes a whole topic (docs/PLAN.md Session 8, decided 2026-10-08): the LEARN explanation
+at the chosen level and a QUIZ question at each level, leaving out any the bank already has.
 `research` yields events while it works:
 
-1. If the bank can already serve the topic at this mode and difficulty, it says so (free).
+1. The plan: which items the search makes live and which the bank already has (free). When the
+   bank has them all, that is the whole search: free, and not counted.
 2. The on-topic check (`agent/topic_check.py`) rejects anything that is not a plain astronomy
-   or space topic.
-3. The visitor's daily limit and the global caps are checked and a slot is reserved
-   (`agent/limits.py`, migration 004). Over a limit, the player is sent back to the bank.
-4. The agent researches the topic and the same three-layer gate as the Curator decides
-   (`agent/publish.py`). Every step is streamed as a log line, including each Jev claim check.
-5. The run is stored in the bank whatever the outcome, its real cost settles the reservation,
+   or space topic. It runs once per search.
+3. The first run is reserved, which opens the search and counts it against the visitor's daily
+   limit and everyone's (`agent/limits.py`, migration 006). Over a limit, the player keeps what
+   the bank has.
+4. The runs go one at a time, each the Curator's evaluated pipeline: the agent researches the
+   item and the same three-layer gate decides (`agent/publish.py`). Every step is streamed as a
+   log line, including each Jev claim check. Each later run reserves its own slot in the search,
+   so only one run's cost bound is ever reserved, and none starts once the search has run for
+   three minutes.
+5. Each run is stored in the bank whatever the outcome, its real cost settles its reservation,
    and a published or review item is sent to the player. A quiz item comes without its answer
    and with a signed token that lets /api/reveal answer it once the player has picked.
 
+Every event after the plan that concerns one item names it (`key`, such as "quiz-easy").
+
 From step 4 the work runs on its own thread, started before anything more is streamed: a run
-that has started is paid for, so it is always finished, stored and settled. If the player leaves,
-closing the stream waits for that thread, which keeps the request (and a serverless instance)
-alive until the run is stored.
+that has started is paid for, so it is always finished, stored and settled, and the search's
+later runs with it. If the player leaves, closing the stream waits for that thread, which keeps
+the request (and a serverless instance) alive until the search is stored.
 """
 
 from __future__ import annotations
@@ -33,7 +42,7 @@ from urllib.parse import urlsplit
 
 from pydantic import BaseModel, ConfigDict
 
-from agent.bank import LearnItem, QuizQuestion
+from agent.bank import DIFFICULTY_ORDER, BankTopic, LearnItem, QuizQuestion
 from agent.config import Settings
 from agent.limits import LIMIT_MESSAGES, LimitSettings, RunSlot
 from agent.llm import LLMProvider
@@ -47,18 +56,65 @@ from agent.verifiers import JevClient
 
 REVEAL_PURPOSE = "reveal"
 
+# Vercel ends a function at 300 seconds, so a search must be stored and settled by this time.
+SEARCH_SECONDS = 280.0
+# No run starts once a search has run this long (decided 2026-10-08): a slow search leaves out
+# its last questions instead of passing the limit.
+RUN_START_SECONDS = 180.0
+# Kept back from a run's agent time budget for the verifiers and the save. A run that starts in
+# the first two minutes keeps the full budget; a later one gets what is left (decided
+# 2026-10-08), so even the last run finishes inside SEARCH_SECONDS.
+VERIFY_SECONDS = 40.0
+
 # --- Events ------------------------------------------------------------------------------------
 
 Tone = Literal["info", "ok", "warn"]
-FallbackReason = Literal["in_bank", "limit", "unavailable", "discarded"]
+FallbackReason = Literal["limit", "unavailable"]
+MissedReason = Literal["discarded", "failed", "skipped"]
+ItemSource = Literal["live", "bank"]
+
+NOUNS: dict[Mode, str] = {"learn": "explanation", "quiz": "question"}
+
+
+def item_key(mode: Mode, difficulty: Difficulty) -> str:
+    """How events name an item of a search: "learn-medium", "quiz-easy" and so on."""
+    return f"{mode}-{difficulty}"
+
+
+class PlannedItem(BaseModel):
+    """One item a search shows: made live, or already in the bank (free)."""
+
+    model_config = ConfigDict(frozen=True)
+
+    key: str
+    mode: Mode
+    difficulty: Difficulty
+    source: ItemSource
+
+    @property
+    def label(self) -> str:
+        """For log lines and messages: "the EASY question"."""
+        return f"the {self.difficulty.upper()} {NOUNS[self.mode]}"
+
+
+class PlanEvent(BaseModel):
+    """What the search will show, in order. `topic` is the bank's spelling when it has the topic;
+    the page loads the bank's items itself."""
+
+    model_config = ConfigDict(frozen=True)
+
+    type: Literal["plan"] = "plan"
+    topic: str
+    items: list[PlannedItem]
 
 
 class LogEvent(BaseModel):
-    """One line of the agent log."""
+    """One line of the agent log. `key` names the item it is about; None for the search."""
 
     model_config = ConfigDict(frozen=True)
 
     type: Literal["log"] = "log"
+    key: str | None = None
     label: str
     detail: str = ""
     tone: Tone = "info"
@@ -78,31 +134,43 @@ class RejectedEvent(BaseModel):
 
 
 class FallbackEvent(BaseModel):
-    """No live result: the page offers the bank instead, which is free. `topic` is set when the
-    bank already has this topic at this mode and difficulty."""
+    """No live research for this search (a limit, or the service is down). The bank's items in
+    the plan are still shown, and the rest of the bank stays free to play."""
 
     model_config = ConfigDict(frozen=True)
 
     type: Literal["fallback"] = "fallback"
     reason: FallbackReason
     message: str
-    topic: str | None = None
 
 
 class ResultEvent(BaseModel):
-    """The live item, published or in review. `reveal_token` unlocks a quiz item's answer."""
+    """A live item, published or in review. `reveal_token` unlocks a quiz item's answer."""
 
     model_config = ConfigDict(frozen=True)
 
     type: Literal["result"] = "result"
+    key: str
     item: QuizQuestion | LearnItem
     reveal_token: str | None = None
 
 
-ResearchEvent = LogEvent | RejectedEvent | FallbackEvent | ResultEvent
+class MissedEvent(BaseModel):
+    """A live item the player will not get: the gate discarded it, its run failed, or it was
+    not started (out of time, or a cap was reached)."""
+
+    model_config = ConfigDict(frozen=True)
+
+    type: Literal["missed"] = "missed"
+    key: str
+    reason: MissedReason
+    message: str
 
 
-# --- What a live run needs ---------------------------------------------------------------------
+ResearchEvent = PlanEvent | LogEvent | RejectedEvent | FallbackEvent | ResultEvent | MissedEvent
+
+
+# --- What a search needs -----------------------------------------------------------------------
 
 
 class LiveStore(Protocol):
@@ -114,6 +182,7 @@ class LiveStore(Protocol):
         difficulty: Difficulty,
         reserve_usd: float,
         limits: LimitSettings,
+        search_id: int | None = None,
     ) -> RunSlot: ...
 
     def finish_on_demand_run(
@@ -126,7 +195,7 @@ class LiveStore(Protocol):
 class PublicBank(Protocol):
     def topic_named(self, name: str) -> str | None: ...
 
-    def has_item(self, topic: str, mode: Mode, difficulty: Difficulty) -> bool: ...
+    def coverage(self, topic: str) -> BankTopic | None: ...
 
 
 class StoredItems(Protocol):
@@ -140,7 +209,7 @@ class Services:
 
     judge: TopicJudge
     bank: PublicBank  # the public bank (publishable key)
-    results: StoredItems  # reads back the stored live item, review included (secret key)
+    results: StoredItems  # reads back a stored live item, review included (secret key)
     store: LiveStore
     llm: LLMProvider
     jev: JevClient | None
@@ -150,55 +219,98 @@ class Services:
 
 
 @dataclass(frozen=True)
-class LiveJob:
-    topic: str  # cleaned (agent/topic_check.clean_topic) and, if known, in the bank's spelling
-    mode: Mode
-    difficulty: Difficulty
+class SearchRequest:
+    topic: str  # cleaned (agent/topic_check.clean_topic)
+    difficulty: Difficulty  # the explanation's level, and the question shown first
     visitor: str  # salted hash of the IP address
 
 
+@dataclass(frozen=True)
+class _Search:
+    id: int  # the id of the run that opened it (migration 006)
+    topic: str  # in the bank's spelling when the bank has it
+    visitor: str
+    live: tuple[PlannedItem, ...]
+
+
 class _Clock:
-    def __init__(self) -> None:
-        self.started = time.monotonic()
+    """Seconds since the search began, stamped on every log line. `for_item` gives a clock
+    that also names the item its lines are about."""
+
+    def __init__(self, started: float | None = None, key: str | None = None) -> None:
+        self.started = time.monotonic() if started is None else started
+        self.key = key
+
+    def for_item(self, key: str) -> _Clock:
+        return _Clock(self.started, key)
+
+    def elapsed(self) -> float:
+        return time.monotonic() - self.started
 
     def log(self, label: str, detail: str = "", tone: Tone = "info", **extra: object) -> LogEvent:
         return LogEvent.model_validate(
             {
+                "key": self.key,
                 "label": label,
                 "detail": detail,
                 "tone": tone,
-                "seconds": round(time.monotonic() - self.started, 1),
+                "seconds": round(self.elapsed(), 1),
                 **extra,
             }
         )
 
 
-# How long closing the stream waits for a started run to be stored: the agent's time budget, the
-# verifiers and the save, under the 300-second limit of a Vercel function.
-RUN_FINISH_SECONDS = 240.0
+def plan_search(difficulty: Difficulty, have: BankTopic | None) -> list[PlannedItem]:
+    """What a search shows, in order: the explanation at the chosen level, then a question at
+    the chosen level and at the other two, easiest first. An item the bank already has is served
+    from it, free."""
+    wanted: list[tuple[Mode, Difficulty]] = [("learn", difficulty), ("quiz", difficulty)]
+    wanted += [("quiz", level) for level in DIFFICULTY_ORDER if level != difficulty]
+
+    def in_bank(mode: Mode, level: Difficulty) -> bool:
+        if have is None:
+            return False
+        return level in (have.learn if mode == "learn" else have.quiz)
+
+    return [
+        PlannedItem(
+            key=item_key(mode, level),
+            mode=mode,
+            difficulty=level,
+            source="bank" if in_bank(mode, level) else "live",
+        )
+        for mode, level in wanted
+    ]
 
 
-def research(job: LiveJob, services: Services) -> Generator[ResearchEvent]:
-    """Run one custom topic live, yielding events as it goes (see the module docstring)."""
+def run_budget(settings: Settings, elapsed: float) -> float:
+    """The agent's time budget for a run starting `elapsed` seconds into the search: the full
+    budget, or less for a late run, so the search is stored before SEARCH_SECONDS."""
+    return min(settings.max_seconds, SEARCH_SECONDS - VERIFY_SECONDS - elapsed)
+
+
+def research(request: SearchRequest, services: Services) -> Generator[ResearchEvent]:
+    """Run one live search, yielding events as it goes (see the module docstring)."""
     clock = _Clock()
 
     try:
-        known = services.bank.topic_named(job.topic)
-        if known is not None and services.bank.has_item(known, job.mode, job.difficulty):
-            yield FallbackEvent(
-                reason="in_bank", message="This topic is already in the bank.", topic=known
-            )
-            return
+        known = services.bank.topic_named(request.topic)
+        have = services.bank.coverage(known) if known is not None else None
     except StoreError as error:
-        print(f"live run: bank lookup failed: {error}", file=sys.stderr)
+        print(f"live search: bank lookup failed: {error}", file=sys.stderr)
         yield _unavailable()
         return
-    topic = known or job.topic
+    topic = known or request.topic
+    plan = plan_search(request.difficulty, have)
+    yield PlanEvent(topic=topic, items=plan)
+    live = tuple(item for item in plan if item.source == "live")
+    if not live:
+        return  # the bank has the whole topic: free, and not counted
 
     try:
         verdict = services.judge.judge(topic)
     except TopicCheckError as error:
-        print(f"live run: topic check failed: {error}", file=sys.stderr)
+        print(f"live search: topic check failed: {error}", file=sys.stderr)
         yield _unavailable()
         return
     # Every paid call is logged with its tokens and cost (CLAUDE.md rule 1); a rejected topic
@@ -218,34 +330,39 @@ def research(job: LiveJob, services: Services) -> Generator[ResearchEvent]:
         yield RejectedEvent(message=verdict.reason)
         return
 
-    reserve = services.settings.max_job_cost_usd
+    first = live[0]
     try:
         slot = services.store.begin_on_demand_run(
-            job.visitor, topic, job.mode, job.difficulty, reserve, services.limits
+            request.visitor,
+            topic,
+            first.mode,
+            first.difficulty,
+            services.settings.max_job_cost_usd,
+            services.limits,
         )
     except StoreError as error:
-        print(f"live run: could not reserve a slot: {error}", file=sys.stderr)
+        print(f"live search: could not reserve a slot: {error}", file=sys.stderr)
         yield _unavailable()
         return
     if not slot.ok or slot.id is None:
-        message = LIMIT_MESSAGES[slot.limit] if slot.limit else "Custom topics are paused."
+        message = LIMIT_MESSAGES[slot.limit] if slot.limit else "Live research is paused."
         yield FallbackEvent(reason="limit", message=message)
         return
 
-    # From here the slot is reserved, so the run's thread starts before anything else is sent:
-    # whatever happens to the stream, that thread settles the slot.
+    # From here the first run is reserved, so the search's thread starts before anything else is
+    # sent: whatever happens to the stream, that thread settles every run it starts.
+    search = _Search(id=slot.id, topic=topic, visitor=request.visitor, live=live)
     events: queue.Queue[ResearchEvent | None] = queue.Queue()
-    events.put(clock.log("Budget", f"up to ${reserve:.2f} reserved for this run", "ok"))
     worker = threading.Thread(
-        target=_run_and_store,
-        args=(LiveJob(topic, job.mode, job.difficulty, job.visitor), slot.id, services, clock),
+        target=_run_search,
+        args=(search, services, clock),
         kwargs={"emit": events.put},
-        name=f"live-run-{slot.id}",
+        name=f"live-search-{slot.id}",
     )
     try:
         worker.start()
     except RuntimeError as error:  # no thread could be started: nothing was spent
-        print(f"live run {slot.id}: could not start: {error}", file=sys.stderr)
+        print(f"live search {slot.id}: could not start: {error}", file=sys.stderr)
         _settle(services, slot.id, 0.0, "failed", None)
         yield _unavailable()
         return
@@ -254,8 +371,8 @@ def research(job: LiveJob, services: Services) -> Generator[ResearchEvent]:
             yield event
     finally:
         # If the player left, the server is closing this stream early. Waiting here keeps the
-        # request, and so a serverless instance, alive until the paid run is stored and settled.
-        worker.join(timeout=RUN_FINISH_SECONDS)
+        # request, and so a serverless instance, alive until the paid runs are stored and settled.
+        worker.join(timeout=max(1.0, SEARCH_SECONDS - clock.elapsed()))
 
 
 def _unavailable() -> FallbackEvent:
@@ -280,25 +397,93 @@ def _settle(
         print(f"live run {slot_id}: could not settle its cost: {error}", file=sys.stderr)
 
 
-def _run_and_store(
-    job: LiveJob,
+def _run_search(
+    search: _Search,
+    services: Services,
+    clock: _Clock,
+    emit: Callable[[ResearchEvent | None], None],
+) -> None:
+    """The paid part of a search, on its own thread: its live items one at a time, the first on
+    the slot the search opened with and each later one on a slot of its own. Every run it starts
+    is settled, and the stream always ends (`emit(None)`), whatever happens."""
+    try:
+        for index, planned in enumerate(search.live):
+            if index == 0:
+                slot_id = search.id
+            else:
+                started = _later_slot(search, planned, services, clock)
+                if isinstance(started, _NotStarted):
+                    for left in search.live[index:]:
+                        emit(
+                            MissedEvent(
+                                key=left.key,
+                                reason="skipped",
+                                message=f"Not started. {started.reason}",
+                            )
+                        )
+                    return
+                slot_id = started
+            _run_item(search, planned, slot_id, services, clock.for_item(planned.key), emit)
+    except Exception:  # each run settles itself; this only guards the loop
+        traceback.print_exc(file=sys.stderr)
+    finally:
+        emit(None)
+
+
+@dataclass(frozen=True)
+class _NotStarted:
+    """Why a later run of a search was not started, as a sentence for the player."""
+
+    reason: str
+
+
+def _later_slot(
+    search: _Search, planned: PlannedItem, services: Services, clock: _Clock
+) -> int | _NotStarted:
+    """Reserve a later run of the search, or say why it cannot start. The database counts it
+    against the dollar caps but not against the search limits (migration 006)."""
+    if clock.elapsed() > RUN_START_SECONDS:
+        return _NotStarted("The search ran out of time.")
+    try:
+        slot = services.store.begin_on_demand_run(
+            search.visitor,
+            search.topic,
+            planned.mode,
+            planned.difficulty,
+            services.settings.max_job_cost_usd,
+            services.limits,
+            search_id=search.id,
+        )
+    except StoreError as error:
+        print(f"live search {search.id}: could not reserve a run: {error}", file=sys.stderr)
+        return _NotStarted("Live research is not available right now.")
+    if not slot.ok or slot.id is None:
+        return _NotStarted(LIMIT_MESSAGES[slot.limit] if slot.limit else "Live research is paused.")
+    return slot.id
+
+
+def _run_item(
+    search: _Search,
+    planned: PlannedItem,
     slot_id: int,
     services: Services,
     clock: _Clock,
     emit: Callable[[ResearchEvent | None], None],
 ) -> None:
-    """The paid part of a live run, on its own thread. Always settles the slot and ends the
-    stream (`emit(None)`), whatever happens."""
+    """One live run: research, the gate and storage, then the item or why there is none. Always
+    settles the run's slot."""
     spent = services.settings.max_job_cost_usd  # assumed until the real cost is known
     outcome: OnDemandOutcome = "failed"
     run_id: int | None = None
     try:
-        record = _produce(job, services, clock, emit)
+        emit(clock.log("Budget", f"up to ${spent:.2f} reserved for {planned.label}", "ok"))
+        record = _produce(search.topic, planned, services, clock, emit)
         spent = record.anthropic_cost_usd
         status = record.status
         outcome = status if status in ("published", "review", "discarded") else "failed"
 
-        topic = TopicRef(name=job.topic, kind="custom")
+        # A topic the bank already has keeps its own kind (record_item matches it by name).
+        topic = TopicRef(name=search.topic, kind="custom")
         ids = services.store.record_item(build_payload(record, topic, "on_demand"))
         run_id = ids.run_id
         emit(clock.log("Saved to the bank", _saved_detail(outcome), "ok"))
@@ -310,23 +495,29 @@ def _run_and_store(
                 if isinstance(item, QuizQuestion)
                 else None
             )
-            emit(ResultEvent(item=item, reveal_token=token))
+            emit(ResultEvent(key=planned.key, item=item, reveal_token=token))
         else:
             emit(
-                FallbackEvent(
+                MissedEvent(
+                    key=planned.key,
                     reason="discarded",
                     message=(
-                        "The agent could not back an answer with its sources this time. "
-                        "Topics in the bank are still free to play."
+                        f"The agent could not back {planned.label} with its sources, so it "
+                        "is left out."
                     ),
                 )
             )
     except Exception:
         traceback.print_exc(file=sys.stderr)
-        emit(_unavailable())
+        emit(
+            MissedEvent(
+                key=planned.key,
+                reason="failed",
+                message=f"Something went wrong with {planned.label} on our side.",
+            )
+        )
     finally:
         _settle(services, slot_id, spent, outcome, run_id)
-        emit(None)
 
 
 def _saved_detail(outcome: OnDemandOutcome) -> str:
@@ -339,11 +530,20 @@ def _saved_detail(outcome: OnDemandOutcome) -> str:
 
 
 def _produce(
-    job: LiveJob, services: Services, clock: _Clock, emit: Callable[[ResearchEvent | None], None]
+    topic: str,
+    planned: PlannedItem,
+    services: Services,
+    clock: _Clock,
+    emit: Callable[[ResearchEvent | None], None],
 ) -> ItemRecord:
     """The agent run and the publish gate, with every step sent to the log."""
     settings = services.settings
-    answer_word = "question" if job.mode == "quiz" else "explanation"
+    budget = run_budget(settings, clock.elapsed())
+    run_settings = settings
+    if budget < settings.max_seconds:
+        run_settings = settings.model_copy(update={"max_seconds": budget})
+        emit(clock.log("Time", f"{budget:.0f} s for the agent, so the search ends in time"))
+    answer_word = NOUNS[planned.mode]
 
     def on_step(step: Step) -> None:
         emit(step_event(step, clock, answer_word))
@@ -351,10 +551,8 @@ def _produce(
     # The first model call usually takes about 2 seconds but now and then 20, so say it started.
     emit(clock.log("Agent", f"researching with {settings.model}"))
 
-    if job.mode == "learn":
-        result = run_learn(job.topic, job.difficulty, services.llm, settings, on_step=on_step)
-    else:
-        result = run_quiz(job.topic, job.difficulty, services.llm, settings, on_step=on_step)
+    run = run_learn if planned.mode == "learn" else run_quiz
+    result = run(topic, planned.difficulty, services.llm, run_settings, on_step=on_step)
 
     if result.code_check is not None:
         problems = result.code_check.problems
@@ -377,7 +575,7 @@ def _produce(
         if haiku is not None:
             # A reason can name the answer ("the passage supports Jupiter"), so a quiz shows only
             # the verdict here; its reasons come with the answer, as the doubts.
-            if job.mode == "quiz" or not haiku.reasons:
+            if planned.mode == "quiz" or not haiku.reasons:
                 detail = str(haiku.verdict)
             else:
                 detail = f"{haiku.verdict}: {haiku.reasons[0]}"
@@ -433,7 +631,7 @@ VERDICT_WORDS: dict[JevVerdict, str] = {
 
 
 def step_event(step: Step, clock: _Clock, answer_word: str) -> LogEvent:
-    """A line of the agent log for one step of the run."""
+    """A line of the agent log for one step of a run."""
     if step.kind == "tool" and step.tool:
         detail = tool_detail(step.arguments or {})
         if step.is_error:

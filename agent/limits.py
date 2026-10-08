@@ -1,7 +1,11 @@
 """The on-demand guardrails' numbers and types (DESIGN.md decision 9, set 2026-10-04).
 
-The counting happens in the database (supabase/migrations/004_on_demand_runs.sql) so it holds
-across serverless instances; the numbers are passed in from here, so they live in reviewed code.
+The counting happens in the database (migrations 004 and 006) so it holds across serverless
+instances; the numbers are passed in from here, so they live in reviewed code.
+
+Since 2026-10-08 a live search on the web page makes up to four items, one agent run at a time.
+The daily limits count searches; the dollar caps count every run, each reserving the most it
+can cost until it ends.
 """
 
 from __future__ import annotations
@@ -11,7 +15,9 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-LimitName = Literal["user_day", "day_runs", "day_usd", "month_usd"]
+# "search" is not a limit a player meets: it is the database refusing a later run that cannot
+# join its search (another visitor's, still running, or already full).
+LimitName = Literal["user_day", "day_searches", "day_usd", "month_usd", "search"]
 
 
 class LimitSettings(BaseModel):
@@ -20,13 +26,17 @@ class LimitSettings(BaseModel):
     # Per visitor (a salted hash of the IP address), across every API endpoint. Raised from 60 on
     # 2026-10-04: a 10-question run is about 21 requests (a question and its answer each).
     requests_per_hour: int = Field(default=300, gt=0)
-    # Per visitor: live runs of custom topics a day (UTC). Bank questions do not count. Lowered
-    # from 10 on 2026-10-05, so one visitor cannot use up the day's global cap of 10 runs.
-    user_runs_per_day: int = Field(default=3, gt=0)
-    # All visitors together. A run reserves the most it can cost until it ends, so the dollar
-    # caps hold even while runs are in flight. The monthly ceiling leaves room for the daily
-    # Curator (about $5 a month) under the $10 Anthropic limit.
-    runs_per_day: int = Field(default=10, gt=0)
+    # Per visitor: live searches a day (UTC). Bank items do not count, nor does a search that
+    # finds everything already in the bank. Changed 2026-10-08 from 3 live runs of one item each.
+    user_searches_per_day: int = Field(default=2, gt=0)
+    # All visitors together. Changed 2026-10-08 from 10 live runs: a search costs about $0.12.
+    searches_per_day: int = Field(default=4, gt=0)
+    # The items a search can make: the explanation and a question at each of the three levels.
+    runs_per_search: int = Field(default=4, gt=0)
+    # Every run reserves the most it can cost until it ends, so the dollar caps hold even while
+    # runs are in flight. The monthly ceiling leaves room for the daily Curator (about $5 a
+    # month) under the $10 Anthropic limit. A run starts only if today's spend plus its
+    # reservation fits, so the day's last search may end early (decided 2026-10-08).
     usd_per_day: float = Field(default=0.50, gt=0)
     usd_per_month: float = Field(default=4.00, gt=0)
 
@@ -55,19 +65,19 @@ class RunSlot(BaseModel):
 
 
 class OnDemandUsage(BaseModel):
-    """Live runs so far, counted as `begin_on_demand_run` counts them: by start time in UTC, and
-    a run that has not ended at its reservation."""
+    """Live research so far, counted as `begin_on_demand_run` counts it: by start time in UTC,
+    searches by the run that opened each one, and a run that has not ended at its reservation."""
 
     model_config = ConfigDict(frozen=True)
 
-    visitor_runs_today: int = Field(ge=0)
-    runs_today: int = Field(ge=0)
+    visitor_searches_today: int = Field(ge=0)
+    searches_today: int = Field(ge=0)
     usd_today: float = Field(ge=0)
     usd_this_month: float = Field(ge=0)
 
 
 class Quota(BaseModel):
-    """What the web page shows before a live run is spent (GET /api/quota)."""
+    """What the web page shows before a live search is spent (GET /api/quota)."""
 
     model_config = ConfigDict(frozen=True)
 
@@ -75,8 +85,8 @@ class Quota(BaseModel):
     limit: int = Field(gt=0)
     # When the visitor's daily count starts again: the next midnight UTC.
     resets_at: datetime
-    # Whether the global caps would let a run start now. Off when today's runs or budget, or the
-    # month's budget, are used up.
+    # Whether the global caps would let a search start now. Off when today's searches or
+    # budget, or the month's budget, are used up.
     global_open: bool
 
 
@@ -90,19 +100,20 @@ def month_start(now: datetime) -> datetime:
 
 
 def quota(usage: OnDemandUsage, limits: LimitSettings, reserve_usd: float, now: datetime) -> Quota:
-    """The visitor's quota. The global check repeats `begin_on_demand_run`'s (migration 004), so
-    the page says "paused" exactly when a run would be refused; the database still decides."""
+    """The visitor's quota. The global check repeats `begin_on_demand_run`'s for a search's
+    first run (migration 006), so the page says "paused" exactly when a search would be refused;
+    the database still decides."""
 
     def fits(spent: float, cap: float) -> bool:
         # Rounded as the reservation is sent to the database, so float noise cannot tip it.
         return round(spent + reserve_usd, 6) <= cap
 
     return Quota(
-        remaining=max(0, limits.user_runs_per_day - usage.visitor_runs_today),
-        limit=limits.user_runs_per_day,
+        remaining=max(0, limits.user_searches_per_day - usage.visitor_searches_today),
+        limit=limits.user_searches_per_day,
         resets_at=day_start(now) + timedelta(days=1),
         global_open=(
-            usage.runs_today < limits.runs_per_day
+            usage.searches_today < limits.searches_per_day
             and fits(usage.usd_today, limits.usd_per_day)
             and fits(usage.usd_this_month, limits.usd_per_month)
         ),
@@ -111,10 +122,13 @@ def quota(usage: OnDemandUsage, limits: LimitSettings, reserve_usd: float, now: 
 
 LIMIT_MESSAGES: dict[LimitName, str] = {
     "user_day": (
-        f"You have researched {LIMITS.user_runs_per_day} custom topics today, the daily "
-        "limit. It resets at midnight UTC."
+        f"You have made {LIMITS.user_searches_per_day} live searches today, the daily limit. "
+        "It resets at midnight UTC."
     ),
-    "day_runs": "Custom topics have reached today's limit for everyone. It resets at midnight UTC.",
-    "day_usd": "Custom topics have reached today's budget. It resets at midnight UTC.",
-    "month_usd": "Custom topics have used this month's budget and resume next month.",
+    "day_searches": (
+        "Live searches have reached today's limit for everyone. It resets at midnight UTC."
+    ),
+    "day_usd": "Live research has reached today's budget. It resets at midnight UTC.",
+    "month_usd": "Live research has used this month's budget and resumes next month.",
+    "search": "This search cannot start another run.",
 }

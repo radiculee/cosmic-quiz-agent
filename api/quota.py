@@ -1,7 +1,7 @@
-"""GET /api/quota: the visitor's live runs left today, when that count resets, and whether the
-global caps would let a run start now.
+"""GET /api/quota: the visitor's live searches left today, when that count resets, and whether
+the global caps would let a search start now.
 
-The web page shows it before a live run is spent (DESIGN.md decision 9). It is counted from
+The web page shows it before a live search is spent (DESIGN.md decision 9). It is counted from
 `on_demand_runs` with the secret key, on the server only: the browser gets four values and never
 a visitor hash. The database still decides when a run starts (`begin_on_demand_run`), so a quota
 that is a moment out of date can only make the page more cautious or less, never break a limit.
@@ -19,8 +19,9 @@ from agent.store import SupabaseStore
 from agent.web import ApiRequest, ApiResponse, error_response, json_response, make_app
 
 UNAVAILABLE = "Live research is not available right now."
-# A live run reserves the most it can cost when it starts (agent/ondemand.py). That bound is the
-# same for every model, so the default settings give it without reading the environment.
+# Each run of a search reserves the most it can cost when it starts (agent/ondemand.py). That
+# bound is the same for every model, so the default settings give it without reading the
+# environment.
 RESERVE_USD = Settings().max_job_cost_usd
 
 

@@ -1,8 +1,9 @@
-"""POST /api/research {"topic": "...", "mode": "learn"|"quiz", "difficulty": "easy"|...}
+"""POST /api/research {"topic": "...", "difficulty": "easy"|"medium"|"hard"}
 
-Researches a custom topic live and streams the agent's steps as lines of JSON
-(`agent/ondemand.py`), ending with the item, a rejection, or a fallback to the bank. Guarded by
-the on-topic check, the visitor's daily limit and the global caps (DESIGN.md decision 9).
+A live search: researches a topic and streams the agent's steps as lines of JSON
+(`agent/ondemand.py`). It makes the explanation at the chosen difficulty and a question at each
+level, leaving out what the bank already has, and sends each item as it is ready. Guarded by the
+on-topic check, the visitor's daily searches and the global caps (DESIGN.md decision 9).
 """
 
 from __future__ import annotations
@@ -18,9 +19,9 @@ from agent.bank import BankReader, LiveResults
 from agent.config import load_settings
 from agent.limits import LIMITS
 from agent.llm import AnthropicProvider
-from agent.ondemand import LiveJob, ResearchEvent, Services, research
+from agent.ondemand import ResearchEvent, SearchRequest, Services, research
 from agent.rest import StoreError
-from agent.schemas import Difficulty, Mode
+from agent.schemas import Difficulty
 from agent.store import SupabaseStore
 from agent.topic_check import InvalidTopicError, JevTopicJudge, clean_topic
 from agent.verifiers import make_jev
@@ -40,11 +41,10 @@ class ResearchBody(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     topic: str = Field(min_length=1, max_length=200)
-    mode: Mode
     difficulty: Difficulty
 
 
-# Everything a live run needs. Checked before any client is made, so a server missing one never
+# Everything a live search needs. Checked before any client is made, so a server missing one never
 # opens connections it cannot use.
 REQUIRED_ENV = (
     "SUPABASE_URL",
@@ -64,7 +64,7 @@ class NotConfiguredError(Exception):
 
 
 def services() -> Services:
-    """The clients live runs use, made once per process and shared by its requests (they are
+    """The clients live searches use, made once per process and shared by its requests (they are
     thread-safe), so a warm serverless instance reuses its connections."""
     global _services
     with _services_lock:
@@ -95,7 +95,7 @@ def handle(request: ApiRequest) -> ApiResponse | StreamResponse:
     try:
         body = ResearchBody.model_validate(read_json(request))
     except ValidationError:
-        return error_response(400, "Send a topic, a mode (learn or quiz) and a difficulty.")
+        return error_response(400, "Send a topic and a difficulty (easy, medium or hard).")
     try:
         topic = clean_topic(body.topic)
     except InvalidTopicError as error:
@@ -107,13 +107,13 @@ def handle(request: ApiRequest) -> ApiResponse | StreamResponse:
     except (NotConfiguredError, StoreError, ValueError) as error:
         print(f"live research is not configured: {error}", file=sys.stderr)
         return error_response(503, "Live research is not available right now.")
-    job = LiveJob(topic=topic, mode=body.mode, difficulty=body.difficulty, visitor=request.visitor)
-    return StreamResponse(_as_json(research(job, live)))
+    search = SearchRequest(topic=topic, difficulty=body.difficulty, visitor=request.visitor)
+    return StreamResponse(_as_json(research(search, live)))
 
 
 def _as_json(events: Generator[ResearchEvent]) -> Generator[JsonValue]:
-    """The events as JSON objects. Closing this closes `events`, which waits for a started run
-    to be stored (agent/ondemand.py)."""
+    """The events as JSON objects. Closing this closes `events`, which waits for a started
+    search to be stored (agent/ondemand.py)."""
     try:
         for event in events:
             yield event.model_dump(mode="json")

@@ -1,0 +1,149 @@
+import { describe, expect, it } from "vitest";
+
+import {
+  ended,
+  explanationSlot,
+  fromPlan,
+  itemLabel,
+  madeAnything,
+  missed,
+  nextOpen,
+  questionSlots,
+  resolved,
+  started,
+  summarize,
+  summaryLine,
+} from "./search";
+import type { LearnItem, PlannedItem, QuizQuestion } from "./types";
+
+// A MEDIUM search on a topic the bank has an EASY question for.
+const PLAN: PlannedItem[] = [
+  { key: "learn-medium", mode: "learn", difficulty: "medium", source: "live" },
+  { key: "quiz-medium", mode: "quiz", difficulty: "medium", source: "live" },
+  { key: "quiz-easy", mode: "quiz", difficulty: "easy", source: "bank" },
+  { key: "quiz-hard", mode: "quiz", difficulty: "hard", source: "live" },
+];
+
+const EXPLANATION: LearnItem = {
+  id: 1,
+  mode: "learn",
+  difficulty: "medium",
+  topic: "Pulsars",
+  explanation: "...",
+  sources: [],
+  source_check: { options: [], sentences: 0, sentences_supported: 0 },
+  status: "published",
+  doubts: [],
+};
+
+function question(id: number, difficulty: QuizQuestion["difficulty"]): QuizQuestion {
+  return {
+    id,
+    mode: "quiz",
+    difficulty,
+    topic: "Pulsars",
+    question: "Q?",
+    options: ["a", "b", "c", "d"],
+    status: "published",
+  };
+}
+
+describe("a search's slots", () => {
+  it("start waiting for live items and loading for bank items", () => {
+    const search = fromPlan(1, "Pulsars", PLAN);
+
+    expect(search.slots.map((slot) => slot.state.kind)).toEqual([
+      "waiting",
+      "waiting",
+      "loading",
+      "waiting",
+    ]);
+    expect(explanationSlot(search)?.key).toBe("learn-medium");
+    expect(questionSlots(search).map((slot) => slot.key)).toEqual([
+      "quiz-medium",
+      "quiz-easy",
+      "quiz-hard",
+    ]);
+  });
+
+  it("follow the stream: researching, then ready or left out", () => {
+    let search = fromPlan(1, "Pulsars", PLAN);
+    search = started(search, "learn-medium");
+    expect(explanationSlot(search)?.state.kind).toBe("researching");
+
+    search = resolved(search, "learn-medium", EXPLANATION);
+    search = started(search, "learn-medium"); // a late log line does not undo it
+    expect(explanationSlot(search)?.state).toEqual({
+      kind: "ready",
+      item: EXPLANATION,
+      revealToken: undefined,
+    });
+
+    search = missed(search, "quiz-medium", "Not backed by its sources.");
+    search = resolved(search, "quiz-hard", question(3, "hard"), "token");
+    const states = questionSlots(search).map((slot) => slot.state);
+    expect(states[0]).toEqual({ kind: "missed", message: "Not backed by its sources." });
+    expect(states[2]).toEqual({ kind: "ready", item: question(3, "hard"), revealToken: "token" });
+  });
+
+  it("leave out live items that never came when the stream ends, but keep loading bank items", () => {
+    let search = fromPlan(1, "Pulsars", PLAN);
+    search = resolved(search, "learn-medium", EXPLANATION);
+    search = ended(search, "The search ended before this was made.");
+
+    expect(search.ended).toBe(true);
+    expect(search.slots.map((slot) => slot.state.kind)).toEqual([
+      "ready",
+      "missed",
+      "loading",
+      "missed",
+    ]);
+  });
+
+  it("ignore events about items the plan does not have", () => {
+    const search = fromPlan(1, "Pulsars", PLAN);
+    expect(resolved(search, "learn-easy", EXPLANATION)).toEqual(search);
+  });
+});
+
+describe("the question order", () => {
+  it("skips questions that were left out", () => {
+    let search = fromPlan(1, "Pulsars", PLAN);
+    search = missed(search, "quiz-medium", "x");
+    const questions = questionSlots(search);
+
+    expect(nextOpen(questions, 0)).toBe(1); // the EASY question from the bank
+    expect(nextOpen(questions, 2)).toBe(2); // HARD, still being researched
+    expect(nextOpen(questions, 3)).toBeNull();
+  });
+});
+
+describe("the search summary", () => {
+  it("counts the live items made and those in review", () => {
+    let search = fromPlan(1, "Pulsars", PLAN);
+    search = resolved(search, "learn-medium", EXPLANATION);
+    search = resolved(search, "quiz-medium", { ...question(2, "medium"), status: "review" });
+    search = resolved(search, "quiz-easy", question(9, "easy")); // from the bank: not counted
+    search = ended(search, "x");
+
+    expect(summarize(search)).toEqual({ made: 2, review: 1, live: 3 });
+    expect(madeAnything(search)).toBe(true);
+    expect(summaryLine(summarize(search))).toBe(
+      "Made 2 of 3, saved to the bank. One is marked not fully verified and shown only to you until reviewed.",
+    );
+  });
+
+  it("says so when the search made nothing", () => {
+    const search = ended(fromPlan(1, "Pulsars", PLAN), "x");
+
+    expect(madeAnything(search)).toBe(false);
+    expect(summaryLine(summarize(search))).toMatch(/could not back any of it/);
+  });
+});
+
+describe("itemLabel", () => {
+  it("names an item by its level and kind", () => {
+    expect(itemLabel("learn-medium")).toBe("MEDIUM explanation");
+    expect(itemLabel("quiz-easy")).toBe("EASY question");
+  });
+});

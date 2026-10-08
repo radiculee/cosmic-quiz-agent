@@ -140,7 +140,7 @@ function NoMatch({
     <p className="text-sm text-ink/90">
       &ldquo;{typed}&rdquo; is not in the bank yet.{" "}
       <Link
-        to={explorePath(typed, "learn", difficulty)}
+        to={explorePath(typed, difficulty)}
         className="text-teal underline underline-offset-4 hover:text-ink"
       >
         Research it live on the web page

@@ -9,7 +9,7 @@ import type { PageProps } from "./common";
 
 /**
  * The front page: Learn and Quiz as two large cards, live research from the web as a smaller one
- * with the visitor's runs left today, then rank, points and the trophy shelf.
+ * with the visitor's searches left today, then rank, points and the trophy shelf.
  */
 export function HomePage({ topicsState, profile }: Pick<PageProps, "topicsState" | "profile">) {
   usePageTitle(null);
@@ -58,7 +58,8 @@ export function HomePage({ topicsState, profile }: Pick<PageProps, "topicsState"
         <span>
           <span className="block font-medium text-ink">Try a new topic from the web</span>
           <span className="mt-1 block text-xs text-slate">
-            The agent researches it live and checks its sources, in about 20 seconds.
+            The agent researches it live: an explanation and a question at each level, each
+            checked against its sources.
           </span>
         </span>
         {quota.kind === "loaded" && (

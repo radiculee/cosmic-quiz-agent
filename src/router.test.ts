@@ -72,8 +72,8 @@ describe("topic slugs", () => {
   });
 
   it("fill the web page's form through the address", () => {
-    expect(explorePath("Pulsars & magnetars", "learn", "hard")).toBe(
-      "/explore?topic=Pulsars+%26+magnetars&mode=learn&difficulty=hard",
+    expect(explorePath("Pulsars & magnetars", "hard")).toBe(
+      "/explore?topic=Pulsars+%26+magnetars&difficulty=hard",
     );
   });
 });

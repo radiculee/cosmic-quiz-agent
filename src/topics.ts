@@ -1,4 +1,4 @@
-import type { BankTopic, Difficulty, Mode } from "./types";
+import { type BankTopic, DIFFICULTIES, type Difficulty, type Mode } from "./types";
 
 export const MAX_SUGGESTIONS = 8;
 
@@ -17,25 +17,30 @@ export function isPlayable(topic: BankTopic, mode: Mode, difficulty: Difficulty)
   return topic[mode].includes(difficulty);
 }
 
-/**
- * Topics playable at this mode and difficulty whose name contains the query (every one for an
- * empty query): those starting with it first, then alphabetical.
- */
-export function filterTopics(
-  topics: readonly BankTopic[],
-  query: string,
-  mode: Mode,
-  difficulty: Difficulty,
-): BankTopic[] {
+/** Topics whose name contains the query (every one for an empty query): those starting with it
+ * first, then alphabetical. */
+function matching(topics: readonly BankTopic[], query: string): BankTopic[] {
   const wanted = normalize(query);
   return topics
-    .filter((topic) => isPlayable(topic, mode, difficulty))
     .filter((topic) => normalize(topic.name).includes(wanted))
     .sort((a, b) => {
       const aStarts = normalize(a.name).startsWith(wanted) ? 0 : 1;
       const bStarts = normalize(b.name).startsWith(wanted) ? 0 : 1;
       return aStarts - bStarts || a.name.localeCompare(b.name);
     });
+}
+
+/** Topics playable at this mode and difficulty whose name contains the query. */
+export function filterTopics(
+  topics: readonly BankTopic[],
+  query: string,
+  mode: Mode,
+  difficulty: Difficulty,
+): BankTopic[] {
+  return matching(
+    topics.filter((topic) => isPlayable(topic, mode, difficulty)),
+    query,
+  );
 }
 
 /** Suggestions for what the player has typed: the first few of `filterTopics`. */
@@ -46,6 +51,12 @@ export function suggest(
   difficulty: Difficulty,
 ): BankTopic[] {
   return filterTopics(topics, query, mode, difficulty).slice(0, MAX_SUGGESTIONS);
+}
+
+/** Suggestions from every topic in the bank, whatever it has: the web page's topic box, where a
+ * bank topic is shown free and only its gaps are researched. */
+export function suggestAny(topics: readonly BankTopic[], query: string): BankTopic[] {
+  return matching(topics, query).slice(0, MAX_SUGGESTIONS);
 }
 
 /**
@@ -92,4 +103,33 @@ export function topicStatus(
     return { kind: "ready", topic };
   }
   return { kind: "elsewhere", topic, difficulties: topic[mode] };
+}
+
+export type SearchStatus =
+  | { kind: "empty" }
+  | { kind: "new" }
+  | { kind: "partial"; topic: BankTopic; missing: number }
+  | { kind: "complete"; topic: BankTopic };
+
+/**
+ * What a live search for the typed topic would do (agent/ondemand.py `plan_search`): it makes
+ * the explanation at `difficulty` and a question at each level, leaving out what the bank has.
+ * "complete" is free and does not use a search.
+ */
+export function searchStatus(
+  topics: readonly BankTopic[],
+  query: string,
+  difficulty: Difficulty,
+): SearchStatus {
+  if (!normalize(query)) {
+    return { kind: "empty" };
+  }
+  const topic = findTopic(topics, query);
+  if (!topic) {
+    return { kind: "new" };
+  }
+  const missing =
+    (isPlayable(topic, "learn", difficulty) ? 0 : 1) +
+    DIFFICULTIES.filter((level) => !isPlayable(topic, "quiz", level)).length;
+  return missing === 0 ? { kind: "complete", topic } : { kind: "partial", topic, missing };
 }

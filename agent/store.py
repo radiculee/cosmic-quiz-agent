@@ -529,6 +529,12 @@ class _UsageRow(BaseModel):
     started_at: datetime
     reserved_usd: float
     spent_usd: float | None
+    # Null on the run that opened a search (migration 006), the one the search limits count.
+    search_id: int | None = None
+
+    @property
+    def opens_search(self) -> bool:
+        return self.search_id is None
 
     @property
     def counted_usd(self) -> float:
@@ -690,9 +696,12 @@ class SupabaseStore:
         difficulty: Difficulty,
         reserve_usd: float,
         limits: LimitSettings,
+        search_id: int | None = None,
     ) -> RunSlot:
-        """Start a live run if the visitor's daily limit and the global caps allow it, reserving
-        `reserve_usd` against the caps until `finish_on_demand_run`. Sent once."""
+        """Start a live run if the limits allow it, reserving `reserve_usd` against the dollar
+        caps until `finish_on_demand_run` (migration 006). Without `search_id` the run opens a
+        search, which counts against the daily search limits; with it, the run joins that search
+        and is not counted again. Sent once."""
         reply = self._rest.send(
             "POST",
             "/rpc/begin_on_demand_run",
@@ -701,9 +710,11 @@ class SupabaseStore:
                 "p_topic": topic,
                 "p_mode": mode,
                 "p_difficulty": difficulty,
+                "p_search_id": search_id,
                 "p_reserve_usd": round(reserve_usd, 6),
-                "p_user_day_runs": limits.user_runs_per_day,
-                "p_day_runs": limits.runs_per_day,
+                "p_user_day_searches": limits.user_searches_per_day,
+                "p_day_searches": limits.searches_per_day,
+                "p_search_runs": limits.runs_per_search,
                 "p_day_usd": limits.usd_per_day,
                 "p_month_usd": limits.usd_per_month,
             },
@@ -711,10 +722,10 @@ class SupabaseStore:
         return parse(_RUN_SLOT, reply, "begin_on_demand_run")
 
     def on_demand_usage(self, user_hash: str, now: datetime) -> OnDemandUsage:
-        """Live runs so far today (the visitor's and everyone's) and this month, for the quota.
-        Two small reads: the visitor's own runs today (at most the daily limit), and every run
-        this month (at most the daily run cap for each day so far). No visitor hash leaves the
-        database in either."""
+        """Live searches so far today (the visitor's and everyone's) and the money spent today
+        and this month, for the quota. Two small reads: the visitor's own searches today (at
+        most the daily limit), and every run this month. No visitor hash leaves the database in
+        either."""
         day = day_start(now)
         mine = self._rest.send(
             "GET",
@@ -723,16 +734,17 @@ class SupabaseStore:
                 "select": "id",
                 "user_hash": f"eq.{user_hash}",
                 "started_at": f"gte.{day.isoformat()}",
+                "search_id": "is.null",
             },
             retries=RETRIES,
         )
-        visitor_runs = parse(_ID_ROWS, mine, "reading the visitor's live runs")
+        visitor_searches = parse(_ID_ROWS, mine, "reading the visitor's live searches")
         rows = parse(
             _USAGE_ROWS,
             self._rest.read_all(
                 "/on_demand_runs",
                 {
-                    "select": "started_at,reserved_usd,spent_usd",
+                    "select": "started_at,reserved_usd,spent_usd,search_id",
                     "started_at": f"gte.{month_start(now).isoformat()}",
                     "order": "id",
                 },
@@ -741,8 +753,8 @@ class SupabaseStore:
         )
         today = [row for row in rows if row.started_at >= day]
         return OnDemandUsage(
-            visitor_runs_today=len(visitor_runs),
-            runs_today=len(today),
+            visitor_searches_today=len(visitor_searches),
+            searches_today=sum(1 for row in today if row.opens_search),
             usd_today=sum(row.counted_usd for row in today),
             usd_this_month=sum(row.counted_usd for row in rows),
         )

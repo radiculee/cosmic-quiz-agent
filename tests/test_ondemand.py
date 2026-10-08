@@ -1,30 +1,40 @@
-"""Custom topics on demand: the topic check, the guardrails and the streamed live run.
+"""Live searches on the web page: the topic check, the plan, the guardrails and the streamed runs.
 
-The agent run and the gate are replaced by a stored record, so nothing here touches the network
-or a paid API.
+Most tests replace each agent run and the gate with a stored record; one plays a whole search
+through the real loop and verifiers with the scripted fake model. Nothing touches the network or
+a paid API.
 """
 
 from __future__ import annotations
 
+import functools
 import json
 from collections.abc import Callable, Generator
 from dataclasses import dataclass, field
+from typing import Any
 
+import httpx2
 import pytest
 
 import agent.ondemand as ondemand
-from agent.bank import LearnItem, QuizQuestion, SourceCheck
+from agent.bank import BankTopic, LearnItem, QuizQuestion, ShownStatus, SourceCheck
 from agent.config import Settings
-from agent.limits import LIMITS, LimitSettings, RunSlot
+from agent.limits import LIMITS, LimitName, LimitSettings, RunSlot
+from agent.loop import run_learn, run_quiz
 from agent.ondemand import (
     FallbackEvent,
-    LiveJob,
     LogEvent,
+    MissedEvent,
+    PlanEvent,
+    PlannedItem,
     RejectedEvent,
     ResearchEvent,
     ResultEvent,
+    SearchRequest,
     Services,
+    plan_search,
     research,
+    run_budget,
     step_event,
     tool_detail,
 )
@@ -41,7 +51,11 @@ from agent.topic_check import (
 )
 from agent.web import ApiRequest, ApiResponse, StreamResponse
 from api import research as research_api
+from tests.conftest import FakeLLM, FakeWeb, completion
+from tests.test_loop import ARTICLE, FETCH, QUOTE
 from tests.test_store import quiz_record
+from tests.test_tools import WIKI_API, wiki_extract
+from tests.test_verifiers import FakeJev, haiku_reply
 
 # --- The topic check --------------------------------------------------------------------------
 
@@ -101,7 +115,7 @@ def test_tool_steps_show_the_url_or_the_query() -> None:
     assert tool_detail({"query": "black hole", "limit": 5}) == '"black hole"'
     assert tool_detail({}) == ""
 
-    clock = ondemand._Clock()
+    clock = ondemand._Clock().for_item("quiz-easy")
     fetch = Step(
         index=1,
         kind="tool",
@@ -113,6 +127,7 @@ def test_tool_steps_show_the_url_or_the_query() -> None:
     )
     line = step_event(fetch, clock, "question")
     assert (line.label, line.detail, line.tone) == ("fetch_page", "www.nasa.gov/x (failed)", "warn")
+    assert line.key == "quiz-easy"
 
     submit = Step(index=2, kind="model", summary="submit_quiz (stop: tool_use)", seconds=2.0)
     assert step_event(submit, clock, "question").detail == "writes the question"
@@ -122,7 +137,55 @@ def test_tool_steps_show_the_url_or_the_query() -> None:
     assert step_event(plan, clock, "question").detail == "next: search_wikipedia, fetch_page"
 
 
-# --- The live run ------------------------------------------------------------------------------
+# --- The plan ----------------------------------------------------------------------------------
+
+
+def keys(items: list[PlannedItem], source: str | None = None) -> list[str]:
+    return [item.key for item in items if source is None or item.source == source]
+
+
+def test_a_search_plans_the_explanation_then_the_chosen_question_first() -> None:
+    assert keys(plan_search("medium", None)) == [
+        "learn-medium",
+        "quiz-medium",
+        "quiz-easy",
+        "quiz-hard",
+    ]
+    assert keys(plan_search("hard", None)) == [
+        "learn-hard",
+        "quiz-hard",
+        "quiz-easy",
+        "quiz-medium",
+    ]
+    assert all(item.source == "live" for item in plan_search("easy", None))
+
+
+def test_the_plan_takes_from_the_bank_what_it_already_has() -> None:
+    # Like "Black holes": questions at two levels, no explanation.
+    have = BankTopic(name="Black holes", kind="evergreen", learn=["easy"], quiz=["easy", "hard"])
+
+    plan = plan_search("medium", have)
+
+    assert keys(plan, "live") == ["learn-medium", "quiz-medium"]
+    assert keys(plan, "bank") == ["quiz-easy", "quiz-hard"]
+
+
+def test_a_late_run_gets_a_shorter_agent_budget_so_the_search_ends_in_time() -> None:
+    settings = Settings()
+
+    assert run_budget(settings, 0.0) == settings.max_seconds  # every typical run
+    assert run_budget(settings, 100.0) == settings.max_seconds
+    assert run_budget(settings, 150.0) == pytest.approx(90.0)
+    # The last moment a run may start still leaves it time to finish under the limit.
+    at_cutoff = run_budget(settings, ondemand.RUN_START_SECONDS)
+    assert at_cutoff > 0
+    assert ondemand.RUN_START_SECONDS + at_cutoff + ondemand.VERIFY_SECONDS <= (
+        ondemand.SEARCH_SECONDS
+    )
+    assert ondemand.SEARCH_SECONDS < 300  # Vercel's limit
+
+
+# --- Fakes -------------------------------------------------------------------------------------
 
 
 class FakeJudge:
@@ -137,38 +200,30 @@ class FakeJudge:
         return self.result
 
 
-QUESTION = QuizQuestion(
-    id=41, difficulty="medium", topic="Neutron stars", question="Q?", options=["a", "b", "c", "d"]
-)
-
-
 class FakeBank:
     def __init__(
-        self, known: str | None = None, has: bool = False, item: QuizQuestion | LearnItem = QUESTION
+        self, known: str | None = None, have: BankTopic | None = None, down: bool = False
     ) -> None:
-        self.known, self.has, self.item = known, has, item
+        self.known, self.have, self.down = known, have, down
 
     def topic_named(self, name: str) -> str | None:
+        if self.down:
+            raise StoreError("down")
         return self.known
 
-    def has_item(self, topic: str, mode: Mode, difficulty: Difficulty) -> bool:
-        return self.has
-
-
-class FakeResults:
-    def __init__(self, item: QuizQuestion | LearnItem) -> None:
-        self.stored = item
-
-    def item(self, item_id: int) -> QuizQuestion | LearnItem | None:
-        return self.stored
+    def coverage(self, topic: str) -> BankTopic | None:
+        return self.have
 
 
 @dataclass
 class FakeStore:
-    slot: RunSlot | Exception = field(default_factory=lambda: RunSlot(ok=True, id=5))
-    began: list[tuple[str, str, float]] = field(default_factory=list)
+    # Limits that refuse the n-th reservation (0 = the run that opens the search).
+    refuse: dict[int, LimitName] = field(default_factory=dict)
+    down: bool = False
+    began: list[tuple[str, str, Mode, Difficulty, int | None]] = field(default_factory=list)
     finished: list[tuple[int, float, OnDemandOutcome, int | None]] = field(default_factory=list)
     payloads: list[ItemPayload] = field(default_factory=list)
+    calls: list[str] = field(default_factory=list)
 
     def begin_on_demand_run(
         self,
@@ -178,193 +233,445 @@ class FakeStore:
         difficulty: Difficulty,
         reserve_usd: float,
         limits: LimitSettings,
+        search_id: int | None = None,
     ) -> RunSlot:
-        self.began.append((user_hash, topic, reserve_usd))
-        if isinstance(self.slot, Exception):
-            raise self.slot
-        return self.slot
+        number = len(self.began)
+        self.began.append((user_hash, topic, mode, difficulty, search_id))
+        self.calls.append("begin")
+        assert reserve_usd == Settings().max_job_cost_usd
+        if self.down:
+            raise StoreError("down")
+        if number in self.refuse:
+            return RunSlot(ok=False, limit=self.refuse[number])
+        return RunSlot(ok=True, id=100 + number)
 
     def finish_on_demand_run(
         self, slot_id: int, spent_usd: float, outcome: OnDemandOutcome, run_id: int | None
     ) -> None:
         self.finished.append((slot_id, spent_usd, outcome, run_id))
+        self.calls.append("finish")
 
     def record_item(self, payload: ItemPayload) -> RecordedIds:
         self.payloads.append(payload)
-        return RecordedIds(topic_id=1, run_id=99, item_id=41)
+        number = len(self.payloads)
+        return RecordedIds(topic_id=1, run_id=200 + number, item_id=40 + number)
+
+
+NO_CHECK = SourceCheck(options=[], sentences=0, sentences_supported=0)
+
+
+class FakeResults:
+    """Reads back a stored live item: the run's mode and difficulty, in `status`."""
+
+    def __init__(self, store: FakeStore, status: ShownStatus = "published") -> None:
+        self.store, self.status = store, status
+
+    def item(self, item_id: int) -> QuizQuestion | LearnItem | None:
+        payload = self.store.payloads[item_id - 41]
+        run, topic = payload.run, payload.topic.name
+        if run.mode == "learn":
+            return LearnItem(
+                id=item_id,
+                difficulty=run.difficulty,
+                topic=topic,
+                explanation="...",
+                sources=[],
+                source_check=NO_CHECK,
+                status=self.status,
+            )
+        return QuizQuestion(
+            id=item_id,
+            difficulty=run.difficulty,
+            topic=topic,
+            question="Q?",
+            options=["a", "b", "c", "d"],
+            status=self.status,
+        )
 
 
 def services(
-    judge: FakeJudge, bank: FakeBank | None = None, store: FakeStore | None = None
-) -> tuple[Services, FakeBank, FakeStore]:
-    bank = bank or FakeBank()
+    judge: FakeJudge | None = None,
+    bank: FakeBank | None = None,
+    store: FakeStore | None = None,
+    status: ShownStatus = "published",
+    llm: object = None,
+    jev: object = None,
+) -> tuple[Services, FakeStore]:
     store = store or FakeStore()
     built = Services(
-        judge=judge,
-        bank=bank,
-        results=FakeResults(bank.item),
+        judge=judge or FakeJudge(ACCEPT),
+        bank=bank or FakeBank(),
+        results=FakeResults(store, status),
         store=store,
-        llm=object(),  # type: ignore[arg-type]
-        jev=None,
+        llm=llm or object(),  # type: ignore[arg-type]
+        jev=jev,  # type: ignore[arg-type]
         settings=Settings(),
         limits=LIMITS,
         sign=lambda purpose, value: f"signed:{purpose}:{value}",
     )
-    return built, bank, store
+    return built, store
 
 
 ACCEPT = verdict(0.98, 0.97, "jev-1.13.0")
-JOB = LiveJob(topic="Neutron stars", mode="quiz", difficulty="medium", visitor="v1")
+SEARCH = SearchRequest(topic="Neutron stars", difficulty="medium", visitor="v1")
+EVERY_ITEM = ["learn-medium", "quiz-medium", "quiz-easy", "quiz-hard"]
 
 
-def run_with(
+@dataclass
+class Script:
+    """What the replaced runs saw: each run's key and its agent time budget."""
+
+    runs: list[tuple[str, float]] = field(default_factory=list)
+
+
+def script(
     monkeypatch: pytest.MonkeyPatch,
-    status: Status | None,
-    *,
-    crash: bool = False,
-) -> Callable[[Services], list[ResearchEvent]]:
-    """Replace the agent run and the gate with the stored quiz record, decided as `status`."""
+    statuses: dict[str, Status | None] | None = None,
+    crash: frozenset[str] = frozenset(),
+) -> Script:
+    """Replace each agent run and the gate with the stored quiz record, made for the run's mode
+    and difficulty and decided as `statuses` says (published by default)."""
     record = quiz_record()
+    seen = Script()
 
-    def fake_run(
-        topic: str,
-        difficulty: Difficulty,
-        llm: object,
-        settings: Settings,
-        on_step: Callable[[Step], None],
-    ) -> RunResult:
-        if crash:
-            raise RuntimeError("the agent fell over")
-        for step in record.run.steps:
-            on_step(step)
-        return record.run
+    def fake_run(mode: Mode) -> Callable[..., RunResult]:
+        def run(
+            topic: str,
+            difficulty: Difficulty,
+            llm: object,
+            settings: Settings,
+            on_step: Callable[[Step], None],
+        ) -> RunResult:
+            key = f"{mode}-{difficulty}"
+            seen.runs.append((key, settings.max_seconds))
+            if key in crash:
+                raise RuntimeError("the agent fell over")
+            for step in record.run.steps:
+                on_step(step)
+            return record.run.model_copy(update={"mode": mode, "difficulty": difficulty})
+
+        return run
 
     def fake_decide(result: RunResult, *_: object) -> ItemRecord:
-        return record.model_copy(update={"status": status})
+        status = (statuses or {}).get(f"{result.mode}-{result.difficulty}", "published")
+        return record.model_copy(update={"run": result, "status": status})
 
-    monkeypatch.setattr(ondemand, "run_quiz", fake_run)
+    monkeypatch.setattr(ondemand, "run_learn", fake_run("learn"))
+    monkeypatch.setattr(ondemand, "run_quiz", fake_run("quiz"))
     monkeypatch.setattr(ondemand, "verify_and_decide", fake_decide)
-    return lambda live: list(research(JOB, live))
+    return seen
 
 
-def test_a_topic_already_in_the_bank_is_served_from_it_for_free() -> None:
-    judge = FakeJudge(ACCEPT)
-    live, _, store = services(judge, FakeBank(known="Neutron stars", has=True))
+def of_type[E](events: list[ResearchEvent], kind: type[E]) -> list[E]:
+    return [event for event in events if isinstance(event, kind)]
 
-    events = list(research(JOB, live))
 
-    assert events == [
-        FallbackEvent(
-            reason="in_bank", message="This topic is already in the bank.", topic="Neutron stars"
-        )
+# --- Searches ----------------------------------------------------------------------------------
+
+
+def test_a_search_makes_every_item_one_run_at_a_time_and_counts_once(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    script(monkeypatch)
+    live, store = services()
+
+    events = list(research(SEARCH, live))
+
+    plan = events[0]
+    assert isinstance(plan, PlanEvent) and plan.topic == "Neutron stars"
+    assert keys(plan.items, "live") == EVERY_ITEM
+    results = of_type(events, ResultEvent)
+    assert [result.key for result in results] == EVERY_ITEM
+    assert results[0].reveal_token is None  # the explanation needs no token
+    assert [result.reveal_token for result in results[1:]] == [
+        f"signed:reveal:{result.item.id}" for result in results[1:]
     ]
+    assert "correct_index" not in json.dumps([r.model_dump(mode="json") for r in results])
+
+    # The first run opens the search; the later runs join it, one at a time.
+    assert [search_id for *_, search_id in store.began] == [None, 100, 100, 100]
+    assert store.calls == ["begin", "finish"] * 4
+    record = quiz_record()
+    assert [(slot, outcome) for slot, _, outcome, _ in store.finished] == [
+        (100, "published"),
+        (101, "published"),
+        (102, "published"),
+        (103, "published"),
+    ]
+    assert all(
+        spent == pytest.approx(record.anthropic_cost_usd) for _, spent, _, _ in store.finished
+    )
+    assert [(p.run.mode, p.run.difficulty, p.run.source) for p in store.payloads] == [
+        ("learn", "medium", "on_demand"),
+        ("quiz", "medium", "on_demand"),
+        ("quiz", "easy", "on_demand"),
+        ("quiz", "hard", "on_demand"),
+    ]
+
+    # Every line after the on-topic check names its item.
+    lines = of_type(events, LogEvent)
+    assert lines[0].label == "On-topic check (Jev)" and lines[0].key is None
+    assert all(line.key in EVERY_ITEM for line in lines[1:])
+    budgets = [line.detail for line in lines if line.label == "Budget"]
+    assert budgets[0] == "up to $0.17 reserved for the MEDIUM explanation"
+    assert budgets[2] == "up to $0.17 reserved for the EASY question"
+    # Which option the sources support would give a quiz answer away.
+    jev_lines = [line for line in lines if line.label.startswith("Jev")]
+    assert jev_lines and all(line.verdict is None for line in jev_lines)
+
+
+def test_a_topic_the_bank_has_at_every_level_is_free_and_not_counted() -> None:
+    have = BankTopic(
+        name="Neutron stars", kind="evergreen", learn=["medium"], quiz=["easy", "medium", "hard"]
+    )
+    judge = FakeJudge(ACCEPT)
+    live, store = services(judge, FakeBank(known="Neutron stars", have=have))
+
+    events = list(research(SEARCH, live))
+
+    assert len(events) == 1
+    plan = events[0]
+    assert isinstance(plan, PlanEvent) and keys(plan.items, "bank") == EVERY_ITEM
     assert judge.topics == [] and store.began == []
 
 
-def test_an_off_topic_topic_is_rejected_before_any_run() -> None:
-    live, _, store = services(FakeJudge(verdict(0.03, 0.97, "jev")))
+def test_a_bank_topic_with_gaps_makes_only_the_missing_items(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    script(monkeypatch)
+    have = BankTopic(name="Black holes", kind="evergreen", learn=[], quiz=["easy", "hard"])
+    request = SearchRequest(topic="Black Holes", difficulty="medium", visitor="v1")
+    live, store = services(bank=FakeBank(known="Black holes", have=have))
 
-    events = list(research(JOB, live))
+    events = list(research(request, live))
 
-    assert isinstance(events[0], LogEvent) and events[0].tone == "warn"
+    plan = events[0]
+    assert isinstance(plan, PlanEvent) and plan.topic == "Black holes"  # the bank's spelling
+    assert keys(plan.items, "bank") == ["quiz-easy", "quiz-hard"]
+    assert [result.key for result in of_type(events, ResultEvent)] == [
+        "learn-medium",
+        "quiz-medium",
+    ]
+    assert [(topic, mode, level) for _, topic, mode, level, _ in store.began] == [
+        ("Black holes", "learn", "medium"),
+        ("Black holes", "quiz", "medium"),
+    ]
+
+
+def test_a_visitor_over_the_daily_limit_keeps_what_the_bank_has() -> None:
+    have = BankTopic(name="Black holes", kind="evergreen", learn=[], quiz=["easy"])
+    store = FakeStore(refuse={0: "user_day"})
+    live, _ = services(bank=FakeBank(known="Black holes", have=have), store=store)
+
+    events = list(research(SEARCH, live))
+
+    assert isinstance(events[0], PlanEvent) and keys(events[0].items, "bank") == ["quiz-easy"]
+    last = events[-1]
+    assert isinstance(last, FallbackEvent) and last.reason == "limit"
+    assert "2 live searches today" in last.message
+    assert store.finished == []
+
+
+def test_an_off_topic_search_is_rejected_before_anything_is_reserved() -> None:
+    live, store = services(FakeJudge(verdict(0.03, 0.97, "jev")))
+
+    events = list(research(SEARCH, live))
+
+    assert isinstance(events[0], PlanEvent)
+    assert isinstance(events[1], LogEvent) and events[1].tone == "warn"
     assert isinstance(events[-1], RejectedEvent) and "astronomy" in events[-1].message
     assert store.began == []
 
 
-def test_a_visitor_over_a_limit_is_sent_back_to_the_bank() -> None:
-    store = FakeStore(slot=RunSlot(ok=False, limit="user_day"))
-    live, _, _ = services(FakeJudge(ACCEPT), store=store)
-
-    events = list(research(JOB, live))
-
-    assert isinstance(events[-1], FallbackEvent) and events[-1].reason == "limit"
-    assert "3 custom topics today" in events[-1].message
-    assert store.finished == []
-
-
-@pytest.mark.parametrize("failure", ["judge", "store"])
+@pytest.mark.parametrize("failure", ["bank", "judge", "store"])
 def test_an_unreachable_check_falls_back_without_running(failure: str) -> None:
     judge = FakeJudge(TopicCheckError("down") if failure == "judge" else ACCEPT)
-    store = FakeStore(slot=StoreError("down") if failure == "store" else RunSlot(ok=True, id=5))
-    live, _, _ = services(judge, store=store)
+    store = FakeStore(down=failure == "store")
+    live, _ = services(judge, FakeBank(down=failure == "bank"), store)
 
-    events = list(research(JOB, live))
+    events = list(research(SEARCH, live))
 
     assert isinstance(events[-1], FallbackEvent) and events[-1].reason == "unavailable"
     assert store.finished == []
 
 
-def test_a_published_live_question_is_stored_settled_and_sent_without_its_answer(
+def test_a_discarded_item_is_reported_and_the_search_goes_on(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    run = run_with(monkeypatch, "published")
-    live, _, store = services(FakeJudge(ACCEPT))
+    script(monkeypatch, {"quiz-medium": "discarded"})
+    live, store = services()
 
-    events = run(live)
+    events = list(research(SEARCH, live))
 
-    labels = [e.label for e in events if isinstance(e, LogEvent)]
-    assert labels[:3] == ["On-topic check (Jev)", "Budget", "Agent"]
-    assert "fetch_page" in labels and "Code checks" in labels and "Haiku verifier" in labels
-    jev_lines = [e for e in events if isinstance(e, LogEvent) and e.label.startswith("Jev")]
-    assert jev_lines and all(line.verdict is None for line in jev_lines)  # no spoilers
-    result = events[-1]
-    assert isinstance(result, ResultEvent) and result.item == QUESTION
-    assert result.reveal_token == "signed:reveal:41"
-    assert "correct_index" not in json.dumps(result.model_dump(mode="json"))
-
-    payload = store.payloads[0]
-    assert payload.run.source == "on_demand" and payload.topic.kind == "custom"
-    record = quiz_record()
-    [(slot_id, spent, outcome, run_id)] = store.finished
-    assert (slot_id, outcome, run_id) == (5, "published", 99)
-    assert spent == pytest.approx(record.anthropic_cost_usd)
-    assert store.began == [("v1", "Neutron stars", Settings().max_job_cost_usd)]
+    [missed] = of_type(events, MissedEvent)
+    assert (missed.key, missed.reason) == ("quiz-medium", "discarded")
+    assert "the MEDIUM question" in missed.message
+    assert [result.key for result in of_type(events, ResultEvent)] == [
+        "learn-medium",
+        "quiz-easy",
+        "quiz-hard",
+    ]
+    assert len(store.payloads) == 4  # the discarded run is still stored
+    assert store.finished[1][2] == "discarded"
 
 
-def test_a_discarded_live_run_is_kept_and_the_player_gets_the_bank(
+def test_a_crashed_run_keeps_its_reservation_and_the_search_goes_on(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    run = run_with(monkeypatch, "discarded")
-    live, _, store = services(FakeJudge(ACCEPT))
+    script(monkeypatch, crash=frozenset({"learn-medium"}))
+    live, store = services()
 
-    events = run(live)
+    events = list(research(SEARCH, live))
 
-    assert isinstance(events[-1], FallbackEvent) and events[-1].reason == "discarded"
-    assert len(store.payloads) == 1  # the paid run is still stored
-    assert store.finished[0][2] == "discarded"
+    [missed] = of_type(events, MissedEvent)
+    assert (missed.key, missed.reason) == ("learn-medium", "failed")
+    assert store.finished[0] == (100, Settings().max_job_cost_usd, "failed", None)
+    assert [result.key for result in of_type(events, ResultEvent)] == EVERY_ITEM[1:]
 
 
-def test_a_crashed_run_keeps_its_reservation_and_still_ends_the_stream(
+def test_a_later_run_refused_by_a_cap_leaves_out_the_rest(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    run = run_with(monkeypatch, None, crash=True)
-    live, _, store = services(FakeJudge(ACCEPT))
+    script(monkeypatch)
+    store = FakeStore(refuse={2: "day_usd"})
+    live, _ = services(store=store)
 
-    events = run(live)
+    events = list(research(SEARCH, live))
 
-    assert isinstance(events[-1], FallbackEvent) and events[-1].reason == "unavailable"
-    assert store.finished == [(5, Settings().max_job_cost_usd, "failed", None)]
-    assert store.payloads == []
+    assert [result.key for result in of_type(events, ResultEvent)] == EVERY_ITEM[:2]
+    skipped = of_type(events, MissedEvent)
+    assert [(m.key, m.reason) for m in skipped] == [
+        ("quiz-easy", "skipped"),
+        ("quiz-hard", "skipped"),
+    ]
+    assert "today's budget" in skipped[0].message
+    assert len(store.began) == 3 and len(store.finished) == 2
 
 
-def test_a_live_learn_item_needs_no_token(monkeypatch: pytest.MonkeyPatch) -> None:
-    learn = LearnItem(
-        id=42,
-        difficulty="easy",
-        topic="Neutron stars",
-        explanation="...",
-        sources=[],
-        source_check=SourceCheck(options=[], sentences=0, sentences_supported=0),
-        status="review",
-        doubts=["explanation: a small doubt"],
+def test_no_run_starts_after_the_cutoff(monkeypatch: pytest.MonkeyPatch) -> None:
+    script(monkeypatch)
+    monkeypatch.setattr(ondemand, "RUN_START_SECONDS", -1.0)
+    live, store = services()
+
+    events = list(research(SEARCH, live))
+
+    assert [result.key for result in of_type(events, ResultEvent)] == ["learn-medium"]
+    skipped = of_type(events, MissedEvent)
+    assert [m.key for m in skipped] == EVERY_ITEM[1:]
+    assert all("ran out of time" in m.message for m in skipped)
+    assert len(store.began) == 1
+
+
+def test_a_run_that_starts_late_is_given_only_the_time_left(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    seen = script(monkeypatch)
+    monkeypatch.setattr(ondemand, "SEARCH_SECONDS", 150.0)  # as if the search were late
+    live, _ = services()
+
+    events = list(research(SEARCH, live))
+
+    assert all(seconds < Settings().max_seconds for _, seconds in seen.runs)
+    assert any(line.label == "Time" for line in of_type(events, LogEvent))
+
+
+def test_a_player_leaving_mid_search_still_gets_every_run_stored_and_settled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    script(monkeypatch)
+    live, store = services()
+    stream = research(SEARCH, live)
+
+    assert isinstance(next(stream), PlanEvent)
+    assert isinstance(next(stream), LogEvent)  # the on-topic check
+    budget = next(stream)  # the first run is reserved and the search's thread has started
+    stream.close()  # the player leaves: closing waits for the search to be stored
+
+    assert isinstance(budget, LogEvent) and budget.label == "Budget"
+    assert len(store.payloads) == 4
+    assert [outcome for _, _, outcome, _ in store.finished] == ["published"] * 4
+
+
+def test_the_verifier_s_reasons_are_kept_out_of_quiz_log_lines(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    script(monkeypatch, {key: "review" for key in EVERY_ITEM})
+    live, _ = services(status="review")
+
+    events = list(research(SEARCH, live))
+
+    haiku = [e for e in of_type(events, LogEvent) if e.label == "Haiku verifier"]
+    assert [line.detail for line in haiku if line.key != "learn-medium"] == ["borderline"] * 3
+    assert all(r.item.status == "review" for r in of_type(events, ResultEvent))
+
+
+# --- A whole search through the real loop and verifiers ---------------------------------------
+
+
+def words(count: int) -> str:
+    return " ".join(["word"] * count)
+
+
+# Inside each level's word range (agent/loop.py WORD_LIMITS).
+LENGTHS: dict[Difficulty, int] = {"easy": 100, "medium": 150, "hard": 190}
+
+
+def learn_answer(difficulty: Difficulty) -> tuple[str, dict[str, Any]]:
+    return (
+        "submit_answer",
+        {
+            "explanation": words(LENGTHS[difficulty]),
+            "citations": [{"url": ARTICLE, "quote": QUOTE}],
+        },
     )
-    run = run_with(monkeypatch, "review")
-    live, _, _ = services(FakeJudge(ACCEPT), FakeBank(item=learn))
 
-    result = run(live)[-1]
 
-    assert isinstance(result, ResultEvent) and result.reveal_token is None
-    assert isinstance(result.item, LearnItem) and result.item.status == "review"
+def quiz_answer(difficulty: Difficulty) -> tuple[str, dict[str, Any]]:
+    return (
+        "submit_quiz",
+        {
+            "question": "What is a neutron star?",
+            "options": ["A collapsed stellar core", "A young planet", "A comet", "A gas cloud"],
+            "correct_index": 0,
+            "explanation": words(LENGTHS[difficulty]),
+            "citations": [{"url": ARTICLE, "quote": QUOTE}],
+        },
+    )
+
+
+def test_a_whole_search_through_the_real_loop_and_verifiers(
+    monkeypatch: pytest.MonkeyPatch, web: FakeWeb, http: httpx2.Client
+) -> None:
+    web.add(WIKI_API, wiki_extract)
+    # Each run reads the article, then answers; then the Haiku verifier checks it.
+    llm = FakeLLM(
+        [
+            completion(FETCH),
+            completion(learn_answer("medium")),
+            completion(FETCH),
+            completion(quiz_answer("medium")),
+            completion(FETCH),
+            completion(quiz_answer("easy")),
+            completion(FETCH),
+            completion(quiz_answer("hard")),
+        ],
+        json_replies=[{"explanation_problems": []}, haiku_reply(), haiku_reply(), haiku_reply()],
+    )
+    # The real loops, reading the fake web instead of the network.
+    monkeypatch.setattr(ondemand, "run_learn", functools.partial(run_learn, http_client=http))
+    monkeypatch.setattr(ondemand, "run_quiz", functools.partial(run_quiz, http_client=http))
+    live, store = services(llm=llm, jev=FakeJev())
+
+    events = list(research(SEARCH, live))
+
+    assert [result.key for result in of_type(events, ResultEvent)] == EVERY_ITEM
+    assert of_type(events, MissedEvent) == []
+    assert [outcome for _, _, outcome, _ in store.finished] == ["published"] * 4
+    # Each run settles at its own measured cost, far below its reservation.
+    assert all(0 < spent < Settings().max_job_cost_usd for _, spent, _, _ in store.finished)
+    assert all(p.item is not None and p.item.status == "published" for p in store.payloads)
+    fetched = [line.detail for line in of_type(events, LogEvent) if line.label == "fetch_page"]
+    assert fetched == ["en.wikipedia.org/wiki/Neutron_star"] * 4
 
 
 # --- The endpoint ------------------------------------------------------------------------------
@@ -375,53 +682,29 @@ def post(body: object, visitor: str = "v1") -> ApiRequest:
 
 
 def test_the_endpoint_checks_its_input_before_streaming(monkeypatch: pytest.MonkeyPatch) -> None:
-    good = {"topic": "neutron stars", "mode": "quiz", "difficulty": "medium"}
+    good = {"topic": "neutron stars", "difficulty": "medium"}
 
     assert research_api.handle(ApiRequest("GET", "/api/research")).status == 405  # type: ignore[union-attr]
     assert research_api.handle(post({"topic": "x"})).status == 400  # type: ignore[union-attr]
+    # A search has no mode any more: it makes the explanation and the questions.
+    assert research_api.handle(post({**good, "mode": "quiz"})).status == 400  # type: ignore[union-attr]
     bad_topic = research_api.handle(post({**good, "topic": "https://evil.example"}))
     assert bad_topic.status == 400 and "link" in bad_topic.body["error"]  # type: ignore[union-attr,index]
     assert research_api.handle(post(good, visitor="")).status == 503  # type: ignore[union-attr]
 
-    seen: list[LiveJob] = []
+    seen: list[SearchRequest] = []
 
-    def fake_research(job: LiveJob, live: Services) -> Generator[ResearchEvent]:
-        seen.append(job)
+    def fake_research(request: SearchRequest, live: Services) -> Generator[ResearchEvent]:
+        seen.append(request)
         yield RejectedEvent(message="no")
 
-    monkeypatch.setattr(research_api, "services", lambda: services(FakeJudge(ACCEPT))[0])
+    monkeypatch.setattr(research_api, "services", lambda: services()[0])
     monkeypatch.setattr(research_api, "research", fake_research)
     response = research_api.handle(post(good))
 
     assert isinstance(response, StreamResponse)
     assert list(response.events) == [{"type": "rejected", "message": "no"}]
-    assert seen == [LiveJob(topic="Neutron stars", mode="quiz", difficulty="medium", visitor="v1")]
-
-
-def test_a_player_leaving_right_after_the_reservation_still_settles_it(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    run_with(monkeypatch, "published")
-    live, _, store = services(FakeJudge(ACCEPT))
-    stream = research(JOB, live)
-
-    first = next(stream)  # the on-topic check
-    budget = next(stream)  # the slot is reserved and the run has started
-    stream.close()  # the player leaves: closing waits for the run to be stored
-
-    assert isinstance(first, LogEvent) and isinstance(budget, LogEvent)
-    assert budget.label == "Budget"
-    assert len(store.payloads) == 1
-    assert [(slot, outcome) for slot, _, outcome, _ in store.finished] == [(5, "published")]
-
-
-def test_the_verifier_s_reasons_are_kept_out_of_a_quiz_log(monkeypatch: pytest.MonkeyPatch) -> None:
-    run = run_with(monkeypatch, "review")
-    live, _, _ = services(FakeJudge(ACCEPT))
-
-    haiku = [e for e in run(live) if isinstance(e, LogEvent) and e.label == "Haiku verifier"]
-
-    assert [line.detail for line in haiku] == ["borderline"]
+    assert seen == [SearchRequest(topic="Neutron stars", difficulty="medium", visitor="v1")]
 
 
 def test_the_endpoint_answers_503_when_live_research_is_not_configured(
@@ -429,9 +712,8 @@ def test_the_endpoint_answers_503_when_live_research_is_not_configured(
 ) -> None:
     monkeypatch.setattr(research_api, "_services", None)
     monkeypatch.delenv("TYPESAFE_API_KEY", raising=False)
-    good = {"topic": "neutron stars", "mode": "quiz", "difficulty": "medium"}
 
-    response = research_api.handle(post(good))
+    response = research_api.handle(post({"topic": "neutron stars", "difficulty": "medium"}))
 
     assert isinstance(response, ApiResponse) and response.status == 503
     assert research_api._services is None  # nothing half-built is kept

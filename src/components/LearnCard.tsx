@@ -5,14 +5,14 @@ import { Doubts } from "./Doubts";
 import { LearnSourceCheck } from "./SourceCheckPanel";
 import { SourcesList } from "./SourcesList";
 
-/** A LEARN explanation with the pages it is based on. */
+/** A LEARN explanation with the pages it is based on. Without `onNext` it has no next button. */
 export function LearnCard({
   item,
   onNext,
   nextLabel = "Another topic",
 }: {
   item: LearnItem;
-  onNext: () => void;
+  onNext?: () => void;
   nextLabel?: string;
 }) {
   const paragraphs = item.explanation.split(/\n+/).filter((text) => text.trim());

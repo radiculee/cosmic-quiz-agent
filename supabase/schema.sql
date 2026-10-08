@@ -209,10 +209,15 @@ create table if not exists public.on_demand_runs (
     finished_at timestamptz,
     spent_usd numeric(10, 6) check (spent_usd >= 0),
     outcome text check (outcome in ('published', 'review', 'discarded', 'failed')),
-    run_id bigint references public.runs (id)
+    run_id bigint references public.runs (id),
+    -- The web page's search this run belongs to, as the id of the run that opened it (migration
+    -- 006). Null on that first run, which is the one the daily search limits count.
+    search_id bigint references public.on_demand_runs (id)
 );
 create index if not exists on_demand_runs_started_at on public.on_demand_runs (started_at);
 create index if not exists on_demand_runs_user on public.on_demand_runs (user_hash, started_at);
+create index if not exists on_demand_runs_search on public.on_demand_runs (search_id)
+    where search_id is not null;
 
 -- --- Triggers -------------------------------------------------------------------------------
 
@@ -401,17 +406,22 @@ as $$
     select count(*)::integer from retired;
 $$;
 
--- Start a live run if every limit allows it. Returns {"ok": true, "id": ...} or
--- {"ok": false, "limit": "user_day" | "day_runs" | "day_usd" | "month_usd"}.
--- Starts are serialised with a lock, so two at once cannot both take the last place.
+-- Start a live run if every limit allows it (migration 006). A search on the web page is up to
+-- four runs, one at a time; the daily limits count searches, by the run that opens each one,
+-- and every run reserves the most it can cost against the dollar caps until it ends. Returns
+-- {"ok": true, "id": ...} or {"ok": false, "limit": "user_day" | "day_searches" | "day_usd" |
+-- "month_usd" | "search"}. "search" means a later run that cannot join its search. Starts are
+-- serialised with a lock, so two at once cannot both take the last place.
 create or replace function public.begin_on_demand_run(
     p_user_hash text,
     p_topic text,
     p_mode text,
     p_difficulty text,
+    p_search_id bigint,  -- null opens a new search
     p_reserve_usd numeric,
-    p_user_day_runs integer,
-    p_day_runs integer,
+    p_user_day_searches integer,
+    p_day_searches integer,
+    p_search_runs integer,
     p_day_usd numeric,
     p_month_usd numeric
 )
@@ -422,10 +432,8 @@ as $$
 declare
     v_day timestamptz := date_trunc('day', now(), 'UTC');
     v_month timestamptz := date_trunc('month', now(), 'UTC');
-    v_user_runs integer;
-    v_day_runs integer;
-    v_day_usd numeric;
-    v_month_usd numeric;
+    v_count integer;
+    v_usd numeric;
     v_id bigint;
 begin
     perform pg_advisory_xact_lock(hashtext('public.on_demand_runs'));
@@ -433,30 +441,53 @@ begin
     update public.on_demand_runs set user_hash = null
     where user_hash is not null and started_at < now() - interval '2 days';
 
-    select count(*) into v_user_runs from public.on_demand_runs
-    where user_hash = p_user_hash and started_at >= v_day;
-    if v_user_runs >= p_user_day_runs then
-        return jsonb_build_object('ok', false, 'limit', 'user_day');
+    if p_search_id is null then
+        -- A new search counts once, against the visitor's searches today and everyone's.
+        select count(*) into v_count from public.on_demand_runs
+        where user_hash = p_user_hash and search_id is null and started_at >= v_day;
+        if v_count >= p_user_day_searches then
+            return jsonb_build_object('ok', false, 'limit', 'user_day');
+        end if;
+        select count(*) into v_count from public.on_demand_runs
+        where search_id is null and started_at >= v_day;
+        if v_count >= p_day_searches then
+            return jsonb_build_object('ok', false, 'limit', 'day_searches');
+        end if;
+    else
+        -- A later run of a search already counted: the same visitor's search, its earlier runs
+        -- ended, and room for one more run.
+        if not exists (
+            select 1 from public.on_demand_runs
+            where id = p_search_id and search_id is null and user_hash = p_user_hash
+        ) then
+            return jsonb_build_object('ok', false, 'limit', 'search');
+        end if;
+        select count(*) into v_count from public.on_demand_runs
+        where id = p_search_id or search_id = p_search_id;
+        if v_count >= p_search_runs or exists (
+            select 1 from public.on_demand_runs
+            where (id = p_search_id or search_id = p_search_id) and finished_at is null
+        ) then
+            return jsonb_build_object('ok', false, 'limit', 'search');
+        end if;
     end if;
 
-    select count(*), coalesce(sum(coalesce(spent_usd, reserved_usd)), 0)
-    into v_day_runs, v_day_usd
+    -- Every run, first or later, must fit today's and this month's dollar caps.
+    select coalesce(sum(coalesce(spent_usd, reserved_usd)), 0) into v_usd
     from public.on_demand_runs where started_at >= v_day;
-    if v_day_runs >= p_day_runs then
-        return jsonb_build_object('ok', false, 'limit', 'day_runs');
-    end if;
-    if v_day_usd + p_reserve_usd > p_day_usd then
+    if v_usd + p_reserve_usd > p_day_usd then
         return jsonb_build_object('ok', false, 'limit', 'day_usd');
     end if;
-
-    select coalesce(sum(coalesce(spent_usd, reserved_usd)), 0) into v_month_usd
+    select coalesce(sum(coalesce(spent_usd, reserved_usd)), 0) into v_usd
     from public.on_demand_runs where started_at >= v_month;
-    if v_month_usd + p_reserve_usd > p_month_usd then
+    if v_usd + p_reserve_usd > p_month_usd then
         return jsonb_build_object('ok', false, 'limit', 'month_usd');
     end if;
 
-    insert into public.on_demand_runs (user_hash, topic, mode, difficulty, reserved_usd)
-    values (p_user_hash, p_topic, p_mode, p_difficulty, p_reserve_usd)
+    insert into public.on_demand_runs (
+        user_hash, topic, mode, difficulty, reserved_usd, search_id
+    )
+    values (p_user_hash, p_topic, p_mode, p_difficulty, p_reserve_usd, p_search_id)
     returning id into v_id;
     return jsonb_build_object('ok', true, 'id', v_id);
 end;
@@ -617,14 +648,14 @@ grant execute on function public.record_item(jsonb) to service_role;
 grant execute on function public.attempted_jobs(text[]) to service_role;
 grant execute on function public.retire_stale() to service_role;
 revoke execute on function public.begin_on_demand_run(
-    text, text, text, text, numeric, integer, integer, numeric, numeric
+    text, text, text, text, bigint, numeric, integer, integer, integer, numeric, numeric
 ) from public, anon, authenticated;
 revoke execute on function public.finish_on_demand_run(bigint, numeric, text, bigint)
     from public, anon, authenticated;
 revoke execute on function public.hit_request_limit(text, integer)
     from public, anon, authenticated;
 grant execute on function public.begin_on_demand_run(
-    text, text, text, text, numeric, integer, integer, numeric, numeric
+    text, text, text, text, bigint, numeric, integer, integer, integer, numeric, numeric
 ) to service_role;
 grant execute on function public.finish_on_demand_run(bigint, numeric, text, bigint)
     to service_role;

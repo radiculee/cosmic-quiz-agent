@@ -1,5 +1,5 @@
 /**
- * Words for the live-run quota. The daily count resets at midnight UTC (agent/limits.py), which
+ * Words for the live-search quota. The daily count resets at midnight UTC (agent/limits.py), which
  * is 01:00 in Ireland in summer and 00:00 in winter, so the time is shown in Irish time from the
  * server's reset instant rather than written in.
  */
@@ -17,7 +17,7 @@ export function irishTime(iso: string): string {
   return IRISH_TIME.format(new Date(iso));
 }
 
-/** The short form, for the home page card: "2 of 3 left today". */
+/** The short form, for the home page card: "1 of 2 left today". */
 export function quotaShort(quota: Quota): string {
   if (!quota.global_open) {
     return "Paused for now";
@@ -29,7 +29,7 @@ export function quotaShort(quota: Quota): string {
 export function quotaLine(quota: Quota): string {
   const reset = `resets at ${irishTime(quota.resets_at)} Irish time`;
   if (quota.remaining === 0) {
-    return `You have used today's ${quota.limit} live topics. The count ${reset}.`;
+    return `You have used today's ${quota.limit} live searches. The count ${reset}.`;
   }
   return `${quota.remaining} of ${quota.limit} left today, ${reset}.`;
 }

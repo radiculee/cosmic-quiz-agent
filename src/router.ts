@@ -9,7 +9,7 @@
  */
 import { useEffect, useSyncExternalStore } from "react";
 
-import type { BankTopic, Difficulty, Mode } from "./types";
+import type { BankTopic, Difficulty } from "./types";
 
 export type Route =
   | { page: "home" }
@@ -108,9 +108,9 @@ export function learnTopicPath(name: string): string {
   return LEARN_PREFIX + topicSlug(name);
 }
 
-/** The web page with its form filled in (never started: a link must not spend a live run). */
-export function explorePath(topic: string, mode: Mode, difficulty: Difficulty): string {
-  const query = new URLSearchParams({ topic, mode, difficulty });
+/** The web page with its form filled in (never started: a link must not spend a search). */
+export function explorePath(topic: string, difficulty: Difficulty): string {
+  const query = new URLSearchParams({ topic, difficulty });
   return `${PATHS.explore}?${query.toString()}`;
 }
 

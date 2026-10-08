@@ -174,9 +174,9 @@ export function learnReached(topicsRead: number): TrophyTiers {
   return reachedOnly([["explorer", tierFor(EXPLORER_GOALS, topicsRead)]]);
 }
 
-/** After a live run that produced a result: how many there have been. */
-export function liveReached(liveRuns: number): TrophyTiers {
-  return reachedOnly([["web-researcher", tierFor(WEB_RESEARCHER_GOALS, liveRuns)]]);
+/** After a search on the web page made something: how many such searches there have been. */
+export function liveReached(searches: number): TrophyTiers {
+  return reachedOnly([["web-researcher", tierFor(WEB_RESEARCHER_GOALS, searches)]]);
 }
 
 // --- What is new ------------------------------------------------------------------------------

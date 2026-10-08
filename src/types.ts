@@ -71,18 +71,26 @@ export interface LearnItem {
 
 export type Item = QuizQuestion | LearnItem;
 
-/** A quiz question from a live run, with the token that unlocks its answer. */
-export interface LiveQuestion {
-  question: QuizQuestion;
-  revealToken: string;
+/** Names an item of a live search: "learn-medium", "quiz-easy" and so on. */
+export type ItemKey = `${Mode}-${Difficulty}`;
+
+/** One item a live search shows: made live, or already in the bank (free). */
+export interface PlannedItem {
+  key: ItemKey;
+  mode: Mode;
+  difficulty: Difficulty;
+  source: "live" | "bank";
 }
 
 export type Tone = "info" | "ok" | "warn";
 
 /** Events streamed by /api/research (agent/ondemand.py). */
 export type ResearchEvent =
+  | { type: "plan"; topic: string; items: PlannedItem[] }
   | {
       type: "log";
+      /** The item the line is about; null for the search as a whole. */
+      key: ItemKey | null;
       label: string;
       detail: string;
       tone: Tone;
@@ -91,21 +99,22 @@ export type ResearchEvent =
       seconds: number;
     }
   | { type: "rejected"; message: string }
+  | { type: "fallback"; reason: "limit" | "unavailable"; message: string }
+  | { type: "result"; key: ItemKey; item: Item; reveal_token: string | null }
   | {
-      type: "fallback";
-      reason: "in_bank" | "limit" | "unavailable" | "discarded";
+      type: "missed";
+      key: ItemKey;
+      reason: "discarded" | "failed" | "skipped";
       message: string;
-      topic: string | null;
     }
-  | { type: "result"; item: Item; reveal_token: string | null }
   | { type: "error"; message: string };
 
-/** The visitor's live runs left today (GET /api/quota, api/quota.py). */
+/** The visitor's live searches left today (GET /api/quota, api/quota.py). */
 export interface Quota {
   remaining: number;
   limit: number;
   /** ISO time in UTC when the visitor's daily count starts again. */
   resets_at: string;
-  /** Whether the global caps would let a live run start now. */
+  /** Whether the global caps would let a live search start now. */
   global_open: boolean;
 }

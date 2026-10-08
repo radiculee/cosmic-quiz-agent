@@ -1,4 +1,5 @@
-"""The visitor's live-run quota: the pure rule, the store's reads and GET /api/quota. No network."""
+"""The visitor's live-search quota: the pure rule, the store's reads and writes, and GET /api/quota.
+No network."""
 
 from __future__ import annotations
 
@@ -21,10 +22,13 @@ RESERVE = 0.17
 
 
 def usage(
-    visitor: int = 0, runs: int = 0, usd_today: float = 0.0, usd_month: float = 0.0
+    visitor: int = 0, searches: int = 0, usd_today: float = 0.0, usd_month: float = 0.0
 ) -> OnDemandUsage:
     return OnDemandUsage(
-        visitor_runs_today=visitor, runs_today=runs, usd_today=usd_today, usd_this_month=usd_month
+        visitor_searches_today=visitor,
+        searches_today=searches,
+        usd_today=usd_today,
+        usd_this_month=usd_month,
     )
 
 
@@ -36,22 +40,22 @@ def test_days_and_months_start_at_midnight_utc() -> None:
     assert month_start(NOW) == datetime(2026, 10, 1, tzinfo=UTC)
 
 
-def test_quota_counts_down_the_visitors_runs_and_resets_at_the_next_midnight_utc() -> None:
+def test_quota_counts_down_the_visitors_searches_and_resets_at_the_next_midnight_utc() -> None:
     fresh = quota(usage(), LIMITS, RESERVE, NOW)
     used = quota(usage(visitor=1), LIMITS, RESERVE, NOW)
     over = quota(usage(visitor=5), LIMITS, RESERVE, NOW)
 
-    assert (fresh.remaining, fresh.limit, fresh.global_open) == (3, 3, True)
-    assert used.remaining == 2
+    assert (fresh.remaining, fresh.limit, fresh.global_open) == (2, 2, True)
+    assert used.remaining == 1
     assert over.remaining == 0
     assert fresh.resets_at == datetime(2026, 10, 9, tzinfo=UTC)
 
 
-def test_global_caps_close_exactly_where_the_database_refuses_a_run() -> None:
-    limits = LimitSettings(runs_per_day=10, usd_per_day=0.50, usd_per_month=4.00)
+def test_global_caps_close_exactly_where_the_database_refuses_a_search() -> None:
+    limits = LimitSettings(searches_per_day=4, usd_per_day=0.50, usd_per_month=4.00)
 
-    assert not quota(usage(runs=10), limits, RESERVE, NOW).global_open
-    assert quota(usage(runs=9), limits, RESERVE, NOW).global_open
+    assert not quota(usage(searches=4), limits, RESERVE, NOW).global_open
+    assert quota(usage(searches=3), limits, RESERVE, NOW).global_open
     # The day's budget must hold one more reservation: 0.33 + 0.17 fits, 0.34 + 0.17 does not.
     assert quota(usage(usd_today=0.33, usd_month=0.33), limits, RESERVE, NOW).global_open
     assert not quota(usage(usd_today=0.34, usd_month=0.34), limits, RESERVE, NOW).global_open
@@ -62,22 +66,38 @@ def test_quota_serialises_its_reset_time_as_iso_utc() -> None:
     body = quota(usage(visitor=1), LIMITS, RESERVE, NOW).model_dump(mode="json")
 
     assert body == {
-        "remaining": 2,
-        "limit": 3,
+        "remaining": 1,
+        "limit": 2,
         "resets_at": "2026-10-09T00:00:00Z",
         "global_open": True,
     }
 
 
-def test_store_reads_the_visitors_runs_and_sums_the_month_without_other_hashes() -> None:
+def test_store_reads_the_visitors_searches_and_sums_the_month_without_other_hashes() -> None:
     seen: list[dict[str, str]] = []
     month_rows = [
         # Yesterday, ended: counts its real cost for the month only.
-        {"started_at": "2026-10-07T20:00:00+00:00", "reserved_usd": 0.17, "spent_usd": 0.03},
-        # Today, ended.
-        {"started_at": "2026-10-08T09:00:00+00:00", "reserved_usd": 0.17, "spent_usd": 0.02},
-        # Today, still running: counts its reservation.
-        {"started_at": "2026-10-08T14:00:00+00:00", "reserved_usd": 0.17, "spent_usd": None},
+        {
+            "started_at": "2026-10-07T20:00:00+00:00",
+            "reserved_usd": 0.17,
+            "spent_usd": 0.03,
+            "search_id": None,
+        },
+        # Today: a search's first run, ended.
+        {
+            "started_at": "2026-10-08T09:00:00+00:00",
+            "reserved_usd": 0.17,
+            "spent_usd": 0.02,
+            "search_id": None,
+        },
+        # Today: a later run of that search, still running. It counts its reservation, but not
+        # as another search.
+        {
+            "started_at": "2026-10-08T09:01:00+00:00",
+            "reserved_usd": 0.17,
+            "spent_usd": None,
+            "search_id": 12,
+        },
     ]
 
     def handler(request: httpx2.Request) -> httpx2.Response:
@@ -93,8 +113,8 @@ def test_store_reads_the_visitors_runs_and_sums_the_month_without_other_hashes()
 
     found = store.on_demand_usage("abc123", NOW)
 
-    assert found.visitor_runs_today == 1
-    assert found.runs_today == 2
+    assert found.visitor_searches_today == 1
+    assert found.searches_today == 1
     assert found.usd_today == pytest.approx(0.19)
     assert found.usd_this_month == pytest.approx(0.22)
     mine, month = seen
@@ -102,10 +122,57 @@ def test_store_reads_the_visitors_runs_and_sums_the_month_without_other_hashes()
         "select": "id",
         "user_hash": "eq.abc123",
         "started_at": "gte.2026-10-08T00:00:00+00:00",
+        "search_id": "is.null",  # the runs that opened a search
     }
-    assert month["select"] == "started_at,reserved_usd,spent_usd"
+    assert month["select"] == "started_at,reserved_usd,spent_usd,search_id"
     assert month["started_at"] == "gte.2026-10-01T00:00:00+00:00"
     assert "user_hash" not in month
+
+
+def test_a_reservation_sends_the_search_limits_and_the_search_it_joins() -> None:
+    sent: list[dict[str, object]] = []
+
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        sent.append(json.loads(request.content))
+        return httpx2.Response(200, json={"ok": True, "id": 13})
+
+    client = httpx2.Client(transport=httpx2.MockTransport(handler))
+    store = SupabaseStore(BASE, "sb_secret_test", client=client, retry_backoff_seconds=0.0)
+
+    opened = store.begin_on_demand_run("abc123", "Pulsars", "learn", "hard", RESERVE, LIMITS)
+    joined = store.begin_on_demand_run(
+        "abc123", "Pulsars", "quiz", "hard", RESERVE, LIMITS, search_id=13
+    )
+
+    assert opened.ok and opened.id == 13 and joined.ok
+    first, later = sent
+    assert first["p_search_id"] is None and later["p_search_id"] == 13
+    assert first == {
+        "p_user_hash": "abc123",
+        "p_topic": "Pulsars",
+        "p_mode": "learn",
+        "p_difficulty": "hard",
+        "p_search_id": None,
+        "p_reserve_usd": 0.17,
+        "p_user_day_searches": 2,
+        "p_day_searches": 4,
+        "p_search_runs": 4,
+        "p_day_usd": 0.50,
+        "p_month_usd": 4.00,
+    }
+
+
+def test_a_refused_reservation_names_the_limit() -> None:
+    client = httpx2.Client(
+        transport=httpx2.MockTransport(
+            lambda _: httpx2.Response(200, json={"ok": False, "limit": "day_searches"})
+        )
+    )
+    store = SupabaseStore(BASE, "sb_secret_test", client=client, retry_backoff_seconds=0.0)
+
+    slot = store.begin_on_demand_run("abc123", "Pulsars", "learn", "hard", RESERVE, LIMITS)
+
+    assert not slot.ok and slot.limit == "day_searches"
 
 
 class FakeStore:
@@ -141,7 +208,7 @@ def test_endpoint_answers_with_the_visitors_quota_and_is_never_cached(
 
     assert response.status == 200
     assert isinstance(response.body, dict)
-    assert response.body["remaining"] == 2 and response.body["global_open"] is True
+    assert response.body["remaining"] == 1 and response.body["global_open"] is True
     assert response.headers["Cache-Control"] == "no-store"
     assert store.asked == [visitor]
     assert visitor not in json.dumps(response.body)

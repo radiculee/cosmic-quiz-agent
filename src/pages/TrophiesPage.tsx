@@ -42,7 +42,7 @@ export function TrophiesPage({ topicsState, profile }: Pick<PageProps, "topicsSt
       <p className="mt-3 text-center text-xs text-slate">
         {counted(profile.finishedRuns, "run finished", "runs finished")} &middot;{" "}
         {counted(profile.learned.length, "topic read", "topics read")} &middot;{" "}
-        {counted(profile.liveRuns, "live topic", "live topics")}
+        {counted(profile.liveRuns, "live search", "live searches")}
       </p>
 
       <ol className="mt-10 space-y-3">

@@ -359,22 +359,23 @@ class BankReader:
                 return row.name
         return None
 
-    def has_item(self, topic: str, mode: Mode, difficulty: Difficulty) -> bool:
-        """Whether the bank can already serve this topic at this mode and difficulty."""
+    def coverage(self, topic: str) -> BankTopic | None:
+        """Where the bank can already serve this topic (its exact name): the difficulties with
+        a published item, per mode. None if it has no published item for it. One small read: a
+        topic has a handful of items."""
         reply = self._rest.send(
             "GET",
             "/items",
             params={
-                "select": "id,topics!inner(name)",
+                "select": "mode,difficulty,topics!inner(name,kind)",
                 "topics.name": f"eq.{topic}",
-                "mode": f"eq.{mode}",
-                "difficulty": f"eq.{difficulty}",
-                "limit": "1",
+                "order": "id.asc",
                 **_VISIBLE,
             },
             retries=RETRIES,
         )
-        return bool(parse(_ID_ROWS, reply, "checking the bank"))
+        found = summarize(parse(_INDEX_ROWS, reply, "checking the bank"))
+        return found[0] if found else None
 
     def is_published(self, item_id: int) -> bool:
         """Whether players can see this item (published, fewer than 2 reports)."""

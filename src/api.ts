@@ -3,9 +3,12 @@ import {
   DIFFICULTIES,
   type Difficulty,
   type Item,
+  type ItemKey,
   type LearnItem,
   type Mode,
+  MODES,
   type OptionCheck,
+  type PlannedItem,
   type Quota,
   type QuizAnswer,
   type QuizQuestion,
@@ -137,15 +140,36 @@ function isQuota(value: unknown): value is Quota {
 }
 
 const TONES: readonly unknown[] = ["info", "ok", "warn"];
-const FALLBACK_REASONS: readonly unknown[] = ["in_bank", "limit", "unavailable", "discarded"];
+const FALLBACK_REASONS: readonly unknown[] = ["limit", "unavailable"];
+const MISSED_REASONS: readonly unknown[] = ["discarded", "failed", "skipped"];
+const ITEM_KEYS: readonly unknown[] = MODES.flatMap((mode) =>
+  DIFFICULTIES.map((difficulty): ItemKey => `${mode}-${difficulty}`),
+);
 
-function isResearchEvent(value: unknown): value is ResearchEvent {
+function isItemKey(value: unknown): value is ItemKey {
+  return ITEM_KEYS.includes(value);
+}
+
+function isPlannedItem(value: unknown): value is PlannedItem {
+  return (
+    isRecord(value) &&
+    isItemKey(value.key) &&
+    value.key === `${String(value.mode)}-${String(value.difficulty)}` &&
+    (value.source === "live" || value.source === "bank")
+  );
+}
+
+/** Exported for tests. */
+export function isResearchEvent(value: unknown): value is ResearchEvent {
   if (!isRecord(value)) {
     return false;
   }
   switch (value.type) {
+    case "plan":
+      return isString(value.topic) && isListOf(value.items, isPlannedItem);
     case "log":
       return (
+        (value.key === null || isItemKey(value.key)) &&
         isString(value.label) &&
         isString(value.detail) &&
         TONES.includes(value.tone) &&
@@ -157,15 +181,17 @@ function isResearchEvent(value: unknown): value is ResearchEvent {
     case "error":
       return isString(value.message);
     case "fallback":
-      return (
-        FALLBACK_REASONS.includes(value.reason) &&
-        isString(value.message) &&
-        (value.topic === null || isString(value.topic))
-      );
+      return FALLBACK_REASONS.includes(value.reason) && isString(value.message);
     case "result":
       return (
         (isQuizQuestion(value.item) || isLearnItem(value.item)) &&
+        // The item must be the one the key names.
+        value.key === `${value.item.mode}-${value.item.difficulty}` &&
         (value.reveal_token === null || isString(value.reveal_token))
+      );
+    case "missed":
+      return (
+        isItemKey(value.key) && MISSED_REASONS.includes(value.reason) && isString(value.message)
       );
     default:
       return false;
@@ -236,7 +262,7 @@ export async function fetchAnswer(
   throw new ApiError("/api/reveal answered in an unexpected shape");
 }
 
-/** How many live runs this visitor has left today, and whether live research is open at all. */
+/** How many live searches this visitor has left today, and whether live research is open. */
 export async function fetchQuota(signal?: AbortSignal): Promise<Quota> {
   const body = await request("/api/quota", signalOnly(signal));
   if (isQuota(body)) {
@@ -263,13 +289,13 @@ export function takeLines(buffer: string): [string[], string] {
 }
 
 /**
- * Research a custom topic live. Each event the server streams is checked and passed to
- * `onEvent` as it arrives; the promise settles when the stream ends. Events of an unknown type
- * are skipped, so an older page keeps working against a newer server.
+ * A live search: the explanation at `difficulty` and a question at each level, leaving out what
+ * the bank already has. Each event the server streams is checked and passed to `onEvent` as it
+ * arrives; the promise settles when the stream ends. Events of an unknown type are skipped, so
+ * an older page keeps working against a newer server.
  */
 export async function streamResearch(
   topic: string,
-  mode: Mode,
   difficulty: Difficulty,
   onEvent: (event: ResearchEvent) => void,
   signal?: AbortSignal,
@@ -277,7 +303,7 @@ export async function streamResearch(
   const response = await fetch("/api/research", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ topic, mode, difficulty }),
+    body: JSON.stringify({ topic, difficulty }),
     ...signalOnly(signal),
   });
   if (!response.ok || !response.body) {

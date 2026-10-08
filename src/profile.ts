@@ -34,7 +34,8 @@ export interface Profile {
   trophies: TrophyTiers;
   /** Quiz runs answered to the last question. */
   finishedRuns: number;
-  /** Live runs on the web page that produced a result. */
+  /** Searches on the web page that made at least one live item (Web researcher). Named for the
+   * single-item live runs it counted before 2026-10-08; kept so saved profiles carry over. */
   liveRuns: number;
   /** Item ids shown in this browser, newest first; sent to the API so they are skipped. */
   seenItems: number[];
@@ -117,7 +118,8 @@ export function afterLearn(profile: Profile, itemId: number, topic: string): [Pr
   return settle(profile, updated, learnReached(updated.learned.length));
 }
 
-/** After a live run on the web page produced a result (published or held for review). */
+/** After a search on the web page made its first live item (published or held for review).
+ * Called once per search, whatever it went on to make. */
 export function afterLiveRun(profile: Profile): [Profile, Award[]] {
   const updated: Profile = { ...profile, liveRuns: profile.liveRuns + 1 };
   return settle(profile, updated, liveReached(updated.liveRuns));

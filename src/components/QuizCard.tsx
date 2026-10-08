@@ -24,10 +24,19 @@ interface QuizCardProps {
   onAnswered: (correct: boolean, seconds: number) => AnswerScore | null;
   nextLabel: string;
   onNext: () => void;
+  /** The next question is not ready yet (the web page, while it is researched). */
+  nextDisabled?: boolean;
 }
 
 /** One question: pick an option, then see the answer, the explanation and its sources. */
-export function QuizCard({ question, revealToken, onAnswered, nextLabel, onNext }: QuizCardProps) {
+export function QuizCard({
+  question,
+  revealToken,
+  onAnswered,
+  nextLabel,
+  onNext,
+  nextDisabled = false,
+}: QuizCardProps) {
   const [state, setState] = useState<AnswerState>({ kind: "unanswered" });
   const shownAt = useRef(performance.now());
 
@@ -128,6 +137,7 @@ export function QuizCard({ question, revealToken, onAnswered, nextLabel, onNext 
               itemId={question.id}
               nextLabel={nextLabel}
               onNext={onNext}
+              nextDisabled={nextDisabled}
               canReport={question.status === "published"}
             />
           </>

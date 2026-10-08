@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { takeLines } from "./api";
+import { isResearchEvent, takeLines } from "./api";
 
 describe("takeLines", () => {
   it("keeps an unfinished line for the next chunk", () => {
@@ -10,5 +10,66 @@ describe("takeLines", () => {
 
   it("skips blank lines", () => {
     expect(takeLines("\n\n{}\n")).toEqual([["{}"], ""]);
+  });
+});
+
+const QUESTION = {
+  id: 7,
+  mode: "quiz",
+  difficulty: "easy",
+  topic: "Pulsars",
+  question: "Q?",
+  options: ["a", "b", "c", "d"],
+  status: "published",
+};
+
+describe("research events", () => {
+  it("accepts a plan of named items", () => {
+    const plan = {
+      type: "plan",
+      topic: "Pulsars",
+      items: [
+        { key: "learn-medium", mode: "learn", difficulty: "medium", source: "live" },
+        { key: "quiz-easy", mode: "quiz", difficulty: "easy", source: "bank" },
+      ],
+    };
+    expect(isResearchEvent(plan)).toBe(true);
+    const mislabelled = { ...plan, items: [{ ...plan.items[0], key: "quiz-medium" }] };
+    expect(isResearchEvent(mislabelled)).toBe(false);
+  });
+
+  it("accepts log lines about the search or one of its items", () => {
+    const line = {
+      type: "log",
+      key: "quiz-easy",
+      label: "fetch_page",
+      detail: "en.wikipedia.org/wiki/Pulsar",
+      tone: "info",
+      verdict: null,
+      confidence: null,
+      seconds: 3.1,
+    };
+    expect(isResearchEvent(line)).toBe(true);
+    expect(isResearchEvent({ ...line, key: null })).toBe(true);
+    expect(isResearchEvent({ ...line, key: "quiz-impossible" })).toBe(false);
+  });
+
+  it("accepts a result only for the item its key names", () => {
+    const result = { type: "result", key: "quiz-easy", item: QUESTION, reveal_token: "t" };
+    expect(isResearchEvent(result)).toBe(true);
+    expect(isResearchEvent({ ...result, key: "quiz-hard" })).toBe(false);
+  });
+
+  it("accepts missed items and refuses the reasons the server no longer sends", () => {
+    const missedItem = {
+      type: "missed",
+      key: "quiz-hard",
+      reason: "skipped",
+      message: "Not started. The search ran out of time.",
+    };
+    expect(isResearchEvent(missedItem)).toBe(true);
+    expect(isResearchEvent({ ...missedItem, reason: "lost" })).toBe(false);
+    expect(isResearchEvent({ type: "fallback", reason: "limit", message: "m" })).toBe(true);
+    expect(isResearchEvent({ type: "fallback", reason: "in_bank", message: "m" })).toBe(false);
   });
 });
