@@ -522,13 +522,21 @@ Claude Code:
       Live at https://cosmic-quiz-agent.vercel.app (2026-10-06). Spike results, the two
       deployment fixes (dependencies read from pyproject.toml; the Anthropic key's name) and the
       move to the `dub1` region are in `docs/SPIKE.md`.
-- [x] `.github/workflows/curator.yml`: daily cron plus `workflow_dispatch` (a choice of `daily`
-      or `upkeep`); `vercel.json` (Vite build, Python functions at 300 s, lean bundles).
+- [x] `.github/workflows/curator.yml`: daily cron plus `workflow_dispatch` (a choice of `daily`,
+      `upkeep` or `rejev`); `vercel.json` (Vite build, Python functions at 300 s, lean bundles).
+      Checked 2026-10-08: all 4 runs succeeded (2 scheduled `upkeep`, the manual `daily` gate run
+      and the manual `rejev`); the left-over-runs cache passes from run to run and is empty; all 4
+      secrets are set; the date check switches `upkeep` to `daily` on 2026-11-01. GitHub started
+      both scheduled runs about 7 hours late (13:16 and 13:19 UTC for 06:17), which its docs allow
+      under high load ("some queued jobs may be dropped"). Harmless for free upkeep; watch it once
+      paid daily runs start.
 
 Gate (Vedant): the production URL works; a manual workflow run adds rows to Supabase.
-- [ ] Not yet passed; session paused 2026-10-06. Done: the production URL works (Vedant played a
-      full run; live custom topics work, 0.23 s median API time in dub1), and a manual `daily`
-      run (curator run 4, $0.145) added a news topic with 6 items. Open before the gate:
+- [x] Passed 2026-10-08: Vedant played the white-dwarf topic ("White dwarf planets in
+      second-generation systems") on the live site and it works. Both conditions were met on
+      2026-10-06: the production URL works (Vedant played a full run; live custom topics work,
+      0.23 s median API time in dub1), and a manual `daily` run (curator run 4, $0.145) added a
+      news topic with 6 items. Settled before the gate:
   - The GitHub secret `TYPESAFE_API_KEY` was rejected by TypeSafe (401), so every Jev check in
     that run failed and all 6 items (189 to 194, "White dwarf planets in second-generation
     systems") went to review with no Jev checks. Vedant re-entered the secret on 2026-10-06 and
@@ -536,6 +544,9 @@ Gate (Vedant): the production URL works; a manual workflow run adds rows to Supa
     failed, from the page text stored with each run, re-applies the gate, and stores the result
     through `apply_jev_recheck` (migration 005), which keeps `reviewed_at` for human decisions.
     It is run once from GitHub Actions (`rejev` choice), which also proves the new key works.
+    Done 2026-10-06 (Actions run 37484087533): Jev passed all 6; 5 published, 193 (QUIZ medium)
+    stays in review on its Haiku doubt; $0.0011 on TypeSafe. The new GitHub key works. Bank:
+    171 published, 4 review (186, 187, 188, 193), 16 discarded.
   - Also in review: live runs 186 (Olympus Mons: explanation calls it the largest volcano;
     the source says tied with Rheasilvia as the tallest mountain), 187 (Tidal locking) and 188
     (Space oceans).
@@ -644,3 +655,13 @@ unsubscribe, then WhatsApp.
   Migrations 002 and 003. Gate passed: Vedant decided 28 items (26 published). 194 tests.
   Next: the review-queue decision (Haiku's explanation doubts block most of the 38 left), then
   Session 5.
+- 2026-10-08 - Session 7: moved to the cloud. The Vercel streaming spike passed (WSGI functions
+  stream line by line, a run whose player left is still stored and settled, forged
+  X-Forwarded-For is ignored; see docs/SPIKE.md), and the app is live at
+  https://cosmic-quiz-agent.vercel.app in the dub1 region, next to Supabase. The Curator runs
+  daily on GitHub Actions with left-over runs kept in the Actions cache: free `upkeep` until
+  2026-11-01, then paid `daily`. A rejected TypeSafe secret sent the gate run's 6 items to
+  review without Jev checks; the new `python -m curator rejev` (migration 005) re-checked them
+  from the stored page text, and 5 were published ($0.0011 on TypeSafe). Gate passed: Vedant
+  played the white-dwarf topic on the live site. Bank: 171 published, 4 review (186, 187, 188,
+  193), 16 discarded. 250 tests. Next: Session 8 (pages, router and trophies).
