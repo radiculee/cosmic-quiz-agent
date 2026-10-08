@@ -9,10 +9,17 @@ Persistent context for Claude Code. Read this, then `docs/DESIGN.md` and `docs/P
 **Cosmic Quiz Agent** (working name) by **Vedant Gaikwad**, a Dublin-based Data Analyst and Full-Stack
 Developer. An autonomous astronomy and space AI agent, surfaced as a Learn / Quiz web game.
 
-- **v1:** a Speedrun-style game with `[EASY|MEDIUM|HARD]`, `[LEARN|QUIZ]`, a topic input, `[Random topic]` and `[GO]`. LEARN gives a plain-language explanation with cited sources. QUIZ gives one 4-option MCQ; after it's answered, the game shows the explanation and cited sources.
-- **v2:** an astronomy newsletter (email via Resend, then WhatsApp) produced by the same agent, and an analytics page of the agent's measured statistics by mode and difficulty.
+- **v1:** a Learn / Quiz web game on separate pages with real URLs. (Changed 2026-10-08 by Vedant; it was one Speedrun-style page.)
+  - Home: Learn and Quiz cards, a smaller "Try a new topic from the web" card, and the rank, points and a trophy shelf.
+  - Learn: a searchable grid of bank topics. Each gives a plain-language explanation with cited sources, at its own URL.
+  - Quiz: runs of 10, 30 or 60 four-option MCQs, each on a different topic, against the clock. After each answer, the game shows the explanation and cited sources.
+  - The web page (`/explore`): a typed topic researched live by the agent, behind guardrails. It also opens "Analytics for nerds", the agent's measured statistics by mode and difficulty (Session 9).
+  - Tiered bronze, silver and gold trophies that pop up when earned.
+- **v2:** an astronomy newsletter (email via Resend, then WhatsApp) produced by the same agent. (The analytics page moved from v2 into v1 on 2026-10-08.)
 
-It is a standalone project with its own repo and domain, hosted on Vercel. It is **not** part of the
+It is a standalone project with its own repo, hosted on Vercel and served at `cosmic.vedantgaikwad.ie`, a
+subdomain of Vedant's existing domain. The repo goes public with an MIT licence in Session 10, after a
+security audit. (Changed 2026-10-08 by Vedant; it was "its own repo and domain".) It is **not** part of the
 portfolio repo (`c:\Users\vedan\Modernpersonalportfoliowebsite`), which is used only as a reference for
 patterns and design tokens. Recruiters will read this code, so code quality is part of the deliverable.
 
@@ -47,7 +54,7 @@ Vercel Python function (`api/research.py`), behind guardrails, with steps stream
 
 ## Hard rules
 
-1. **Capped running cost.** Anthropic API usage is capped at $10 a month by a Console spend limit. TypeSafe (Jev, the second-opinion verifier) runs on a prepaid balance (EUR 5 for evals at 2026-10-01) at $0.042 per million input tokens. Every other service stays on a free tier, and the domain is the only other paid item. Log tokens and cost for every model run. Before adding any service, dependency or API, state its free tier or price. (Changed 2026-10-01, see `docs/PLAN.md`.)
+1. **Capped running cost.** Anthropic API usage is capped at $10 a month by a Console spend limit. TypeSafe (Jev, the second-opinion verifier) runs on a prepaid balance (EUR 5 for evals at 2026-10-01) at $0.042 per million input tokens. Every other service stays on a free tier, and there is no other paid item: the site uses a subdomain of vedantgaikwad.ie, which Vedant already owns. Log tokens and cost for every model run. Before adding any service, dependency or API, state its free tier or price. (Changed 2026-10-01; changed 2026-10-08 by Vedant, when a new domain stopped being a cost. See `docs/PLAN.md`.)
 2. **Citation rule.** A source may only be a URL actually fetched during that run. This is enforced in code (`agent/verify.py`), never trusted to the prompt. Drop any other URL.
 3. **Publish gate.**
    - A separate verifier pass must quote a source passage that supports the correct answer and confirm each distractor is wrong.

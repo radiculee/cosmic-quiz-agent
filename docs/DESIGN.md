@@ -1,18 +1,27 @@
 # Cosmic Quiz Agent - design plan
 
 ## Context
-Vedant wants an autonomous AI agent themed on astronomy and space. v1 is a Learn/Quiz web game; v2 adds an
-astronomy newsletter (email, then WhatsApp) produced by the same agent, and an analytics page that shows
-the agent's measured statistics by mode and difficulty (added 2026-10-01, see `docs/PLAN.md` Session 9). It started as a portfolio feature but
-is now a **standalone project**: new repo, own domain, hosted on Vercel. The portfolio repo is not changed
-(at most a Projects link later). Aim: a capped running cost (Anthropic API up to $10 a month, TypeSafe Jev on a prepaid balance, every other service free), a real agent (the model chooses tools in a loop and
+Vedant wants an autonomous AI agent themed on astronomy and space. v1 is a Learn/Quiz web game with an
+analytics page of the agent's measured statistics by mode and difficulty ("Analytics for nerds",
+`docs/PLAN.md` Session 9); v2 adds an astronomy newsletter (email, then WhatsApp) produced by the same
+agent. (Changed 2026-10-08 by Vedant: the analytics page, added to v2 on 2026-10-01, moved into v1.) It
+started as a portfolio feature but is now a **standalone project**: its own repo (public with an MIT
+licence from Session 10, after a security audit), served at `cosmic.vedantgaikwad.ie` and hosted on
+Vercel. (Changed 2026-10-08 by Vedant: it was "own domain"; it is now a subdomain of his existing
+vedantgaikwad.ie.) The portfolio repo is not changed (at most a Projects link later). Aim: a capped running cost (Anthropic API up to $10 a month, TypeSafe Jev on a prepaid balance, every other service free), a real agent (the model chooses tools in a loop and
 runs on a schedule with no human trigger), and code that reads well to recruiters.
 
 ## Decisions (grill-me session, 2026-09-30)
 1. **Audience:** Vedant first, public later. Build for one user; keep the data model public-ready (opt-in, unsubscribe, GDPR).
 2. **Domain:** astronomy and space only.
 3. **Models:** Claude Code builds it. At runtime, `claude-haiku-4-5` for every step via the `anthropic` SDK, behind the provider interface in `agent/llm.py` (the model is config). Changed 2026-10-01; it was OpenRouter free models. See `docs/PLAN.md`.
-4. **UI:** modelled on the "Wikipedia Speedrun" screenshot, restyled with the portfolio tokens (void background, surface panels, teal accent, Space Grotesk headings, Press Start 2P only for small segmented-control labels). Controls: `[EASY|MEDIUM|HARD]`, `[LEARN|QUIZ]`, a topic input, `[Random topic]`, `[GO]`.
+4. **UI:** separate pages with real URLs, styled with the portfolio tokens (void background, surface panels, teal accent, Space Grotesk headings, Press Start 2P only for small labels). Changed 2026-10-08 by Vedant; it was one page modelled on the "Wikipedia Speedrun" screenshot, with `[EASY|MEDIUM|HARD]`, `[LEARN|QUIZ]`, a topic input, `[Random topic]` and `[GO]`. Details in `docs/PLAN.md` Session 8.
+   - Home (`/`): Learn and Quiz as two large cards, "Try a new topic from the web" as a smaller card showing the visitor's live runs left today, then the rank, points and a trophy shelf.
+   - Learn (`/learn`, `/learn/<topic-slug>`): a difficulty switch, a searchable grid of bank topics (read ones ticked) and Random. Each topic's explanation and sources has its own URL.
+   - Quiz (`/quiz`): a difficulty and a run of 10, 30 or 60 questions, each on a different random topic (unplayed first). A length is offered only when the bank has that many topics at that difficulty.
+   - The web page (`/explore`): a typed topic researched live (decision 9), shown on the page as one explanation or one question. "Analytics for nerds" opens from it at `/explore/stats` (`docs/PLAN.md` Session 9).
+   - Trophies (`/trophies`): tiered bronze, silver and gold trophies, which replace the v1 badges and pop up when earned.
+   - A slim header on every page with a GitHub link. Routing is a hand-rolled History-API router, with no routing library.
 5. **Modes:**
    - LEARN: a plain-language explanation plus cited sources.
    - QUIZ: one 4-option MCQ per GO. After answering (right or wrong), show the explanation plus cited sources.
@@ -32,7 +41,7 @@ runs on a schedule with no human trigger), and code that reads well to recruiter
    - Azure was considered and turned down on 2026-10-02. The only always-free Azure database (Azure SQL's free offer) has a monthly compute allowance that a public site could use up, after which it pauses until the next month; Azure PostgreSQL is free for 12 months only; and Azure SQL has no browser-safe read API. Azure could still host another part later (for example the Curator's schedule or v2 email).
    - Vercel Hobby hosts the UI and `/api`.
    - Local first: everything runs on Vedant's machine against Supabase, and moves to the cloud in Session 7 (changed 2026-10-01).
-   - The only costs are the domain, the Anthropic API (capped at $10 a month) and TypeSafe Jev (prepaid balance, EUR 5 at 2026-10-01; $0.042 per million input tokens, output free).
+   - The only costs are the Anthropic API (capped at $10 a month) and TypeSafe Jev (prepaid balance, EUR 5 at 2026-10-01; $0.042 per million input tokens, output free). The site uses a subdomain of Vedant's existing domain, so there is nothing new to buy (changed 2026-10-08 by Vedant; a new domain was the one other cost).
 9. **On-demand guardrails:**
    - A cheap on-topic check: two Jev yes/no questions in one request (is it astronomy or space; is it only a topic name, with no instructions or abuse), with the typed text passed as data. Measured 2026-10-04 on 44 labelled inputs: Jev 44/44, a keyword filter 18/44; about $0.00002 and 0.23 s a check (`python -m evals ontopic`).
    - Per-user limits, where a user is a salted hash of the IP address (never the raw IP, for GDPR). Decided 2026-10-01:
@@ -75,7 +84,10 @@ runs on a schedule with no human trigger), and code that reads well to recruiter
 - **Verifier evaluation:** the eval also includes a seeded-error set: generated items with planted faults (a wrong number, an unsupported claim, a quote that is not on the page, a distractor that is actually true). Each layer's catch rate and false-reject rate is measured on it, together with Haiku/Jev agreement and whether Jev's confidence is calibrated (do 0.9-confidence verdicts turn out right about 90% of the time).
 - **Secrets:** `ANTHROPIC_API_KEY`, `TYPESAFE_API_KEY`, `SUPABASE_URL`, `SUPABASE_SECRET_KEY` (Actions and server only; Supabase's new name for the service-role key), `SUPABASE_PUBLISHABLE_KEY` (the new name for the anon key: read-only, row-level security), `IP_HASH_SALT`. `NASA_API_KEY` is kept in `.env` but unused while APOD is read from its pages; `SEARCH_API_KEY` only if a web search fallback is added.
 
-## Proposed repo layout (new repo; name and domain are Vedant's choice)
+## Repo layout
+Changed 2026-10-08 by Vedant: the UI is split into pages with a router and trophies, `api/quota.py`
+(Session 8) and `api/stats.py` (Session 9) are added, and the repo gets an MIT licence when it goes
+public (Session 10). The repo is `radiculee/cosmic-quiz-agent`, served at `cosmic.vedantgaikwad.ie`.
 ```
 agent/                 Python package (shared core)
   llm.py               provider interface + Anthropic implementation, model config
@@ -86,9 +98,12 @@ agent/                 Python package (shared core)
   verifiers/           Verifier interface: haiku.py (layer 2), jev.py (layer 3)
   prompts/             per-difficulty prompt templates
   rest.py              small PostgREST client (retries, errors, paging) shared by store and bank
-  store.py             Supabase writes/reads with the secret key (Curator, review, reports)
+  store.py             Supabase writes/reads with the secret key (Curator, review, reports, limits)
   bank.py              public reads with the publishable key: topics, items, answers, source check
-  web.py               HTTP layer for api/: handle(ApiRequest) -> ApiResponse, Vercel handler class
+  limits.py            the on-demand guardrails' numbers, and the visitor's quota
+  topic_check.py       the on-topic check for typed topics (Jev)
+  ondemand.py          a guarded live run, streamed as events
+  web.py               HTTP layer for api/: handle(ApiRequest) -> ApiResponse, WSGI app per function
 curator/               build (initial bank) and daily (news) runs: discover -> research -> draft ->
                        verify -> publish / review / discard -> retire, under a dollar cap
 api/research.py        Vercel Python fn: guarded on-demand run, streams steps (Session 6)
@@ -96,14 +111,21 @@ api/topics.py          bank topics and where they can be played
 api/item.py            a random published item (a quiz item without its answer)
 api/reveal.py          a quiz item's answer, explanation, sources and source check
 api/report.py          report an item (salted IP hash; two reports hide it)
+api/quota.py           the visitor's live runs left today and whether the global cap is open
+api/stats.py           Analytics for nerds: aggregates only, edge-cached (Session 9)
 dev/api_server.py      local server for api/ (Vite proxies /api to it); never deployed
 evals/                 fixed topic set + scoring script
-src/                   Vite + React UI (Speedrun-style layout): game.ts (points, streaks, ranks,
-                       badges, runs), profile.ts (progress in localStorage), components/
+src/                   Vite + React UI: router.ts (History-API router), pages/ (home, Learn, Quiz,
+                       the web page, trophies), game.ts (points, streaks, ranks, runs), trophies.ts
+                       (tiers and what was just earned), profile.ts (progress in localStorage),
+                       components/
 supabase/schema.sql    topics, items, sources, claim_checks (per-claim results of all three layers,
                        incl. Jev verdict, confidence, probabilities and model version), runs,
-                       curator_runs, cited_pages, reports, rate_limits (+ subscribers in v2)
+                       curator_runs, cited_pages, reports, rate_limits, on_demand_runs
+                       (+ subscribers in v2)
+supabase/migrations/   numbered changes after schema.sql (006 adds agent_stats() in Session 9)
 .github/workflows/curator.yml   daily cron + manual dispatch
+LICENSE                MIT (Session 10, when the repo goes public)
 ```
 
 ## Milestones (one at a time, verified before moving on)

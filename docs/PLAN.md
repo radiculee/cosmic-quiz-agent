@@ -60,6 +60,21 @@ decision for Vedant (Session 4).
 
 ---
 
+## Changes on 2026-10-08
+
+Vedant played the deployed build and, in a grill-me session on 2026-10-08, changed these locked
+decisions. Each is marked "Changed 2026-10-08 by Vedant" where it is recorded.
+
+| Topic | Was | Now |
+|---|---|---|
+| UI (`DESIGN.md` decision 4) | One page: `[EASY\|MEDIUM\|HARD]`, `[LEARN\|QUIZ]`, a topic input, `[Random topic]`, `[GO]`; quiz runs of 10 with badges | Separate pages with real URLs: home, Learn (a topic grid), Quiz (runs of 10, 30 or 60), the web page for live research, and trophies. Tiered trophies replace the badges |
+| Analytics page | v2, after launch | v1, Session 9 ("Analytics for nerds", opened from the web page) |
+| Session order | Session 8 Launch, then v2 | Session 8 pages and trophies; Session 9 analytics; Session 10 security audit, public repo, domain and launch; then v2 (the newsletter) |
+| Repo | Private | Public with an MIT licence in Session 10, after a security audit and a secret scan of the whole history |
+| Domain (`CLAUDE.md` hard rule 1) | Its own domain, the one other paid item | `cosmic.vedantgaikwad.ie`, a subdomain of Vedant's existing domain, so there is nothing new to buy |
+
+---
+
 ## Standing rules for every session
 - Plan and explain before any change that touches several modules. Ask before adding a dependency, a
   service or anything that costs money, and state its free tier or price.
@@ -554,65 +569,211 @@ Gate (Vedant): the production URL works; a manual workflow run adds rows to Supa
 
 ---
 
-## Session 8 - Launch
-Decisions to ask: the domain name, README tone, and what the OG image shows.
+## Session 8 - Pages, router and trophies
+**Goal:** the single page becomes separate pages with real URLs (home, Learn, Quiz, the web page
+and trophies), quiz runs of 10, 30 or 60 questions, and tiered trophies that pop up when earned.
+Changed 2026-10-08 by Vedant: this replaces the old Session 8 (Launch), which moves to Session 10.
+
+Decided 2026-10-08 (grill-me session):
+- **Home:** Learn and Quiz as two large cards, with "Try a new topic from the web" as a smaller
+  third card below, showing "N of 3 left today". Rank, points and a compact trophy shelf sit
+  underneath.
+- **Header:** a slim, non-sticky header on every page. Inner pages show "COSMIC QUIZ" on the left,
+  linking home. The GitHub icon sits on the right, opens a new tab and has an aria-label.
+- **Routing:** real URLs: `/`, `/learn`, `/learn/<topic-slug>`, `/quiz`, `/explore`,
+  `/explore/stats` (Session 9) and `/trophies`. A hand-rolled History-API router (no new
+  dependency, unit-tested), plus a Vercel SPA rewrite that leaves `/api/*` alone.
+- **Learn page:** a difficulty switch, a search box that filters a grid of topic cards (read ones
+  are ticked), and Random. A card opens the explanation and sources at `/learn/<slug>`. A topic
+  that is not in the bank links to the web page.
+- **Quiz page:** difficulty, length (10 / 30 / 60) and START, with no topic choice. Every question
+  is a different random topic, unplayed ones first.
+  - A length is enabled only when the bank has that many quiz topics at the chosen difficulty.
+    Otherwise it is disabled with "HARD: 23 of 60 questions so far". No repeats, no cost.
+  - An "End run" button shows results for the questions answered so far. Full-run trophies are
+    not awarded. There is no resume after a reload, and points already earned stay.
+- **Trophies:** tiered bronze / silver / gold trophies replace the badges, and the v1 badges carry
+  over as bronze. Tier colours come from the tokens: bronze `--accent-rust`, silver
+  `--text-secondary`, gold `--accent-gold`. The icons are pixel-style SVGs, with no emojis. The
+  list and thresholds are approved at the start of the session.
+- **Trophy pop-up:** a centred card over a dimmed page, shown right after the answer is revealed,
+  while the clock is already paused. Several trophies at once share one card. A button or Esc
+  closes it; focus is trapped and reduced motion is respected. Rank-ups pop up the same way. In
+  LEARN and on the web page it pops up after the result.
+- **Trophy case:** the home page has a shelf. `/trophies` lists every trophy and tier, with locked
+  ones greyed and showing how to earn them.
+- **Web page (`/explore`):** topic, difficulty and LEARN/QUIZ. The agent log streams, then the
+  explanation, or one quiz question, is shown on the page with sources and the source check.
+  - No 10-question run is attached.
+  - A topic already in the bank at those settings links to Learn or Quiz instead of spending a run.
+  - It keeps the limit of 3 a day per hashed IP. The page shows "2 of 3 left today, resets at
+    01:00 Irish time", plus a notice when the global cap is reached.
+
+Decisions to ask:
+- The trophy list with its bronze / silver / gold thresholds (a proposal is shown).
+- A first-screen mock of the home page and the quiz page, before the rest is built.
+
+Decided at the start of the session (2026-10-08), from a mock of the home, quiz and trophy pages:
+- Trophies as proposed, except that Speed runner also needs at least 70% right (7 of 10, 21 of
+  30, 42 of 60), so racing through on guesses does not earn it:
+
+  | Trophy | Bronze | Silver | Gold |
+  |---|---|---|---|
+  | First light | 1 correct answer | 50 | 250 |
+  | Hot streak | 5 correct in a row | 10 | 20 |
+  | Finisher | Finish a 10 run | 30 | 60 |
+  | Perfect run | 10 / 10 | 30 / 30 | 60 / 60 |
+  | Speed runner | A 10 run at 12 s a question or less, 70% right | 30 | 60 |
+  | Hard mode | Perfect HARD 10 | 30 | 60 |
+  | Explorer | 10 LEARN topics read | 20 | 30 |
+  | Web researcher | 1 live topic | 3 | 10 |
+
+  With the bank at 30 / 26 / 23 quiz topics, every 60 tier and Hard mode silver cannot be earned
+  yet; the trophy case says so on those tiers. Higher tiers of a carried-over badge come with the
+  next matching event. Run trophies pop up when the last answer is revealed. Web researcher counts
+  live runs that produced a result. A question on the web page scores like a quiz answer.
+- The mock approved as shown; End run ends a run in one click.
+- The GitHub icon links to Vedant's profile (github.com/radiculee) until the repo is public in
+  Session 10, so visitors never meet a 404; then it links to the repo.
+- A QUIZ topic already in the bank at the chosen difficulty is played on the web page itself,
+  free and with no run attached, since Quiz has no topic choice (LEARN links to
+  `/learn/<slug>`). The server's fallback messages no longer promise "a question from the bank";
+  the page offers Learn and Quiz instead.
+- The reset time is shown in Irish time from the server's reset instant (midnight UTC), so it
+  reads 01:00 until the clocks go back on 25 October and 00:00 after.
 
 Claude Code:
-- [ ] Domain setup, OG image, README with an architecture diagram for recruiters.
+- [x] `src/router.ts` and tests: path matching, `navigate()`, `popstate`, `<Link>`
+      (`components/Link.tsx`), and the topic slug both ways.
+- [x] `src/pages/`: `HomePage`, `LearnPage`, `QuizPage`, `ExplorePage`, `TrophiesPage` and a
+      not-found page, each owning its part of the old `App.tsx`. `App.tsx` is now a shell: the
+      router, the profile hook, the trophy pop-up queue and the header.
+- [x] `src/components/`: `SiteHeader`, `GitHubIcon`, `TopicGrid`, `TrophyIcon`, `TrophyPopup` (a
+      native modal `<dialog>`, queued in the shell), `TrophyShelf` and `ModeCard`. `RunResults`
+      gains partial-run results, `ProfileStrip` becomes the home summary and shelf, and
+      `BadgeChip` is removed.
+- [x] `src/trophies.ts` and tests: the trophy definitions and pure "what was just earned"
+      functions, replacing `BADGES` and `runBadges`.
+- [x] `src/game.ts`: run lengths 10, 30 and 60, `planRun(..., length)`, `availableLength()`, and
+      runs that can end early.
+- [x] `src/profile.ts`: profile v2 with trophy tiers, `liveRuns` and `finishedRuns`, migrating the
+      `cosmic-quiz:profile:v1` badges to bronze and still working with storage blocked.
+- [x] `api/quota.py`: `GET /api/quota` returns `{remaining, limit, resets_at, global_open}` for
+      the visitor's salted hash, read server-side with the secret key (helpers in `agent/store.py`
+      and `agent/limits.py`; no migration). It reads the visitor's rows today (at most 3) rather
+      than a PostgREST count, which the REST client does not expose. `fetchQuota()` in
+      `src/api.ts`; the route in `dev/api_server.py`.
+- [x] `vercel.json`: an SPA rewrite of `/((?!api/).*)` to `/index.html`.
+- [x] Checks: 58 TypeScript tests, 258 Python tests, typecheck, build, ruff and mypy --strict.
+      Driven in headless Chrome against the local servers: a v1 profile carried over, a perfect
+      EASY 10 with both pop-ups (focus on Continue, Esc closes), End run, Back and Forward, deep
+      links, the Learn-to-web-page link, a bank question played free on the web page, and 404.
 
-Gate (Vedant): the README reads well to someone who has never seen the project.
+Vedant, optional, before the gate: run `python -m curator review` for items 186, 187, 188 and
+193. Publishing 193 takes MEDIUM quiz questions from 26 to 27.
+
+Gate (Vedant): run `pnpm dev` and `python -m dev.api_server` and check:
+- every card, plus Back, Forward and deep links;
+- the Learn grid, search and a shared `/learn/<slug>` link;
+- Quiz 10 on each difficulty and 30 on EASY, the disabled 30/60 messages, and End run;
+- trophy pop-ups, including carry-over of existing badges, and `/trophies`;
+- the web page counter going 3 to 2, and the limit message;
+- the GitHub icon.
+
+After commit and push, check deep links on production.
 
 ---
 
-## Session 9 and later - v2
-Two features, planned in detail once v1 is live. Their order is a decision for Vedant at that point.
+## Session 9 - Analytics for nerds
+**Goal:** a public page of everything the agent measures, opened from the web page. Changed
+2026-10-08 by Vedant: it was a v2 page (`/stats`, planned after launch) and is now part of v1.
 
-### v2: Analytics page ("nerd stats")
-**Goal:** a separate page (for example `/stats`) that shows everything the agent measures, filtered by
-mode (LEARN, QUIZ) and difficulty (EASY, MEDIUM, HARD), with a 2 x 3 grid view that compares all six
-combinations side by side.
+Decided 2026-10-08:
+- A button on `/explore` opens a full-screen panel at `/explore/stats`. Back closes it.
+- Two tabs:
+  - **This run:** model calls, tools, pages by domain, tokens, cost, step timings and Jev checks
+    for the live run just made.
+  - **The agent:** the groups below, filterable by mode, difficulty and Curator vs live.
+- Charts are hand-written SVG (no chart library). The stats are public, including dollar spend.
+  Only aggregates leave the database.
 
-What it shows, grouped (every group respects the mode and difficulty filters, a date range, and the run
-source: Curator or on-demand):
+What "The agent" tab can show (the 2026-10-01 list, grouped under the 2026-10-08 headings):
 
 | Group | Statistics |
 |---|---|
-| Volume and outcomes | Runs; outcome split (passed, failed citations, no answer, budget exceeded, model error); published / review / discarded rate |
-| Cost | Cost per run and per published item, Haiku and Jev separately; month to date against the $10 Anthropic cap and the TypeSafe balance; savings from prompt caching (actual against uncached price) |
-| Tokens | Average input, cache write, cache read and output tokens per run; cache hit ratio |
-| Speed | Run time (median and 95th percentile); latency per model call, per tool and per Jev check |
-| Agent behaviour | Model calls per run; tool calls by tool; how often the model calls tools in parallel; pages fetched per run and by domain (Wikipedia, NASA, ESA, arXiv); nudges; which budget ran out, when one did |
-| Evidence | Citations per answer; kept against dropped; verbatim quote rate; number-check pass rate |
+| Volume, outcomes and cost | Runs; outcome split (passed, failed citations, no answer, budget exceeded, model error); published / review / discarded rate; cost per run and per published item, Haiku and Jev separately; month to date against the $10 Anthropic cap and the TypeSafe balance |
+| Tokens, caching and speed | Average input, cache write, cache read and output tokens per run; cache hit ratio; savings from prompt caching (actual against uncached price); run time (median and 95th percentile); latency per model call, per tool and per Jev check |
+| Agent behaviour and evidence | Model calls per run; tool calls by tool; how often the model calls tools in parallel; pages fetched per run and by domain (Wikipedia, NASA, ESA, arXiv); nudges; which budget ran out, when one did; citations per answer; kept against dropped; verbatim quote rate; number-check pass rate |
 | Verifiers | Haiku verdict split; Jev verdict split; Jev confidence histogram; Haiku/Jev agreement; why items went to review |
-| Evals | Each `python -m evals` run over time: citation pass rate, seeded-error catch rate per layer, Jev calibration, with model or version changes marked |
-| Players (only if approved, see decisions) | Correct-answer rate per difficulty; reports per item |
 
-Data and serving:
-- Reads the tables v1 already writes (`runs`, `claim_checks`, `items`, `reports`) plus stored eval results.
-- The browser only reads aggregated SQL views, never raw rows, so salted IP hashes and step logs stay
-  server-side. Views are refreshed after each Curator run to keep queries light on the Supabase free tier.
-- Built with the portfolio design tokens; Press Start 2P only for small stat labels.
+Data and serving (changed 2026-10-08 by Vedant; it was aggregated SQL views refreshed after each
+Curator run):
+- Migration `006_agent_stats.sql`: a `security definer` function (`set search_path = ''`),
+  `agent_stats(p_mode, p_difficulty, p_source)`, that returns aggregates only, as jsonb. Only it
+  is granted to anon; `runs` stays private, so salted IP hashes and step logs stay server-side.
+- `api/stats.py`, edge-cached for about 10 minutes.
+- The live run's `result` event gains a `stats` object, built from `RunResult` and the
+  verification in `agent/ondemand.py`.
+- `src/pages/StatsPanel.tsx` with the tabs, and `src/charts/` (`StatTile`, `BarSplit`,
+  `Histogram`) in SVG with the design tokens; Press Start 2P only for small stat labels.
 
-v1 prerequisites (so the page has history from the first day):
+v1 prerequisites (done, so the page has history from the first day):
 - Session 3: eval results saved as JSON with the date, model and Jev versions, and per-layer scores.
 - Session 4: each `runs` row stores mode, difficulty, source (Curator or on-demand), outcome, Haiku and Jev
   tokens and cost separately, cache tokens, wall time, per-step latencies, tool calls by name, pages
   fetched by domain, nudges and the budget reason.
 
 Decisions to ask:
-- Public page, or private to Vedant. Recommendation: public, aggregated only; it doubles as a portfolio
-  piece for recruiters.
-- Whether to store anonymous player answer events (no IP, no account) to get correct-answer rates. This
-  touches GDPR, so it needs a privacy note and must stay aggregate-only.
-- Charts: hand-written SVG or a free chart library (license and bundle size checked first).
-- Which statistics appear on the first screen, and the refresh cadence.
+- The first-screen layout and the default date range.
+- Three items from the 2026-10-01 list that the 2026-10-08 decision does not mention: the 2 x 3
+  grid comparing every mode and difficulty side by side; eval history over time (citation pass
+  rate, seeded-error catch rate per layer, Jev calibration); and player statistics, which need
+  anonymous answer events (no IP, no account) and so a GDPR note.
 
-Gate (Vedant): picks one mode and difficulty filter and checks the page's numbers against the Supabase
-tables and the Anthropic and TypeSafe consoles.
+Gate (Vedant): picks a filter and checks the numbers against the Supabase tables and the
+Anthropic and TypeSafe consoles.
 
-### v2: Newsletter
-Curator email output via Resend (portfolio `api/contact.ts` pattern), subscribers with double opt-in and
-unsubscribe, then WhatsApp.
+---
+
+## Session 10 - Security, public repo, domain and launch
+**Goal:** a hardened app, a public repo and the site on Vedant's domain. Changed 2026-10-08 by
+Vedant: it replaces the old Session 8 (Launch) and adds the security audit and the public repo.
+
+Decided 2026-10-08:
+- **Security:** a full audit of the code and database, and every finding fixed. That includes
+  headers, dependencies, and repo and platform guards if the audit flags them. Anything that needs
+  a new tool or a paid feature is asked about first.
+- **GitHub:** the repo goes public with an **MIT** licence, after the audit and a secret scan of
+  the whole history.
+- **Domain:** `cosmic.vedantgaikwad.ie`, as a CNAME at Web Hosting Ireland, where the domain's DNS
+  is. The `.vercel.app` address redirects to it. Nothing new to buy.
+
+Claude Code:
+- [ ] Audit the code and database: every API input, rate limits on every endpoint (including
+      quota and stats), reveal-token signing, SSRF in `fetch_page`, prompt-injection paths, RLS
+      and grants checked live, and no secret in the built `dist/` bundle. Fix every finding.
+- [ ] Scan the whole git history for secrets; Vedant reviews the docs before they go public. Add
+      `LICENSE` (MIT). Vedant confirms, then the repo is made public. Turn on GitHub secret
+      scanning with push protection, and Dependabot, if the audit calls for them.
+- [ ] Add `cosmic.vedantgaikwad.ie` to the Vercel project. Vedant adds a CNAME `cosmic` pointing
+      to the value Vercel shows (`cname.vercel-dns.com`) at Web Hosting Ireland. Redirect the
+      `.vercel.app` address to the new domain.
+- [ ] From the old Session 8: the README with an architecture diagram for recruiters, and the OG
+      image.
+
+Decisions to ask: the README's tone and what the OG image shows (carried over from the old
+Session 8), and the secret-scanning tool if one is needed (its free tier or price first).
+
+Gate (Vedant): a header scan of production, the audit findings closed, the repo public and clean,
+the site reachable at the new domain, and the README readable to someone who has never seen the
+project.
+
+---
+
+## Later - v2: Newsletter
+Planned in detail once v1 is live. Curator email output via Resend (portfolio `api/contact.ts`
+pattern), subscribers with double opt-in and unsubscribe, then WhatsApp. (Changed 2026-10-08 by
+Vedant: the analytics page, the other v2 feature, moved into v1 as Session 9.)
 
 ---
 
