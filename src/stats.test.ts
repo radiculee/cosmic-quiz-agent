@@ -15,6 +15,7 @@ import {
   formatSeconds,
   formatUsd,
   gateParts,
+  gridHint,
   gridRange,
   headline,
   madeCounts,
@@ -27,7 +28,7 @@ import {
 } from "./stats";
 import { fromPlan, missed, resolved } from "./search";
 import { sampleReply, sampleRun } from "./testing/samples";
-import type { PlannedItem, QuizQuestion } from "./types";
+import { DIFFICULTIES, MODES, type PlannedItem, type QuizQuestion } from "./types";
 
 describe("statsQuery", () => {
   it("leaves out every filter set to all", () => {
@@ -215,6 +216,33 @@ describe("the first view's words", () => {
     expect(range?.high.difficulty).toBe("easy");
     expect(range?.low.difficulty).toBe("hard");
     expect(gridRange({ ...stats, grid: [] })).toBeNull();
+    expect(gridHint({ ...stats, grid })).toBe(
+      "From 30% published (learn hard) to 80% (learn easy)",
+    );
+  });
+
+  it("says so when every cell publishes the same share", () => {
+    const { stats } = sampleReply();
+    const base = stats.grid[0];
+    if (!base) {
+      throw new Error("the sample has a grid cell");
+    }
+    const grid = MODES.flatMap((mode) =>
+      DIFFICULTIES.map((difficulty) => ({ ...base, mode, difficulty, runs: 4, published: 2 })),
+    );
+    // 1 of 2 is the same share as 2 of 4; the first of equal cells is kept for both ends.
+    grid[0] = { ...base, mode: "learn", difficulty: "easy", runs: 2, published: 1 };
+    const range = gridRange({ ...stats, grid });
+    expect(range?.high).toBe(grid[0]);
+    expect(range?.low).toBe(grid[0]);
+    expect(gridHint({ ...stats, grid })).toBe("50% published in every cell");
+    expect(gridHint({ ...stats, grid: grid.slice(0, 4) })).toBe(
+      "50% published in every cell with runs",
+    );
+    expect(gridHint({ ...stats, grid: grid.slice(0, 1) })).toBe(
+      "Only learn easy has runs: 50% published",
+    );
+    expect(gridHint({ ...stats, grid: [] })).toBe("No runs yet");
   });
 
   it("counts what a search made out of what it set out to make", () => {

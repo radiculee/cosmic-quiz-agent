@@ -27,7 +27,7 @@ import {
   formatUsd,
   gateParts,
   gridCell,
-  gridRange,
+  gridHint,
   headline,
   JEV_WORDS,
   LEVEL_FILTERS,
@@ -240,15 +240,6 @@ function ModeGrid({ reply }: { reply: StatsReply }) {
       note="Published by the gate, then runs, Anthropic cost per run and the median agent time. This grid follows the source and range filters only."
     />
   );
-}
-
-function gridHint(reply: StatsReply): string {
-  const range = gridRange(reply.stats);
-  if (!range) {
-    return "No runs yet";
-  }
-  const name = (cell: { mode: string; difficulty: string }) => `${cell.mode} ${cell.difficulty}`;
-  return `From ${formatPercent(range.low.published, range.low.runs)} published (${name(range.low)}) to ${formatPercent(range.high.published, range.high.runs)} (${name(range.high)})`;
 }
 
 function SpendThisMonth({ reply }: { reply: StatsReply }) {
@@ -549,7 +540,7 @@ function Rows({ reply }: { reply: StatsReply | null }) {
     <Groups label="More about the agent">
       {reply && (
         <>
-          <Group title="By mode and level" hint={gridHint(reply)}>
+          <Group title="By mode and level" hint={gridHint(reply.stats)}>
             <ModeGrid reply={reply} />
           </Group>
           <Group

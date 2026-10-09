@@ -4,16 +4,18 @@
  * events of /api/research). Pure functions over plain data, so they are tested without a browser.
  */
 import type { Search } from "./search";
-import type {
-  AgentStats,
-  ClaimKind,
-  Difficulty,
-  GateStatus,
-  LayerVerdict,
-  Mode,
-  Outcome,
-  RunStats,
-  Verdict,
+import {
+  type AgentStats,
+  type ClaimKind,
+  DIFFICULTIES,
+  type Difficulty,
+  type GateStatus,
+  type LayerVerdict,
+  type Mode,
+  MODES,
+  type Outcome,
+  type RunStats,
+  type Verdict,
 } from "./types";
 
 // --- Filters -----------------------------------------------------------------------------------
@@ -291,6 +293,26 @@ export function gridCell(
   difficulty: Difficulty,
 ): GridCell | undefined {
   return stats.grid.find((cell) => cell.mode === mode && cell.difficulty === difficulty);
+}
+
+/** The grid row's one-line hint: the lowest and highest share published, as the cells show it. */
+export function gridHint(stats: AgentStats): string {
+  const range = gridRange(stats);
+  if (!range) {
+    return "No runs yet";
+  }
+  const name = (cell: GridCell) => `${cell.mode} ${cell.difficulty}`;
+  const high = formatPercent(range.high.published, range.high.runs);
+  const low = formatPercent(range.low.published, range.low.runs);
+  const withRuns = stats.grid.filter((cell) => cell.runs > 0).length;
+  if (withRuns === 1) {
+    return `Only ${name(range.high)} has runs: ${high} published`;
+  }
+  if (high === low) {
+    const all = withRuns === MODES.length * DIFFICULTIES.length;
+    return `${high} published in every cell${all ? "" : " with runs"}`;
+  }
+  return `From ${low} published (${name(range.low)}) to ${high} (${name(range.high)})`;
 }
 
 export interface Row {
