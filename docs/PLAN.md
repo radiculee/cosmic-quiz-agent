@@ -927,9 +927,13 @@ Claude Code:
       filter sets (read-only), then check `/api/stats` on the local server. Done 2026-10-09:
       all 7 the same field by field; the real handler answers 200 with the edge-cache header;
       only the 11-argument `begin_on_demand_run` is left.
-- [ ] Fix the code review's findings (2026-10-08): `docs/CODE_REVIEW_SESSION9.md`, 7 items,
+- [x] Fix the code review's findings (2026-10-08): `docs/CODE_REVIEW_SESSION9.md`, 7 items,
       two of them confirmed bugs (a dead Back press after Back, Forward and Close; `days`
-      accepted in many spellings). Next session.
+      accepted in many spellings). Done 2026-10-09, all 7 (item 4 as the comparison only, on
+      Vedant's choice: `python -m dev.check_stats`, 7 of 7 the same). The drive found one more:
+      handling the dialog's `close` event (item 5) made Esc go Back twice when Chrome does not
+      let the cancel be prevented; the panel now leaves `/explore/stats` once per close. 302
+      Python and 114 TypeScript tests; a drive of 24 checks passed. Details in the review file.
 
 Gate (Vedant): picks a filter and checks the numbers against the Supabase tables and the
 Anthropic and TypeSafe consoles.
@@ -966,25 +970,123 @@ Decided 2026-10-08:
 - **Domain:** `cosmic.vedantgaikwad.ie`, as a CNAME at Web Hosting Ireland, where the domain's DNS
   is. The `.vercel.app` address redirects to it. Nothing new to buy.
 
+Decided 2026-10-09 (planning, each as recommended):
+- **Two sessions.** 10a is the audit and its fixes, with its own gate. 10b is everything that
+  publishes: the history scan, the docs read-through, LICENSE, the public repo, the domain, the
+  README, the OG image, the privacy page and the launch. The repo goes public only after 10a's
+  gate.
+- **History scan:** gitleaks (free, MIT), one binary downloaded outside the repo and run once,
+  not a project dependency, plus a grep of every commit for this project's key prefixes and
+  `.env` names. Once public, GitHub's secret scanning and push protection (free on public
+  repos) take over.
+- **A key found in the history:** rotate it at its provider and keep the history as it is (a
+  revoked key is harmless, and the commits are part of what recruiters read).
+- **`/rpc/agent_stats` (audit note 1):** kept as it is and documented: the figures are public by
+  design and aggregates only, neither the Supabase URL nor a key is in the browser bundle
+  (checked 2026-10-09), and the anon role's statement timeout bounds each call (3 s by default
+  on Supabase; confirmed live in 10a). The reasoning goes in the audit record and the README's
+  security notes.
+- **Docs:** `docs/` and `CLAUDE.md` go public as they are, after Vedant reads them for anything
+  private.
+- **README:** an engineering case study: a short pitch and the live link, a Mermaid architecture
+  diagram (GitHub draws it from text), the agent loop, the three-layer publish gate with its
+  measured catch rates, the cost controls with real numbers, security notes, and how to run it.
+- **OG image:** a title card ("COSMIC QUIZ" in Space Grotesk on the void background, the teal
+  accent, a one-line tagline, a few pixel stars), 1200x630, rendered from an SVG in the repo
+  with the headless Chrome already on the machine (no new dependency).
+- **Privacy:** a `/privacy` page with a footer link, in plain words: what is stored, why, for how
+  long, and a contact; the same text in the README. Each retention it states is checked in 10a.
+
+Before 10a (carried over from Sessions 8 and 9): Vedant runs the two live searches on production
+(end of Session 9), and 10a starts by checking `on_demand_runs` read-only and recording the
+Session 8 and 9 gates.
+
+### Session 10a - Security audit and fixes
+
+Decisions to ask at the start:
+- Python dependency audit: `pip-audit` (free, Apache-2.0, a new dev-only tool in
+  `requirements-dev.txt`), or rely on Dependabot alerts once public. `pnpm audit` is built in.
+- Report hashes: `reports.user_hash` is kept with no end date (it stops one visitor reporting an
+  item twice), while `on_demand_runs` and `rate_limits` remove theirs after two days. Keep it and
+  say so on the privacy page, or remove it after a set time.
+- Any finding whose fix needs a new tool, a paid feature or a change to a locked decision.
+
+Claude Code (each finding recorded in `docs/SECURITY_AUDIT.md` with its fix and test):
+- [ ] Every API input: each endpoint's method, parameters and body checked, unknown fields
+      refused, sizes bounded (topic length, ids, the stream's lifetime), and no error reply that
+      carries a stack trace, a database message or a key.
+- [ ] Rate limits on every endpoint, including `/api/quota` and `/api/stats`; that a 429 carries
+      Retry-After; and that the global live-research caps hold when searches start at the same
+      moment (`begin_on_demand_run` under concurrency).
+- [ ] Reveal tokens: the signing key, a constant-time compare, purpose binding and expiry.
+- [ ] SSRF in `fetch_page`: host matching (exact or dot-suffix), IP literals and private ranges,
+      user info and ports in URLs, redirects to hosts off the allow-list, schemes, and size caps.
+- [ ] Prompt-injection paths: the typed topic (the on-topic check takes it as data), fetched page
+      text reaching the agent, tool arguments, and the citation rule enforced in code.
+- [ ] RLS and grants checked live, read-only: RLS on every table, and every function in `public`
+      with its owner, `security definer` and who may execute it, and the browser roles'
+      statement timeouts. Vedant runs this in the SQL editor (it lists, and changes nothing):
+
+      ```sql
+      select p.oid::regprocedure as function, r.rolname as owner,
+             p.prosecdef as security_definer,
+             has_function_privilege('anon', p.oid, 'execute') as anon,
+             has_function_privilege('authenticated', p.oid, 'execute') as authenticated
+      from pg_proc p join pg_roles r on r.oid = p.proowner
+      where p.pronamespace = 'public'::regnamespace
+      order by 1;
+      select evtname, evtevent, evtfoid::regproc from pg_event_trigger;
+      select rolname, rolconfig from pg_roles where rolname in ('anon', 'authenticated');
+      ```
+
+      This answers audit note 2: what created `public.rls_auto_enable`, and whether the browser
+      roles can run it.
+- [ ] `agent_stats`: record the decision above (audit note 1) and its reasoning.
+- [ ] Secrets: none in the built `dist/` bundle, in a reply, or in a log line; `IP_HASH_SALT`
+      long and random; the visitor's IP read only from the last `X-Forwarded-For` entry.
+- [ ] Security headers in `vercel.json`: Content-Security-Policy (self, plus Google Fonts),
+      frame-ancestors, X-Content-Type-Options, Referrer-Policy and Permissions-Policy; HSTS as
+      Vercel serves it. Checked with a header scan of the deployed preview.
+- [ ] Dependencies: `pnpm audit`, and the Python audit as decided; pins up to date where a fix
+      exists.
+- [ ] GitHub Actions: least-privilege `permissions`, no `pull_request_target`, pinned actions
+      (done in Session 7), secrets only in the steps that need them, and the past run logs read
+      for anything private, since they become public with the repo.
+- [ ] Data retention as the privacy page will state it, checked against the schema and the
+      live tables.
+- [ ] Tests for every fix, with the scripted fake model only; typecheck, build, pytest, ruff,
+      mypy --strict; `python -m dev.check_stats` if `agent_stats()` changes.
+
+Gate (Vedant): reads `docs/SECURITY_AUDIT.md` and confirms every finding is closed or accepted
+with a reason; a header scan of the deployed site; the checks above pass.
+
+### Session 10b - Public repo, domain and launch
+
+Decisions to ask: the one-line tagline (OG card and README), the privacy page's wording and
+contact address, and anything gitleaks finds.
+
 Claude Code:
-- [ ] Audit the code and database: every API input, rate limits on every endpoint (including
-      quota and stats), reveal-token signing, SSRF in `fetch_page`, prompt-injection paths, RLS
-      and grants checked live, and no secret in the built `dist/` bundle. Fix every finding.
-- [ ] Scan the whole git history for secrets; Vedant reviews the docs before they go public. Add
-      `LICENSE` (MIT). Vedant confirms, then the repo is made public. Turn on GitHub secret
-      scanning with push protection, and Dependabot, if the audit calls for them.
-- [ ] Add `cosmic.vedantgaikwad.ie` to the Vercel project. Vedant adds a CNAME `cosmic` pointing
-      to the value Vercel shows (`cname.vercel-dns.com`) at Web Hosting Ireland. Redirect the
-      `.vercel.app` address to the new domain.
-- [ ] From the old Session 8: the README with an architecture diagram for recruiters, and the OG
-      image.
+- [ ] Docs read-through: Claude Code lists passages for Vedant to look at (names, emails, IDs,
+      anything not meant for the public); Vedant reads `docs/` and `CLAUDE.md` and approves.
+- [ ] History scan: gitleaks over every commit, plus the grep for key prefixes and `.env` names.
+      Any real key found is rotated at its provider; the history is kept.
+- [ ] `LICENSE` (MIT, Vedant Gaikwad, 2026).
+- [ ] README as decided, with the Mermaid diagram and the `agent_stats` note.
+- [ ] `/privacy` (a route in `src/router.ts`, a page, and a footer link on every page), with
+      tests.
+- [ ] OG image: the SVG in the repo, the PNG rendered with headless Chrome, and `og:` and
+      `twitter:` tags in `index.html` with absolute URLs on the new domain.
+- [ ] Vedant confirms, then the repo is made public (Vedant in GitHub's settings, or `gh repo
+      edit --visibility public` on his word). Turn on secret scanning with push protection and
+      Dependabot alerts (free on public repos). The header's GitHub icon links to the repo.
+- [ ] Domain: add `cosmic.vedantgaikwad.ie` to the Vercel project; Vedant adds the CNAME
+      `cosmic` at Web Hosting Ireland with the value Vercel shows; then redirect
+      `cosmic-quiz-agent.vercel.app` to it. Check deep links, the API and the live search on the
+      new domain.
 
-Decisions to ask: the README's tone and what the OG image shows (carried over from the old
-Session 8), and the secret-scanning tool if one is needed (its free tier or price first).
-
-Gate (Vedant): a header scan of production, the audit findings closed, the repo public and clean,
-the site reachable at the new domain, and the README readable to someone who has never seen the
-project.
+Gate (Vedant): the repo public and clean (gitleaks clean, or every key it found rotated), the
+site at the new domain with the old address redirecting, the OG preview right where he shares
+it, the privacy page, and the README readable to someone who has never seen the project.
 
 ---
 
@@ -1084,3 +1186,11 @@ Vedant: the analytics page, the other v2 feature, moved into v1 as Session 9.)
   `619c5e9` the panel, then the docs) and pushed to deploy. What is left, and the prompt for the
   next session, are in `docs/NEXT_SESSION.md`. Next: Vedant checks the panel on production and
   runs the two live searches; then the review fixes and both gates.
+- 2026-10-09 - Session 9 (continued): fixed all 7 code review items (item 4 as the comparison
+  only, on Vedant's choice: `python -m dev.check_stats`, read-only, 7 of 7 filter sets the
+  same). The drive caught one regression in the item 5 fix (Esc could go Back twice), fixed
+  before the end. 302 Python and 114 TypeScript tests, all checks clean, a drive of 24 checks
+  against the local servers; no paid calls. The live searches are not run yet, so the Session 8
+  and 9 gates stay open. Planned Session 10 as two sessions (10a audit and fixes; 10b history
+  scan, public repo, domain, README, OG image, privacy page), with Vedant's eight decisions
+  recorded under Session 10. Not committed yet. Next: Vedant runs the live searches, then 10a.

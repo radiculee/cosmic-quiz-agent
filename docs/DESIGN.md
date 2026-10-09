@@ -21,6 +21,7 @@ runs on a schedule with no human trigger), and code that reads well to recruiter
    - Quiz (`/quiz`): a difficulty and a run of 10, 30 or 60 questions, each on a different random topic (unplayed first). A length is offered only when the bank has that many topics at that difficulty.
    - The web page (`/explore`): a typed topic researched live (decision 9). A search makes the explanation at the chosen level and a question at each level, all shown on the page and stored in the bank (changed later on 2026-10-08 by Vedant; it was one explanation or one question). "Analytics for nerds" opens from it at `/explore/stats` (`docs/PLAN.md` Session 9): each of its two tabs opens on four key figures, with the rest in closed rows (decided by Vedant on 2026-10-08).
    - Trophies (`/trophies`): tiered bronze, silver and gold trophies, which replace the v1 badges and pop up when earned.
+   - Privacy (`/privacy`, Session 10b, decided 2026-10-09): what is stored, why and for how long, in plain words, linked from a footer on every page.
    - A slim header on every page with a GitHub link. Routing is a hand-rolled History-API router, with no routing library.
 5. **Modes:**
    - LEARN: a plain-language explanation plus cited sources.
@@ -117,6 +118,7 @@ api/report.py          report an item (salted IP hash; two reports hide it)
 api/quota.py           the visitor's live runs left today and whether the global cap is open
 api/stats.py           Analytics for nerds: aggregates only, edge-cached (Session 9)
 dev/api_server.py      local server for api/ (Vite proxies /api to it); never deployed
+dev/check_stats.py     read-only check of the live agent_stats() against a Python version of it
 evals/                 fixed topic set + scoring script; `export` writes the eval history for the UI
 src/                   Vite + React UI: router.ts (History-API router), pages/ (home, Learn, Quiz,
                        the web page, trophies), game.ts (points, streaks, ranks, runs), trophies.ts

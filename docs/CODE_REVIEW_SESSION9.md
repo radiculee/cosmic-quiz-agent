@@ -12,9 +12,46 @@ hole; two items are confirmed bugs (1 and 2).
     sets: all runs, quiz, learn hard, on_demand, curator easy, 7 days, 30 days quiz medium.
   - The real `GET /api/stats` handler answers 200 with `public, s-maxage=600` and real figures.
   - Only the 11-argument `begin_on_demand_run` is left (the 9-argument one from 004 is dropped).
-- The Session 9 code is not committed yet. Vedant is testing it on localhost first, then commits.
-- Still to do after the fixes: the rest of the Session 9 gate, commit and deploy, then the two
-  live searches on production and the Session 8 gate (see `docs/PLAN.md`, end of Session 9).
+- Session 9 is committed and deployed (`90ff820`, `6376826`, `619c5e9`).
+- All 7 items are fixed, uncommitted until Vedant asks (see "Fixed" below). Still to do: the two
+  live searches on production, then the Session 8 and Session 9 gates (`docs/PLAN.md`).
+
+## Fixed (2026-10-09)
+
+1. `navigate()` takes an optional `state`, passed to `pushState` or `replaceState`. The Analytics
+   for nerds button pushes `{ panel: "explore" }`; Close goes Back only from an entry with that
+   mark, and replaces the address with `/explore` otherwise. The `openedPanel` ref and its effect
+   are gone. Router test added; the drive below covers Back, Forward, Close, Back.
+2. `StatsQuery.days` is `Period = Literal["7", "30"]` (in `agent/stats.py`, replacing
+   `PERIODS`), converted with `int()` in `filters()`. `"07"`, `"+7"`, `" 7"` and `"7.0"` are
+   refused in the test.
+3. `_Reply` is `extra="ignore"`, and so is `StatsFilters`, which `agent_stats()` echoes in its
+   reply (a new filter there would otherwise still be refused). A new key in a count, such as an
+   outcome, is still refused. Tests: a reply with fields added later is read, and the new fields
+   are not passed on; the missing-field, wrong-bins and new-outcome cases are refused.
+4. On Vedant's choice, the comparison only: `python -m dev.check_stats` (read-only; the secret
+   key reads the rows, the publishable key calls the function, and the raw reply is compared,
+   so a field the models do not name yet still shows). It also says whether `/api/stats`'s models
+   would accept each reply. Run on 2026-10-09: 7 of 7 filter sets the same (197 runs).
+   `tests/test_check_stats.py` checks the Python version on hand-worked rows, that it has every
+   field of the reply, and the comparison itself. The browser drives stay out of the repo.
+5. The panel handles the dialog's `close` event: a close it did not make goes through the address.
+   The drive then found that this alone made Esc go Back twice when Chrome does not let the
+   `cancel` be prevented (it fires `cancel`, then closes the dialog itself, and Back takes effect
+   a moment later). The panel now leaves `/explore/stats` once per close, which also stops a
+   double click on Close going Back twice. Focus returns to the button either way.
+6. The button's attributes are wrapped one per line.
+7. `gridHint()` moved to `src/stats.ts`: "50% published in every cell" (or "in every cell with
+   runs" when some have none), "Only learn easy has runs: 50% published" for one cell, and
+   compared as the cells show the shares. Tests added for equal cells.
+
+Checks: 302 Python tests (12 new), 114 TypeScript tests (2 new), typecheck, build, ruff, ruff
+format, mypy --strict and the control-character scan all pass. A drive in headless Chrome
+against the local servers (no live search, nothing spent) passed 24 checks: Back, Forward,
+Close, Back reaches home; Close from the button and from a deep link; focus back on the button;
+three rounds of Esc; cancel and close together; a double click on Close; a dialog closed by the
+browser, from the button and from a deep link; `days` spellings on the real `/api/stats`; and
+the grid hint on real figures ("From 32% published (learn hard) to 79% (learn easy)").
 
 ## Issues
 
@@ -99,7 +136,9 @@ hole; two items are confirmed bugs (1 and 2).
 ## For the Session 10 audit (not Session 9 changes)
 
 - Anyone holding the publishable key can call `/rpc/agent_stats` directly, past the edge cache
-  and the 300-an-hour limit. It returns aggregates only and runs one small query.
+  and the 300-an-hour limit. It returns aggregates only and runs one small query. (Checked
+  2026-10-09: neither the Supabase URL nor a key is in the browser bundle, so today only the
+  server holds the publishable key.)
 - The secret key's API schema lists an RPC `public.rls_auto_enable` that no migration in this
   repo created. Find out what added it and check its grants; the publishable key may not read
   the schema listing, so whether the browser role can run it was not checked.
@@ -109,4 +148,4 @@ hole; two items are confirmed bugs (1 and 2).
 `pnpm typecheck`, `pnpm test`, `pnpm build`, `pytest`, `ruff check .`, `ruff format --check .`,
 `mypy --strict`, a control-character scan of the edited files (see the memory note on
 backslashes), and a drive of the panel against the local servers (Back, Forward, Close, Back
-included). Then commit when Vedant asks.
+included). Then commit when Vedant asks. All done on 2026-10-09 (results under "Fixed").
