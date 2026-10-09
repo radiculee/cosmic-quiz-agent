@@ -783,7 +783,9 @@ Gate progress (2026-10-08):
       `TYPESAFE_API_KEY` in the local `.env` is rejected; production's works), which stopped the
       search before anything was reserved. Vedant chose to test the searches on production
       instead of replacing the local key. The production runs made earlier on 2026-10-08 count
-      as searches, so the search check there starts after 01:00 Irish time.
+      as searches, so the search check there starts after 01:00 Irish time. Deployed the same
+      day (`4d5fd8f`; free checks on production passed); Vedant moved the check to the end of
+      Session 9 (see there).
 
 ---
 
@@ -837,8 +839,117 @@ Decisions to ask:
   rate, seeded-error catch rate per layer, Jev calibration); and player statistics, which need
   anonymous answer events (no IP, no account) and so a GDPR note.
 
+Decided at the start of the session (2026-10-08), each as recommended:
+- **First screen:** summary first. The filters (mode, level, source, range), four tiles (runs,
+  published by the gate, cost per published item, median run), the month's spend against the
+  caps, and the mode-and-difficulty grid; the four groups follow as numbered sections, one column.
+  (Changed later the same day by Vedant: see "Four key elements" below.)
+- **Date range:** all time by default, with 7- and 30-day switches. `agent_stats` gains a fourth
+  argument, `p_days` (the API takes only 7 and 30, so each filter set is one cache entry).
+- **"This run" is "This search":** the search as a whole, then one row per run that opens to its
+  steps and timings. Jev's checks are counts only, so a question waiting for its answer is not
+  given away.
+- **The 2 x 3 grid:** included. It follows the source and range filters only.
+- **Eval history:** the latest eval as a static section. `python -m evals export` (new, free)
+  writes a summary of every stored eval run to `src/data/evals.json`, which is committed and
+  built in; it grows into a history as evals are re-run.
+- **Player statistics:** left out of v1 (a write path and a table just before the security
+  audit, fake answers could skew it, and it needs a privacy note). Revisit after launch.
+
+Decided while building it (2026-10-08):
+- **A `stats` event per run, not a field on `result`.** A discarded run sends `missed`, so a
+  field on `result` would leave its cost out of the search's totals. Explained to Vedant before
+  building (he could not reply then); to confirm at the gate.
+- Chosen without asking, to change if wanted: "gate" counts what the publish gate decided when
+  the run was stored and "bank" where the items are now; the spend shown is what `runs` records
+  (eval and development runs and the on-topic checks are not stored, so the consoles show a
+  little more), and there is no TypeSafe balance in the database, so Jev's spend is shown this
+  month and in all instead; the $10 Console limit is mirrored as `ANTHROPIC_MONTHLY_LIMIT_USD` in
+  `agent/config.py`; `/api/stats` refuses unknown parameters, so they cannot make cache entries.
+- For the Session 10 audit: anyone holding the publishable key can call `/rpc/agent_stats`
+  directly, past the edge cache and the 300-an-hour limit. It returns aggregates only and runs
+  one small query.
+
+Four key elements (changed 2026-10-08 by Vedant, in a grill-me session after seeing the built
+panel): the panel should show only four key elements at first, for the reader's attention, and
+the rest only when asked for.
+- **Scope:** both tabs, four each. The tab switch is navigation, not an element.
+- **Filters:** one Filter button that names the current choice ("All runs, all time") and opens
+  the four filter rows. The filters still scope the four elements and every group.
+- **The agent opens on:** published by the gate (with "104 of 195 runs" in its note), cost per
+  published item, median run, and this month's spend as a meter against the $10 limit.
+- **The rest:** closed rows under the four, each with its name and a one-line hint, opened one
+  at a time: By mode and level, Spend this month (live research and TypeSafe), Volume, outcomes
+  and cost, Tokens, caching and speed, Agent behaviour and evidence, Verifiers, Evals. The
+  dates and "figures as of" are a footnote.
+- **This search opens on:** cost, items made out of those planned (with how many are in review
+  or left out), time and pages read. Closed rows: Run by run, Tokens, Pages by site, Tool calls,
+  Jev's checks.
+- **Rows always start closed;** nothing is stored in the browser.
+- **Built now, before the gate.**
+
+Vedant prepares: paste `supabase/migrations/007_agent_stats.sql` into the Supabase SQL editor.
+
+Claude Code:
+- [x] Migration `007_agent_stats.sql` (shown before pasting): `agent_stats(p_mode, p_difficulty,
+      p_source, p_days)`, `security definer`, `stable`, `search_path = ''`, every argument checked;
+      aggregates only as jsonb (volume, bank, tokens, speed, behaviour, verifiers, grid, budget);
+      execute revoked from everyone and granted to anon, authenticated and service_role; drops
+      the 9-argument `begin_on_demand_run`. `supabase/schema.sql` updated to match.
+- [x] `agent/run_stats.py` and the `stats` event in `agent/ondemand.py`: sent once per run that
+      made a record, before it is stored, and guarded so a failure there never costs the run.
+- [x] `agent/stats.py` (reply models checked field by field, the reader, caching savings priced
+      from `agent/config.py`) and `api/stats.py` (edge-cached for ten minutes), routed in
+      `dev/api_server.py`.
+- [x] `evals/export.py` and `src/data/evals.json` (1 full eval: 51/60 pass the code checks, 38/40
+      planted faults kept out; the on-topic check: Jev 44/44, keywords 18/44).
+- [x] UI: `/explore/stats` over the web page (which stays mounted, so a search keeps going),
+      `src/pages/StatsPanel.tsx` (a modal dialog; Esc, Close and Back close it), the tabs in
+      `src/components/stats/`, `src/charts/` (StatTile, BarSplit, BarList, Histogram, Meter and
+      Table, hand-written SVG in the tokens; colours checked with the data-visualisation
+      validator), `src/stats.ts`, `src/shapes.ts` and `src/guards.ts`, `useStats`.
+- [x] Four key elements (above): the Filter button, the four key figures per tab, and closed
+      rows (`Group` in `src/components/stats/Section.tsx`) whose figures are drawn only once
+      opened. 112 TypeScript tests (3 new); a second drive passed 39 checks, among them exactly
+      four figures per tab, every row closed with no chart drawn but the spend meter, one row
+      opening at a time, the filters scoping the four, and rows closed again on every visit.
+- [x] Checks: 290 Python tests (22 new) and 109 TypeScript tests (36 new), all with the scripted
+      fake model or none; typecheck, build, ruff and mypy --strict.
+- [x] Driven in headless Chrome against Vite and a scratchpad copy of the API (fake search runs;
+      `/api/stats` answered by a Python re-implementation of `agent_stats` over the real rows,
+      read-only): 42 checks passed, among them the filters, Esc, Back and Forward, a deep link, a
+      search filling the tab as its runs end (a discarded run counted), no answer text in the
+      panel, and no sideways scroll at phone width. The drive found and fixed: chart marks drawn
+      black (an SVG attribute does not resolve `var()`), focus taken from the button on close,
+      clipped labels and the grid wrapping on a phone. The real `/api/stats` answers 503 (not
+      cached) until 007 is applied.
+- [x] After 007 is applied: compare the live function with the Python re-implementation on 7
+      filter sets (read-only), then check `/api/stats` on the local server. Done 2026-10-09:
+      all 7 the same field by field; the real handler answers 200 with the edge-cache header;
+      only the 11-argument `begin_on_demand_run` is left.
+- [ ] Fix the code review's findings (2026-10-08): `docs/CODE_REVIEW_SESSION9.md`, 7 items,
+      two of them confirmed bugs (a dead Back press after Back, Forward and Close; `days`
+      accepted in many spellings). Next session.
+
 Gate (Vedant): picks a filter and checks the numbers against the Supabase tables and the
 Anthropic and TypeSafe consoles.
+- [x] Paste 007; the comparison above agrees (2026-10-09).
+- [ ] Open the panel from `/explore` (and at `/explore/stats` directly): four elements per tab,
+      the rest in closed rows; try the Filter button, each filter and the 7-day range; the numbers against the Supabase tables and the consoles (expect the consoles to
+      be a little higher: evals and development runs are not in `runs`).
+- [ ] Confirm the `stats` event (above), or say what to change.
+
+At the end of the session, after its gate (carried over from Session 8 on 2026-10-08):
+- [ ] Vedant runs two live searches on https://cosmic-quiz-agent.vercel.app/explore, on a day
+      his network has not used live research yet (the count resets at 01:00 Irish time): a new
+      topic at MEDIUM (about $0.12: the explanation, then three questions labelled by
+      difficulty, the next button waiting for each), then "Black holes" at MEDIUM (about $0.09:
+      3 items made, the EASY question marked "From the bank, free"). The counter goes 2, 1, then
+      the limit message.
+- [ ] Claude Code checks `on_demand_runs` read-only: each search's later runs carry the id of
+      the run that opened it, and every run's `spent_usd` is set. Then the Session 8 gate is
+      recorded as passed. The local `TYPESAFE_API_KEY` is rejected (HTTP 401), so live runs
+      work only on production until Vedant replaces it.
 
 ---
 
@@ -951,3 +1062,25 @@ Vedant: the analytics page, the other v2 feature, moved into v1 as Session 9.)
   caps stay (the day's 4th search may end early). 268 Python and 73 TypeScript tests; a no-cost
   drive of the page passed 39 checks. No paid calls. Next: Vedant pastes 006, then the Session 8
   gate.
+- 2026-10-08 - Session 8 (continued): Vedant applied 006; a probe of the new function and the
+  quota read passed against the real database, and production kept working through the 004
+  function. The local TypeSafe key is rejected (HTTP 401), so Vedant chose to check the live
+  searches on production. Committed (`823c2ea`, docs `4d5fd8f`) and deployed; free checks on
+  production passed. The live-search check moves to the end of Session 9. Next: Session 9.
+- 2026-10-08 - Session 9 (in progress): Vedant took the recommended option on all six decisions
+  (summary first, all time with 7/30 days, This search as a whole then run by run, the 2 x 3
+  grid, the latest eval as a static section, no player statistics in v1). Built migration 007
+  (`agent_stats`, aggregates only; drops the 004 function), a `stats` event per live run,
+  `/api/stats`, `python -m evals export`, and the panel at `/explore/stats` with hand-written SVG
+  charts. 290 Python and 109 TypeScript tests; a no-cost drive passed 42 checks. No paid calls.
+  Then, after a grill-me session, the panel opens on four key elements per tab (quality, cost,
+  speed and budget; cost, made, time and pages) with everything else in closed rows and the
+  filters behind one button. 112 TypeScript tests; a second drive passed 39 checks. Next:
+  Vedant pastes 007, then the comparison, the Session 9 gate and the live searches.
+- 2026-10-09 - Session 9 (continued): a code review found 7 items, none critical; they are
+  filed in `docs/CODE_REVIEW_SESSION9.md` for the next session. Vedant applied 007; the live
+  `agent_stats()` matches the Python re-implementation on 7 filter sets and `/api/stats`
+  answers 200. Committed on Vedant's word (`90ff820` migration 007, `6376826` the server side,
+  `619c5e9` the panel, then the docs) and pushed to deploy. What is left, and the prompt for the
+  next session, are in `docs/NEXT_SESSION.md`. Next: Vedant checks the panel on production and
+  runs the two live searches; then the review fixes and both gates.

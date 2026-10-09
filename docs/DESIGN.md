@@ -19,7 +19,7 @@ runs on a schedule with no human trigger), and code that reads well to recruiter
    - Home (`/`): Learn and Quiz as two large cards, "Try a new topic from the web" as a smaller card showing the visitor's live runs left today, then the rank, points and a trophy shelf.
    - Learn (`/learn`, `/learn/<topic-slug>`): a difficulty switch, a searchable grid of bank topics (read ones ticked) and Random. Each topic's explanation and sources has its own URL.
    - Quiz (`/quiz`): a difficulty and a run of 10, 30 or 60 questions, each on a different random topic (unplayed first). A length is offered only when the bank has that many topics at that difficulty.
-   - The web page (`/explore`): a typed topic researched live (decision 9). A search makes the explanation at the chosen level and a question at each level, all shown on the page and stored in the bank (changed later on 2026-10-08 by Vedant; it was one explanation or one question). "Analytics for nerds" opens from it at `/explore/stats` (`docs/PLAN.md` Session 9).
+   - The web page (`/explore`): a typed topic researched live (decision 9). A search makes the explanation at the chosen level and a question at each level, all shown on the page and stored in the bank (changed later on 2026-10-08 by Vedant; it was one explanation or one question). "Analytics for nerds" opens from it at `/explore/stats` (`docs/PLAN.md` Session 9): each of its two tabs opens on four key figures, with the rest in closed rows (decided by Vedant on 2026-10-08).
    - Trophies (`/trophies`): tiered bronze, silver and gold trophies, which replace the v1 badges and pop up when earned.
    - A slim header on every page with a GitHub link. Routing is a hand-rolled History-API router, with no routing library.
 5. **Modes:**
@@ -104,6 +104,8 @@ agent/                 Python package (shared core)
   limits.py            the on-demand guardrails' numbers, and the visitor's quota
   topic_check.py       the on-topic check for typed topics (Jev)
   ondemand.py          a guarded live search (up to 4 runs, one at a time), streamed as events
+  run_stats.py         one live run's figures for the analytics panel (numbers only)
+  stats.py             the analytics page's statistics: agent_stats() reply models and reader
   web.py               HTTP layer for api/: handle(ApiRequest) -> ApiResponse, WSGI app per function
 curator/               build (initial bank) and daily (news) runs: discover -> research -> draft ->
                        verify -> publish / review / discard -> retire, under a dollar cap
@@ -115,17 +117,19 @@ api/report.py          report an item (salted IP hash; two reports hide it)
 api/quota.py           the visitor's live runs left today and whether the global cap is open
 api/stats.py           Analytics for nerds: aggregates only, edge-cached (Session 9)
 dev/api_server.py      local server for api/ (Vite proxies /api to it); never deployed
-evals/                 fixed topic set + scoring script
+evals/                 fixed topic set + scoring script; `export` writes the eval history for the UI
 src/                   Vite + React UI: router.ts (History-API router), pages/ (home, Learn, Quiz,
                        the web page, trophies), game.ts (points, streaks, ranks, runs), trophies.ts
                        (tiers and what was just earned), profile.ts (progress in localStorage),
-                       search.ts (a live search's items as the web page shows them), components/
+                       search.ts (a live search's items as the web page shows them), components/,
+                       stats.ts and charts/ (Analytics for nerds, hand-written SVG), data/evals.json
+                       (the eval history, built in)
 supabase/schema.sql    topics, items, sources, claim_checks (per-claim results of all three layers,
                        incl. Jev verdict, confidence, probabilities and model version), runs,
                        curator_runs, cited_pages, reports, rate_limits, on_demand_runs
                        (+ subscribers in v2)
 supabase/migrations/   numbered changes after schema.sql (006 the web page's searches, Session 8;
-                       007 adds agent_stats() in Session 9)
+                       007 adds agent_stats() and drops the 004 begin_on_demand_run, Session 9)
 .github/workflows/curator.yml   daily cron + manual dispatch
 LICENSE                MIT (Session 10, when the repo goes public)
 ```
