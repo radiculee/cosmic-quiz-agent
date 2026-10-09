@@ -17,6 +17,8 @@ export type Route =
   | { page: "learn-topic"; slug: string }
   | { page: "quiz" }
   | { page: "explore" }
+  /** The analytics panel, over the web page (which stays mounted, so a search keeps going). */
+  | { page: "explore-stats" }
   | { page: "trophies" }
   | { page: "not-found" };
 
@@ -25,6 +27,7 @@ export const PATHS = {
   learn: "/learn",
   quiz: "/quiz",
   explore: "/explore",
+  exploreStats: "/explore/stats",
   trophies: "/trophies",
 } as const;
 
@@ -45,6 +48,8 @@ export function matchRoute(pathname: string): Route {
       return { page: "quiz" };
     case PATHS.explore:
       return { page: "explore" };
+    case PATHS.exploreStats:
+      return { page: "explore-stats" };
     case PATHS.trophies:
       return { page: "trophies" };
   }

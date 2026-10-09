@@ -1,3 +1,4 @@
+import { isRunStats, isStatsReply } from "./shapes";
 import {
   type BankTopic,
   DIFFICULTIES,
@@ -16,6 +17,7 @@ import {
   type ShownStatus,
   type Source,
   type SourceCheck,
+  type StatsReply,
   VERDICTS,
 } from "./types";
 
@@ -193,6 +195,12 @@ export function isResearchEvent(value: unknown): value is ResearchEvent {
       return (
         isItemKey(value.key) && MISSED_REASONS.includes(value.reason) && isString(value.message)
       );
+    case "stats":
+      return (
+        isRunStats(value.stats) &&
+        // The figures must be for the run the key names.
+        value.key === `${value.stats.mode}-${value.stats.difficulty}`
+      );
     default:
       return false;
   }
@@ -269,6 +277,16 @@ export async function fetchQuota(signal?: AbortSignal): Promise<Quota> {
     return body;
   }
   throw new ApiError("/api/quota answered in an unexpected shape");
+}
+
+/** The agent's statistics for the filters in `query` (statsQuery in stats.ts); an empty query
+ * covers every run. */
+export async function fetchStats(query: string, signal?: AbortSignal): Promise<StatsReply> {
+  const body = await request(query ? `/api/stats?${query}` : "/api/stats", signalOnly(signal));
+  if (isStatsReply(body)) {
+    return body;
+  }
+  throw new ApiError("/api/stats answered in an unexpected shape");
 }
 
 /** Report an item. Resolves to true if this visitor had already reported it. */

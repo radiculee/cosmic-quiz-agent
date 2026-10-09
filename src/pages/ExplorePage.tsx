@@ -10,13 +10,14 @@ import { TopicInput } from "../components/TopicInput";
 import { type AnswerScore, scoreAnswer } from "../game";
 import { afterAnswer, afterLearn, afterLiveRun } from "../profile";
 import { GLOBAL_CAP_NOTICE, quotaLine } from "../quota";
-import { PATHS, useLocation, usePageTitle } from "../router";
+import { navigate, PATHS, useLocation, usePageTitle } from "../router";
 import {
   ended,
   explanationSlot,
   fromPlan,
   itemLabel,
   madeAnything,
+  measured,
   missed,
   nextOpen,
   questionSlots,
@@ -45,7 +46,9 @@ import {
   PageHeading,
   type PageProps,
   PRIMARY_BUTTON,
+  SECONDARY_BUTTON,
 } from "./common";
+import { StatsPanel } from "./StatsPanel";
 
 /** A search's agent log. `outcome` is set when the search was refused or cut short; otherwise
  * the log ends with a summary of what the search made. */
@@ -75,6 +78,9 @@ const UNAVAILABLE = "Live research is not available right now.";
  *
  * The address can carry the form's values (`?topic=...&difficulty=...`, from the Learn page's
  * "research it live" link); it only fills the form, so a link can never spend a search.
+ *
+ * "Analytics for nerds" opens over the page at /explore/stats (`statsOpen`). The page stays
+ * mounted under it, so a search keeps streaming while the panel is open.
  */
 export function ExplorePage({
   topicsState,
@@ -84,8 +90,9 @@ export function ExplorePage({
   celebrate,
   difficulty,
   setDifficulty,
-}: PageProps) {
-  usePageTitle("Explore");
+  statsOpen,
+}: PageProps & { statsOpen: boolean }) {
+  usePageTitle(statsOpen ? "Analytics for nerds" : "Explore");
   const location = useLocation();
   const [initial] = useState(() => {
     const params = location.searchParams;
@@ -110,6 +117,28 @@ export function ExplorePage({
   const awaitingAnswer = useRef(false);
   // A search counts once towards Web researcher, with its first live item.
   const counted = useRef(false);
+  // Whether this page opened the panel, so closing it can go Back rather than add a history entry.
+  const openedPanel = useRef(false);
+
+  useEffect(() => {
+    if (!statsOpen) {
+      openedPanel.current = false;
+    }
+  }, [statsOpen]);
+
+  function openStats() {
+    openedPanel.current = true;
+    navigate(PATHS.exploreStats);
+  }
+
+  function closeStats() {
+    if (openedPanel.current) {
+      openedPanel.current = false;
+      window.history.back();
+    } else {
+      navigate(PATHS.explore, { replace: true });
+    }
+  }
 
   useEffect(() => {
     if (initial.difficulty) {
@@ -264,6 +293,9 @@ export function ExplorePage({
           patch((s) => resolved(s, event.key, event.item, event.reveal_token ?? undefined));
           onLiveItem(event.item);
           break;
+        case "stats":
+          patch((s) => measured(s, event.key, event.stats));
+          break;
         case "missed":
           patch((s) => missed(s, event.key, event.message));
           addLine({
@@ -390,6 +422,9 @@ export function ExplorePage({
           {quota.global_open ? quotaLine(quota) : GLOBAL_CAP_NOTICE}
         </p>
       )}
+      <button type="button" onClick={openStats} className={`${SECONDARY_BUTTON} mt-6 px-4 py-3 text-[9px]`}>
+        Analytics for nerds
+      </button>
 
       <div ref={viewRef} className="mt-10 w-full scroll-mt-6" aria-live="polite">
         {log && logOutcome && (
@@ -401,6 +436,18 @@ export function ExplorePage({
               lines={log.lines}
               outcome={logOutcome}
             />
+            {search && search.runs.length > 0 && (
+              <p className="mt-3 text-sm text-slate">
+                What each run cost and did:{" "}
+                <button
+                  type="button"
+                  onClick={openStats}
+                  className="text-teal underline underline-offset-4 hover:text-ink"
+                >
+                  this search in Analytics for nerds
+                </button>
+              </p>
+            )}
           </div>
         )}
 
@@ -454,6 +501,14 @@ export function ExplorePage({
         {search?.ended && !showItems && logOutcome?.kind !== "rejected" && <BankLinks />}
         {!search && logOutcome?.kind === "fallback" && <BankLinks />}
       </div>
+
+      <StatsPanel
+        open={statsOpen}
+        onClose={closeStats}
+        search={search}
+        level={log?.difficulty ?? null}
+        running={streaming}
+      />
     </div>
   );
 }

@@ -84,6 +84,215 @@ export interface PlannedItem {
 
 export type Tone = "info" | "ok" | "warn";
 
+// --- Analytics for nerds (Session 9) ----------------------------------------------------------
+
+export const OUTCOMES = [
+  "passed",
+  "failed_checks",
+  "no_answer",
+  "budget_exceeded",
+  "llm_error",
+] as const;
+export const GATE_STATUSES = ["published", "review", "discarded"] as const;
+export const BANK_STATUSES = ["published", "review", "discarded", "retired"] as const;
+export const LAYER_VERDICTS = ["pass", "borderline", "fail", "error"] as const;
+export const CLAIM_KINDS = ["correct_answer", "distractor", "sentence"] as const;
+export const SOURCES = ["curator", "on_demand"] as const;
+
+/** How an agent run ended (agent/schemas.py). */
+export type Outcome = (typeof OUTCOMES)[number];
+/** What the publish gate decided for a run's item. */
+export type GateStatus = (typeof GATE_STATUSES)[number];
+export type BankStatus = (typeof BANK_STATUSES)[number];
+/** One verifier layer's verdict on an item. */
+export type LayerVerdict = (typeof LAYER_VERDICTS)[number];
+export type ClaimKind = (typeof CLAIM_KINDS)[number];
+/** Who started a run: the daily Curator, or a player's live search. */
+export type RunSource = (typeof SOURCES)[number];
+
+/** One step of a live run: a model call (with how many tools it asked for) or a tool call. */
+export interface StepTiming {
+  kind: "model" | "tool";
+  tool: string | null;
+  seconds: number;
+  tools_asked: number;
+  is_error: boolean;
+}
+
+/** What one live run measured (agent/run_stats.py). Numbers only: nothing in it can give a
+ * quiz answer away. */
+export interface RunStats {
+  mode: Mode;
+  difficulty: Difficulty;
+  model: string;
+  outcome: Outcome;
+  status: GateStatus | null;
+  model_calls: number;
+  nudges: number;
+  tokens: {
+    input: number;
+    output: number;
+    cache_write: number;
+    cache_read: number;
+    verifier_input: number;
+    verifier_output: number;
+    jev_input: number;
+  };
+  cost: { agent_usd: number; verifier_usd: number; jev_usd: number };
+  seconds: { agent: number; verifier: number; jev: number };
+  tool_calls: Record<string, number>;
+  tool_errors: number;
+  pages_by_domain: Record<string, number>;
+  citations_kept: number;
+  citations_dropped: number;
+  haiku: LayerVerdict | null;
+  jev: LayerVerdict | null;
+  jev_checks: { supports: number; contradicts: number; says_nothing: number };
+  steps: StepTiming[];
+}
+
+/** A median and 95th percentile; null when there was nothing to measure. */
+export interface Percentiles {
+  median: number | null;
+  p95: number | null;
+}
+
+/** The agent's statistics (agent_stats(), supabase/migrations/007_agent_stats.sql). */
+export interface AgentStats {
+  filters: {
+    mode: Mode | null;
+    difficulty: Difficulty | null;
+    source: RunSource | null;
+    days: number | null;
+  };
+  generated_at: string;
+  volume: {
+    runs: number;
+    first_run_at: string | null;
+    last_run_at: string | null;
+    outcomes: Record<Outcome, number>;
+    /** What the publish gate decided when each run was stored, before any review. */
+    gate: Record<GateStatus, number>;
+    cost: { agent_usd: number; verifier_usd: number; jev_usd: number };
+  };
+  /** Where those items are now. */
+  bank: Record<BankStatus, number>;
+  tokens: {
+    by_model: {
+      model: string;
+      runs: number;
+      input_tokens: number;
+      output_tokens: number;
+      cache_write_tokens: number;
+      cache_read_tokens: number;
+      agent_usd: number;
+    }[];
+    verifier_input_tokens: number;
+    verifier_output_tokens: number;
+    jev_input_tokens: number;
+  };
+  speed: {
+    run_seconds: Percentiles;
+    total_seconds: Percentiles;
+    model_call_seconds: Percentiles;
+    verifier_seconds: Percentiles;
+    jev_seconds: Percentiles;
+    tools: { tool: string; calls: number; errors: number; median: number | null; p95: number | null }[];
+  };
+  behaviour: {
+    model_calls: { calls: number; runs: number }[];
+    model_steps: number;
+    tool_steps: number;
+    parallel_steps: number;
+    pages_by_domain: { domain: string; pages: number }[];
+    nudges: number;
+    nudged_runs: number;
+    budgets: { budget: string; runs: number }[];
+    answers: number;
+    citations: { kept: number; misquoted: number; unfetched: number };
+    unsupported_number_answers: number;
+  };
+  verifiers: {
+    haiku: Record<LayerVerdict, number>;
+    jev: Record<LayerVerdict, number>;
+    agreement: { haiku: LayerVerdict; jev: LayerVerdict; items: number }[];
+    jev_claims: { kind: ClaimKind; verdict: Verdict; checks: number }[];
+    jev_confidence: { bins: number[]; exactly_one: number };
+    review: {
+      items: number;
+      haiku_doubt: number;
+      jev_doubt: number;
+      verifier_error: number;
+      explanation: number;
+      unsettled_option: number;
+      verifier_quote: number;
+    };
+  };
+  grid: {
+    mode: Mode;
+    difficulty: Difficulty;
+    runs: number;
+    published: number;
+    anthropic_usd: number;
+    jev_usd: number;
+    median_seconds: number | null;
+  }[];
+  budget: {
+    month_start: string;
+    anthropic_usd: number;
+    typesafe_usd: number;
+    typesafe_all_time_usd: number;
+    live_usd: number;
+  };
+}
+
+/** GET /api/stats (api/stats.py). */
+export interface StatsReply {
+  stats: AgentStats;
+  caching: { uncached_usd: number; cached_usd: number; saved_usd: number; unpriced_runs: number };
+  caps: { anthropic_month_usd: number; live_month_usd: number };
+}
+
+/** The eval history built into the page (src/data/evals.json, `python -m evals export`). */
+export interface EvalHistory {
+  generation: {
+    run: string;
+    at: string;
+    size: "full" | "quick";
+    model: string;
+    jev_model: string | null;
+    jev_criteria: string | null;
+    gate_rule: string;
+    items: number;
+    layer1_pass: number;
+    by_difficulty: { difficulty: Difficulty; items: number; layer1_pass: number }[];
+    unfetched_urls: number;
+    verified: number;
+    haiku: Partial<Record<LayerVerdict, number>>;
+    jev: Partial<Record<LayerVerdict, number>>;
+    agreement: number;
+    gate: Partial<Record<GateStatus, number>>;
+    seeded: {
+      fault: string;
+      items: number;
+      layer1: number;
+      haiku: number;
+      jev: number;
+      handled: number;
+    }[];
+    calibration: { band: string; claims: number; right: number }[];
+    anthropic_usd: number;
+    typesafe_usd: number;
+  }[];
+  ontopic: {
+    run: string;
+    at: string;
+    inputs: number;
+    on_topic: number;
+    judges: { judge: string; right: number }[];
+  }[];
+}
+
 /** Events streamed by /api/research (agent/ondemand.py). */
 export type ResearchEvent =
   | { type: "plan"; topic: string; items: PlannedItem[] }
@@ -107,6 +316,8 @@ export type ResearchEvent =
       reason: "discarded" | "failed" | "skipped";
       message: string;
     }
+  /** What one run measured, for the analytics panel; sent for discarded runs too. */
+  | { type: "stats"; key: ItemKey; stats: RunStats }
   | { type: "error"; message: string };
 
 /** The visitor's live searches left today (GET /api/quota, api/quota.py). */

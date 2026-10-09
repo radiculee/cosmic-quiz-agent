@@ -18,6 +18,7 @@ describe("matchRoute", () => {
     expect(matchRoute("/learn")).toEqual({ page: "learn" });
     expect(matchRoute("/quiz")).toEqual({ page: "quiz" });
     expect(matchRoute("/explore")).toEqual({ page: "explore" });
+    expect(matchRoute("/explore/stats")).toEqual({ page: "explore-stats" });
     expect(matchRoute("/trophies")).toEqual({ page: "trophies" });
     expect(matchRoute("/learn/black-holes")).toEqual({ page: "learn-topic", slug: "black-holes" });
   });
@@ -32,6 +33,7 @@ describe("matchRoute", () => {
     expect(matchRoute("/nope")).toEqual({ page: "not-found" });
     expect(matchRoute("/learn/a/b")).toEqual({ page: "not-found" });
     expect(matchRoute("/quizzes")).toEqual({ page: "not-found" });
+    expect(matchRoute("/explore/other")).toEqual({ page: "not-found" });
     expect(matchRoute("/learn/%E0%A4%A")).toEqual({ page: "learn-topic", slug: "%e0%a4%a" });
   });
 });

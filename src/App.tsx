@@ -9,7 +9,7 @@ import { LearnPage } from "./pages/LearnPage";
 import { NotFoundPage } from "./pages/NotFoundPage";
 import { QuizPage } from "./pages/QuizPage";
 import { TrophiesPage } from "./pages/TrophiesPage";
-import { matchRoute, type Route, useLocation } from "./router";
+import { matchRoute, PATHS, type Route, useLocation } from "./router";
 import type { Award } from "./trophies";
 import type { Difficulty } from "./types";
 import { useProfile } from "./useProfile";
@@ -26,7 +26,10 @@ function page(route: Route, props: PageProps) {
     case "quiz":
       return <QuizPage {...props} />;
     case "explore":
-      return <ExplorePage {...props} />;
+    case "explore-stats":
+      // One element for both addresses, so the page (and a search it is running) stays mounted
+      // while the analytics panel opens over it.
+      return <ExplorePage {...props} statsOpen={route.page === "explore-stats"} />;
     case "trophies":
       return <TrophiesPage topicsState={props.topicsState} profile={props.profile} />;
     case "not-found":
@@ -47,7 +50,9 @@ export function App() {
   const [difficulty, setDifficulty] = useState<Difficulty>("easy");
   const [popups, setPopups] = useState<(readonly Award[])[]>([]);
   const main = useRef<HTMLElement>(null);
-  const firstPath = useRef(pathname);
+  // The analytics panel opens over the web page, so moving between the two is not a new page.
+  const pagePath = route.page === "explore-stats" ? PATHS.explore : pathname;
+  const firstPath = useRef(pagePath);
 
   const celebrate = useCallback((awards: readonly Award[]) => {
     if (awards.length > 0) {
@@ -58,11 +63,11 @@ export function App() {
 
   // After moving to another page, start keyboard and screen-reader users at its content.
   useEffect(() => {
-    if (pathname !== firstPath.current) {
+    if (pagePath !== firstPath.current) {
       firstPath.current = "";
       main.current?.focus({ preventScroll: true });
     }
-  }, [pathname]);
+  }, [pagePath]);
 
   const props: PageProps = {
     topicsState,

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { isResearchEvent, takeLines } from "./api";
+import { sampleRun } from "./testing/samples";
 
 describe("takeLines", () => {
   it("keeps an unfinished line for the next chunk", () => {
@@ -71,5 +72,16 @@ describe("research events", () => {
     expect(isResearchEvent({ ...missedItem, reason: "lost" })).toBe(false);
     expect(isResearchEvent({ type: "fallback", reason: "limit", message: "m" })).toBe(true);
     expect(isResearchEvent({ type: "fallback", reason: "in_bank", message: "m" })).toBe(false);
+  });
+});
+
+describe("a run's figures", () => {
+  it("accepts figures for the run the key names, and nothing else", () => {
+    const stats = sampleRun();
+    expect(isResearchEvent({ type: "stats", key: "quiz-medium", stats })).toBe(true);
+    expect(isResearchEvent({ type: "stats", key: "quiz-easy", stats })).toBe(false);
+    expect(isResearchEvent({ type: "stats", key: "quiz-medium", stats: { ...stats, cost: null } })).toBe(
+      false,
+    );
   });
 });

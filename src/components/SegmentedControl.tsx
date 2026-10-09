@@ -9,6 +9,8 @@ interface SegmentedControlProps<T extends string | number> {
   disabled?: readonly T[];
   /** The id of a line explaining why some choices are not available. */
   describedBy?: string | undefined;
+  /** Smaller buttons, for a row of filters. */
+  compact?: boolean;
 }
 
 /**
@@ -22,6 +24,7 @@ export function SegmentedControl<T extends string | number>({
   onChange,
   disabled = [],
   describedBy,
+  compact = false,
 }: SegmentedControlProps<T>) {
   const buttons = useRef<(HTMLButtonElement | null)[]>([]);
 
@@ -71,7 +74,9 @@ export function SegmentedControl<T extends string | number>({
             tabIndex={selected ? 0 : -1}
             onClick={() => onChange(option)}
             onKeyDown={(event) => move(event, index)}
-            className={`rounded-md px-5 py-3 font-pixel text-[10px] uppercase leading-none transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal disabled:cursor-not-allowed disabled:text-slate/30 disabled:line-through disabled:decoration-slate/30 ${
+            className={`rounded-md font-pixel uppercase leading-none ${
+              compact ? "px-3 py-2.5 text-[8px]" : "px-5 py-3 text-[10px]"
+            } transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal disabled:cursor-not-allowed disabled:text-slate/30 disabled:line-through disabled:decoration-slate/30 ${
               selected ? "bg-teal text-void" : "text-slate hover:text-ink"
             }`}
           >

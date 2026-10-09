@@ -6,6 +6,7 @@ import {
   fromPlan,
   itemLabel,
   madeAnything,
+  measured,
   missed,
   nextOpen,
   questionSlots,
@@ -14,6 +15,7 @@ import {
   summarize,
   summaryLine,
 } from "./search";
+import { sampleRun } from "./testing/samples";
 import type { LearnItem, PlannedItem, QuizQuestion } from "./types";
 
 // A MEDIUM search on a topic the bank has an EASY question for.
@@ -145,5 +147,17 @@ describe("itemLabel", () => {
   it("names an item by its level and kind", () => {
     expect(itemLabel("learn-medium")).toBe("MEDIUM explanation");
     expect(itemLabel("quiz-easy")).toBe("EASY question");
+  });
+});
+
+describe("a search's runs", () => {
+  it("keeps each run's figures once, in the order they arrived", () => {
+    const search = fromPlan(1, "Pulsars", PLAN);
+    const first = measured(search, "quiz-medium", sampleRun());
+    const both = measured(first, "learn-medium", sampleRun({ mode: "learn" }));
+    const again = measured(both, "quiz-medium", sampleRun({ model_calls: 9 }));
+    expect(search.runs).toEqual([]);
+    expect(again.runs.map((run) => run.key)).toEqual(["learn-medium", "quiz-medium"]);
+    expect(again.runs[1]?.stats.model_calls).toBe(9);
   });
 });

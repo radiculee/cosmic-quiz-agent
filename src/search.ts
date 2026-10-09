@@ -3,7 +3,7 @@
  * item, the explanation first and then the questions, each made live or loaded from the bank.
  * Pure functions over plain data, so the page's rules are tested without a browser.
  */
-import type { Item, ItemKey, PlannedItem } from "./types";
+import type { Item, ItemKey, PlannedItem, RunStats } from "./types";
 
 export type SlotState =
   /** Made live; its run has not started yet. */
@@ -26,8 +26,15 @@ export interface Search {
   /** The bank's spelling when it has the topic. */
   topic: string;
   slots: Slot[];
+  /** What each finished run measured, in the order the runs ended (the analytics panel). */
+  runs: SearchRun[];
   /** The stream has closed: nothing still waiting will come. */
   ended: boolean;
+}
+
+export interface SearchRun {
+  key: ItemKey;
+  stats: RunStats;
 }
 
 /** "EASY question" or "MEDIUM explanation", for headings and buttons. */
@@ -44,8 +51,14 @@ export function fromPlan(id: number, topic: string, items: readonly PlannedItem[
       ...item,
       state: item.source === "live" ? { kind: "waiting" } : { kind: "loading" },
     })),
+    runs: [],
     ended: false,
   };
+}
+
+/** A run's figures arrived. Each item has one run, so a repeat replaces the earlier figures. */
+export function measured(search: Search, key: ItemKey, stats: RunStats): Search {
+  return { ...search, runs: [...search.runs.filter((run) => run.key !== key), { key, stats }] };
 }
 
 function update(search: Search, key: ItemKey, next: (slot: Slot) => SlotState): Search {
