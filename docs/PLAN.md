@@ -779,13 +779,14 @@ Gate progress (2026-10-08):
       refused to join a search that does not exist and inserted nothing, and the quota read
       counts searches against the real table. The deployed site kept working through the 004
       function: two Antimatter runs on production after the migration were published.
-- [ ] The web page's live searches. Locally the on-topic check failed with HTTP 401 (the
+- [x] The web page's live searches. Locally the on-topic check failed with HTTP 401 (the
       `TYPESAFE_API_KEY` in the local `.env` is rejected; production's works), which stopped the
       search before anything was reserved. Vedant chose to test the searches on production
       instead of replacing the local key. The production runs made earlier on 2026-10-08 count
       as searches, so the search check there starts after 01:00 Irish time. Deployed the same
       day (`4d5fd8f`; free checks on production passed); Vedant moved the check to the end of
-      Session 9 (see there).
+      Session 9. Passed 2026-10-09 on Vedant's word, with what the database confirmed recorded
+      there.
 
 ---
 
@@ -938,22 +939,37 @@ Claude Code:
 Gate (Vedant): picks a filter and checks the numbers against the Supabase tables and the
 Anthropic and TypeSafe consoles.
 - [x] Paste 007; the comparison above agrees (2026-10-09).
-- [ ] Open the panel from `/explore` (and at `/explore/stats` directly): four elements per tab,
-      the rest in closed rows; try the Filter button, each filter and the 7-day range; the numbers against the Supabase tables and the consoles (expect the consoles to
-      be a little higher: evals and development runs are not in `runs`).
-- [ ] Confirm the `stats` event (above), or say what to change.
+- [x] Open the panel from `/explore` (and at `/explore/stats` directly): four elements per tab,
+      the rest in closed rows; try the Filter button, each filter and the 7-day range; the
+      numbers against the Supabase tables and the consoles (expect the consoles to be a little
+      higher: evals and development runs are not in `runs`). Passed 2026-10-09 on Vedant's
+      word. The figures against the tables are checked by `python -m dev.check_stats` (7 of 7
+      filter sets the same); a check against the consoles was not reported.
+- [x] Confirm the `stats` event (above), or say what to change. Confirmed 2026-10-09: for the
+      Antimatter search below, the "This search" tab showed what the stored runs give ($0.067
+      Anthropic and $0.0006 TypeSafe, 2 items made with 1 in review, 80 s, 4 pages read).
 
 At the end of the session, after its gate (carried over from Session 8 on 2026-10-08):
-- [ ] Vedant runs two live searches on https://cosmic-quiz-agent.vercel.app/explore, on a day
+- [x] Vedant runs two live searches on https://cosmic-quiz-agent.vercel.app/explore, on a day
       his network has not used live research yet (the count resets at 01:00 Irish time): a new
       topic at MEDIUM (about $0.12: the explanation, then three questions labelled by
       difficulty, the next button waiting for each), then "Black holes" at MEDIUM (about $0.09:
       3 items made, the EASY question marked "From the bank, free"). The counter goes 2, 1, then
-      the limit message.
-- [ ] Claude Code checks `on_demand_runs` read-only: each search's later runs carry the id of
+      the limit message. Done in part on 2026-10-09: one search, on Antimatter (a topic the bank
+      had in part), at 15:29 Irish time; Vedant reports the searches work. Vedant will run the
+      second one, a new topic, which shows the 4-run path and the limit message; the next
+      session checks it read-only.
+- [x] Claude Code checks `on_demand_runs` read-only: each search's later runs carry the id of
       the run that opened it, and every run's `spent_usd` is set. Then the Session 8 gate is
-      recorded as passed. The local `TYPESAFE_API_KEY` is rejected (HTTP 401), so live runs
-      work only on production until Vedant replaces it.
+      recorded as passed. Done 2026-10-09: one search since 01:00 Irish time, opened by live
+      run 20 (QUIZ MEDIUM, item 198, in review) with live run 21 (QUIZ HARD, item 199,
+      published) carrying `search_id` 20. Both have `spent_usd` set ($0.041657 and $0.025224),
+      each equal to its run's stored Anthropic cost, and both come from the same visitor (hashes
+      compared, not printed). It made only what the bank lacked (Antimatter already had the
+      EASY explanation and question from 2026-10-08), which matches a search at EASY. Not shown
+      by the data yet: a whole new topic with 4 runs, and the limit after 2 searches. Session 8
+      and Session 9 gates recorded as passed on Vedant's choice. The local `TYPESAFE_API_KEY`
+      is rejected (HTTP 401), so live runs work only on production until Vedant replaces it.
 
 ---
 
@@ -997,9 +1013,9 @@ Decided 2026-10-09 (planning, each as recommended):
 - **Privacy:** a `/privacy` page with a footer link, in plain words: what is stored, why, for how
   long, and a contact; the same text in the README. Each retention it states is checked in 10a.
 
-Before 10a (carried over from Sessions 8 and 9): Vedant runs the two live searches on production
-(end of Session 9), and 10a starts by checking `on_demand_runs` read-only and recording the
-Session 8 and 9 gates.
+Before 10a: the Session 8 and 9 gates are recorded as passed (2026-10-09). Vedant runs the
+second live search, on a new topic, and 10a starts by checking its runs in `on_demand_runs`
+read-only (4 runs, the later three carrying the first one's id, `spent_usd` set on each).
 
 ### Session 10a - Security audit and fixes
 
@@ -1194,3 +1210,9 @@ Vedant: the analytics page, the other v2 feature, moved into v1 as Session 9.)
   and 9 gates stay open. Planned Session 10 as two sessions (10a audit and fixes; 10b history
   scan, public repo, domain, README, OG image, privacy page), with Vedant's eight decisions
   recorded under Session 10. Not committed yet. Next: Vedant runs the live searches, then 10a.
+- 2026-10-09 - Session 9 (closed): committed the review fixes and the Session 10 plan on
+  Vedant's word (`87d1b0e`, `8daf4d5`, `14a07b2`, `d1e5b18`, `f413fb5`; not pushed). Vedant ran
+  a live search on production (Antimatter: 2 runs, one item in review, $0.067) and reports the
+  searches work; `on_demand_runs` checked read-only (the search id link, `spent_usd` set and
+  equal to each run's cost), and the "This search" tab matched the stored runs. Session 8 and 9
+  gates recorded as passed. Next: Vedant runs the second search (a new topic), then 10a.

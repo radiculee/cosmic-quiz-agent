@@ -13,8 +13,8 @@ hole; two items are confirmed bugs (1 and 2).
   - The real `GET /api/stats` handler answers 200 with `public, s-maxage=600` and real figures.
   - Only the 11-argument `begin_on_demand_run` is left (the 9-argument one from 004 is dropped).
 - Session 9 is committed and deployed (`90ff820`, `6376826`, `619c5e9`).
-- All 7 items are fixed, uncommitted until Vedant asks (see "Fixed" below). Still to do: the two
-  live searches on production, then the Session 8 and Session 9 gates (`docs/PLAN.md`).
+- All 7 items are fixed and committed (see "Fixed" below). The Session 8 and Session 9 gates
+  were recorded as passed on 2026-10-09 (`docs/PLAN.md`).
 
 ## Fixed (2026-10-09)
 
