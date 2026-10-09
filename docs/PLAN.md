@@ -955,10 +955,10 @@ At the end of the session, after its gate (carried over from Session 8 on 2026-1
       topic at MEDIUM (about $0.12: the explanation, then three questions labelled by
       difficulty, the next button waiting for each), then "Black holes" at MEDIUM (about $0.09:
       3 items made, the EASY question marked "From the bank, free"). The counter goes 2, 1, then
-      the limit message. Done in part on 2026-10-09: one search, on Antimatter (a topic the bank
-      had in part), at 15:29 Irish time; Vedant reports the searches work. Vedant will run the
-      second one, a new topic, which shows the 4-run path and the limit message; the next
-      session checks it read-only.
+      the limit message. Done on 2026-10-09: Antimatter (a topic the bank had in part) at 15:29
+      Irish time, then "Red light shift index" (new) at EASY: the explanation, then three
+      questions labelled by difficulty; the counter went from 1 to the limit message ("You have
+      used today's 2 live searches").
 - [x] Claude Code checks `on_demand_runs` read-only: each search's later runs carry the id of
       the run that opened it, and every run's `spent_usd` is set. Then the Session 8 gate is
       recorded as passed. Done 2026-10-09: one search since 01:00 Irish time, opened by live
@@ -966,10 +966,19 @@ At the end of the session, after its gate (carried over from Session 8 on 2026-1
       published) carrying `search_id` 20. Both have `spent_usd` set ($0.041657 and $0.025224),
       each equal to its run's stored Anthropic cost, and both come from the same visitor (hashes
       compared, not printed). It made only what the bank lacked (Antimatter already had the
-      EASY explanation and question from 2026-10-08), which matches a search at EASY. Not shown
-      by the data yet: a whole new topic with 4 runs, and the limit after 2 searches. Session 8
-      and Session 9 gates recorded as passed on Vedant's choice. The local `TYPESAFE_API_KEY`
-      is rejected (HTTP 401), so live runs work only on production until Vedant replaces it.
+      EASY explanation and question from 2026-10-08), which matches a search at EASY. Session 8
+      and Session 9 gates recorded as passed on Vedant's choice.
+      The second search, checked the same way: opened by live run 22 (LEARN EASY, item 200,
+      published), with live runs 23 (QUIZ EASY, item 201, published), 24 (QUIZ MEDIUM, item 202,
+      review) and 25 (QUIZ HARD, item 203, review) each carrying `search_id` 22; `spent_usd`
+      set on all 4 and equal to each run's stored Anthropic cost; the same visitor throughout.
+      Vedant's screenshots of "This search" match the stored runs: $0.152 with $0.0010 on Jev,
+      4 of 4 made with 2 in review, 122 s, 10 pages from 2 sites, 23 model calls, and Jev's 32
+      claims (22 supported, 9 contradicted, 1 not addressed); run by run the same calls, pages
+      and costs, and times within 0.1 s (the event carries unrounded times; `runs` stores each
+      to 2 decimals). The screenshots also showed "1 pages" in a run row, fixed the same day
+      with the file's `plural()`. The local `TYPESAFE_API_KEY` is rejected (HTTP 401), so live
+      runs work only on production until Vedant replaces it.
 
 ---
 
@@ -1013,9 +1022,8 @@ Decided 2026-10-09 (planning, each as recommended):
 - **Privacy:** a `/privacy` page with a footer link, in plain words: what is stored, why, for how
   long, and a contact; the same text in the README. Each retention it states is checked in 10a.
 
-Before 10a: the Session 8 and 9 gates are recorded as passed (2026-10-09). Vedant runs the
-second live search, on a new topic, and 10a starts by checking its runs in `on_demand_runs`
-read-only (4 runs, the later three carrying the first one's id, `spent_usd` set on each).
+Before 10a: nothing. The Session 8 and 9 gates passed and both live searches are checked
+(2026-10-09). Items 198, 202 and 203 from those searches are in the review queue.
 
 ### Session 10a - Security audit and fixes
 
@@ -1216,3 +1224,7 @@ Vedant: the analytics page, the other v2 feature, moved into v1 as Session 9.)
   searches work; `on_demand_runs` checked read-only (the search id link, `spent_usd` set and
   equal to each run's cost), and the "This search" tab matched the stored runs. Session 8 and 9
   gates recorded as passed. Next: Vedant runs the second search (a new topic), then 10a.
+- 2026-10-09 - Session 9 (after close): pushed and deployed. Vedant ran the second search ("Red
+  light shift index", 4 runs, $0.152, 2 items in review, then the limit message); its runs check
+  out read-only and match his screenshots of "This search". Fixed "1 pages" in a run row. Next:
+  Session 10a.
