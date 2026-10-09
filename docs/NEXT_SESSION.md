@@ -13,8 +13,8 @@ into the next Claude Code session.
   checked read-only, and "This search" matched the stored runs each time:
   - Antimatter (a topic the bank had in part): 2 runs, $0.067, 1 item in review;
   - "Red light shift index" (new): 4 runs, $0.152, 2 items in review, then the limit message.
-- One small fix after the deploy is not committed yet: a run row in "This search" said "1 pages"
-  (`src/components/stats/SearchTab.tsx` now uses the file's `plural()`).
+- One small fix after the deploy, committed and pushed (`f48400e`): a run row in "This search"
+  said "1 pages"; `src/components/stats/SearchTab.tsx` now uses the file's `plural()`.
 - Session 10 is planned as 10a (security audit and fixes) and 10b (history scan, public repo,
   domain, README, OG image, privacy page), with Vedant's decisions in `docs/PLAN.md`.
 - The local `TYPESAFE_API_KEY` is still rejected (HTTP 401), so live searches work only on
@@ -31,12 +31,17 @@ into the next Claude Code session.
 > Read CLAUDE.md, docs/DESIGN.md, docs/PLAN.md and docs/NEXT_SESSION.md. Session 9 is closed,
 > and its gates passed.
 >
-> 1. Start Session 10a (security audit and fixes) as planned in docs/PLAN.md. Ask me its
->    decisions first, each with a recommendation. Record every finding in docs/SECURITY_AUDIT.md
->    with its fix and test, and fix every finding.
-> 2. Tests use the scripted fake model only (no paid calls). Run pnpm typecheck, pnpm test,
->    pnpm build, pytest, ruff and mypy --strict, and `python -m dev.check_stats` if
->    agent_stats() changes. Show me the changes before committing.
+> 1. Start Session 10a (security audit and fixes) as planned in docs/PLAN.md, with the two audit
+>    notes from docs/CODE_REVIEW_SESSION9.md on its list. Ask me its decisions first, each with a
+>    recommendation.
+> 2. Audit every area on the 10a list and record each finding in docs/SECURITY_AUDIT.md with
+>    its severity, where it is, and the fix you propose. Show me that list before fixing
+>    anything, and ask about any fix that needs a new tool, a paid feature or a change to a
+>    locked decision.
+> 3. Then fix every finding I approve, each with a test. Tests use the scripted fake model only
+>    (no paid calls). Run pnpm typecheck, pnpm test, pnpm build, pytest, ruff and
+>    mypy --strict, and `python -m dev.check_stats` if agent_stats() changes. Show me the
+>    changes before committing.
 >
 > Rules from CLAUDE.md apply: ask before adding any dependency, service or cost; no emojis;
 > complete files; commit only when I ask.
