@@ -64,8 +64,8 @@ function RunDetails({ run }: { run: SearchRun }) {
           <span className="font-heading font-bold">{itemLabel(run.key)}</span>
           <span className="font-pixel text-[8px] uppercase text-slate">{status}</span>
           <span className="ml-auto text-sm tabular-nums text-ink/90">
-            {stats.model_calls} calls, {runPages(stats)} pages, {formatSeconds(runSeconds(stats))},{" "}
-            {formatUsd(runUsd(stats))}
+            {plural(stats.model_calls, "call")}, {plural(runPages(stats), "page")},{" "}
+            {formatSeconds(runSeconds(stats))}, {formatUsd(runUsd(stats))}
           </span>
         </summary>
         <div className="space-y-6 border-t border-white/10 px-4 py-5">
