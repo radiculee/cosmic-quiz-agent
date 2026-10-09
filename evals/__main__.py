@@ -6,6 +6,7 @@ python -m evals verify-seeded RUN_DIR [--workers N] [--yes]
 python -m evals report RUN_DIR
 python -m evals rejev RUN_DIR --criteria astro-1 [--workers N] [--yes]
 python -m evals ontopic [--yes]
+python -m evals export [--out src/data/evals.json]
 """
 
 from __future__ import annotations
@@ -25,7 +26,7 @@ from agent.schemas import ItemRecord
 from agent.topic_check import JevTopicJudge, keyword_judge
 from agent.verifiers import JevClient, make_jev, verify
 from agent.verify import code_check
-from evals import ontopic, rejev
+from evals import export, ontopic, rejev
 from evals.report import write_report
 from evals.runner import estimate, new_run_dir, run_eval
 from evals.seeding import FAULT_TYPES, PER_FAULT, SeededItem, SeededResult, build_seeded_set
@@ -240,6 +241,16 @@ def command_ontopic(args: argparse.Namespace, settings: Settings) -> int:
     return 0
 
 
+def command_export(args: argparse.Namespace, settings: Settings) -> int:
+    history = export.collect()
+    path = export.write_history(history, Path(args.out))
+    print(
+        f"Wrote {len(history.generation)} eval run(s) and {len(history.ontopic)} on-topic "
+        f"check(s) to {path}"
+    )
+    return 0
+
+
 def rescore_seeded(result: SeededResult) -> SeededResult:
     return result.model_copy(update={"verification": rescore(result.verification)})
 
@@ -284,6 +295,11 @@ def main(argv: list[str] | None = None) -> int:
     )
     on_topic.add_argument("--yes", action="store_true")
 
+    history = commands.add_parser(
+        "export", help="Write the eval history for the analytics page (free)."
+    )
+    history.add_argument("--out", default=str(export.DEFAULT_OUT))
+
     args = parser.parse_args(argv)
     settings = load_settings()
     handlers = {
@@ -293,6 +309,7 @@ def main(argv: list[str] | None = None) -> int:
         "report": command_report,
         "rejev": command_rejev,
         "ontopic": command_ontopic,
+        "export": command_export,
     }
     return handlers[args.command](args, settings)
 

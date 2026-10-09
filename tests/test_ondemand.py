@@ -32,6 +32,7 @@ from agent.ondemand import (
     ResultEvent,
     SearchRequest,
     Services,
+    StatsEvent,
     plan_search,
     research,
     run_budget,
@@ -513,6 +514,46 @@ def test_a_discarded_item_is_reported_and_the_search_goes_on(
     ]
     assert len(store.payloads) == 4  # the discarded run is still stored
     assert store.finished[1][2] == "discarded"
+
+
+def test_every_run_that_made_a_record_sends_its_figures_before_its_item(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    script(monkeypatch, {"quiz-medium": "discarded"}, crash=frozenset({"quiz-hard"}))
+    live, _ = services()
+
+    events = list(research(SEARCH, live))
+
+    stats = of_type(events, StatsEvent)
+    # The discarded run cost money too, so it counts towards the search; the crashed run made
+    # no record, so it has no figures.
+    assert [(s.key, s.stats.mode, s.stats.status) for s in stats] == [
+        ("learn-medium", "learn", "published"),
+        ("quiz-medium", "quiz", "discarded"),
+        ("quiz-easy", "quiz", "published"),
+    ]
+    first_result = next(i for i, e in enumerate(events) if isinstance(e, ResultEvent))
+    assert events.index(stats[0]) < first_result
+    answer = quiz_record().run.answer
+    assert answer is not None and hasattr(answer, "options")
+    sent = json.dumps([event.model_dump(mode="json") for event in stats])
+    assert not any(option in sent for option in answer.options)
+
+
+def test_figures_that_cannot_be_built_never_cost_the_run(monkeypatch: pytest.MonkeyPatch) -> None:
+    script(monkeypatch)
+
+    def broken(record: ItemRecord) -> object:
+        raise ValueError("a bug in the figures")
+
+    monkeypatch.setattr(ondemand, "run_stats", broken)
+    live, store = services()
+
+    events = list(research(SEARCH, live))
+
+    assert of_type(events, StatsEvent) == []
+    assert [result.key for result in of_type(events, ResultEvent)] == EVERY_ITEM
+    assert [outcome for _, _, outcome, _ in store.finished] == ["published"] * 4
 
 
 def test_a_crashed_run_keeps_its_reservation_and_the_search_goes_on(

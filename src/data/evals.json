@@ -1,0 +1,131 @@
+{
+  "generation": [
+    {
+      "run": "20261001T131332Z-full",
+      "at": "2026-10-01T13:13:32Z",
+      "size": "full",
+      "model": "claude-haiku-4-5",
+      "jev_model": "jev-1.13.0",
+      "jev_criteria": "generic-1",
+      "gate_rule": "all_must_pass",
+      "items": 60,
+      "layer1_pass": 51,
+      "by_difficulty": [
+        {
+          "difficulty": "easy",
+          "items": 20,
+          "layer1_pass": 19
+        },
+        {
+          "difficulty": "medium",
+          "items": 20,
+          "layer1_pass": 19
+        },
+        {
+          "difficulty": "hard",
+          "items": 20,
+          "layer1_pass": 13
+        }
+      ],
+      "unfetched_urls": 0,
+      "verified": 51,
+      "haiku": {
+        "pass": 25,
+        "borderline": 23,
+        "fail": 3
+      },
+      "jev": {
+        "pass": 39,
+        "borderline": 9,
+        "fail": 3
+      },
+      "agreement": 31,
+      "gate": {
+        "published": 22,
+        "review": 25,
+        "discarded": 4
+      },
+      "seeded": [
+        {
+          "fault": "wrong_number",
+          "items": 10,
+          "layer1": 10,
+          "haiku": 9,
+          "jev": 9,
+          "handled": 10
+        },
+        {
+          "fault": "fake_quote",
+          "items": 10,
+          "layer1": 10,
+          "haiku": 3,
+          "jev": 2,
+          "handled": 10
+        },
+        {
+          "fault": "unsupported_claim",
+          "items": 10,
+          "layer1": 0,
+          "haiku": 8,
+          "jev": 7,
+          "handled": 8
+        },
+        {
+          "fault": "true_distractor",
+          "items": 10,
+          "layer1": 0,
+          "haiku": 9,
+          "jev": 10,
+          "handled": 10
+        }
+      ],
+      "calibration": [
+        {
+          "band": "0.00-0.60",
+          "claims": 13,
+          "right": 13
+        },
+        {
+          "band": "0.60-0.80",
+          "claims": 4,
+          "right": 2
+        },
+        {
+          "band": "0.80-0.90",
+          "claims": 11,
+          "right": 11
+        },
+        {
+          "band": "0.90-0.97",
+          "claims": 17,
+          "right": 14
+        },
+        {
+          "band": "0.97-1.00",
+          "claims": 159,
+          "right": 159
+        }
+      ],
+      "anthropic_usd": 1.97750605,
+      "typesafe_usd": 0.017815980000000002
+    }
+  ],
+  "ontopic": [
+    {
+      "run": "20261004T143850Z-ontopic",
+      "at": "2026-10-04T14:38:50Z",
+      "inputs": 44,
+      "on_topic": 23,
+      "judges": [
+        {
+          "judge": "jev",
+          "right": 44
+        },
+        {
+          "judge": "keywords",
+          "right": 18
+        }
+      ]
+    }
+  ]
+}

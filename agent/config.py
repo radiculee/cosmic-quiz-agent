@@ -42,6 +42,10 @@ PRICES: dict[str, ModelPrice] = {
 
 DEFAULT_MODEL = "claude-haiku-4-5"
 
+# The monthly spend limit set on the Anthropic Console workspace (CLAUDE.md hard rule 1).
+# Anthropic enforces it; it is kept here only so the analytics page can show spend against it.
+ANTHROPIC_MONTHLY_LIMIT_USD = 10.0
+
 # Versions of the verdict definitions sent to Jev (the wording is in agent/verifiers/jev.py).
 JevCriteria = Literal["generic-1", "astro-1"]
 

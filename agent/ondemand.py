@@ -19,6 +19,8 @@ at the chosen level and a QUIZ question at each level, leaving out any the bank 
 5. Each run is stored in the bank whatever the outcome, its real cost settles its reservation,
    and a published or review item is sent to the player. A quiz item comes without its answer
    and with a signed token that lets /api/reveal answer it once the player has picked.
+6. Each run that produced a record also sends what it measured (`agent/run_stats.py`), for the
+   analytics panel: numbers only, so nothing in it can give a quiz answer away.
 
 Every event after the plan that concerns one item names it (`key`, such as "quiz-easy").
 
@@ -49,6 +51,7 @@ from agent.llm import LLMProvider
 from agent.loop import run_learn, run_quiz
 from agent.publish import verify_and_decide
 from agent.rest import StoreError
+from agent.run_stats import RunStats, run_stats
 from agent.schemas import Difficulty, ItemRecord, JevVerdict, Mode, Step
 from agent.store import ItemPayload, OnDemandOutcome, RecordedIds, TopicRef, build_payload
 from agent.topic_check import TopicCheckError, TopicJudge
@@ -167,7 +170,20 @@ class MissedEvent(BaseModel):
     message: str
 
 
-ResearchEvent = PlanEvent | LogEvent | RejectedEvent | FallbackEvent | ResultEvent | MissedEvent
+class StatsEvent(BaseModel):
+    """What one run measured, for the analytics panel. Sent for every run that produced a
+    record, discarded ones included, so the search's totals hold everything it spent."""
+
+    model_config = ConfigDict(frozen=True)
+
+    type: Literal["stats"] = "stats"
+    key: str
+    stats: RunStats
+
+
+ResearchEvent = (
+    PlanEvent | LogEvent | RejectedEvent | FallbackEvent | ResultEvent | MissedEvent | StatsEvent
+)
 
 
 # --- What a search needs -----------------------------------------------------------------------
@@ -481,6 +497,7 @@ def _run_item(
         spent = record.anthropic_cost_usd
         status = record.status
         outcome = status if status in ("published", "review", "discarded") else "failed"
+        _emit_stats(planned, record, emit)
 
         # A topic the bank already has keeps its own kind (record_item matches it by name).
         topic = TopicRef(name=search.topic, kind="custom")
@@ -518,6 +535,17 @@ def _run_item(
         )
     finally:
         _settle(services, slot_id, spent, outcome, run_id)
+
+
+def _emit_stats(
+    planned: PlannedItem, record: ItemRecord, emit: Callable[[ResearchEvent | None], None]
+) -> None:
+    """Send what the run measured. Sent before the run is stored, so a run whose save fails
+    still shows its cost; a failure here only loses the figures, never the paid run."""
+    try:
+        emit(StatsEvent(key=planned.key, stats=run_stats(record)))
+    except Exception:
+        traceback.print_exc(file=sys.stderr)
 
 
 def _saved_detail(outcome: OnDemandOutcome) -> str:
