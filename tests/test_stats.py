@@ -18,7 +18,14 @@ from agent.llm import Usage
 from agent.rest import RestClient, StoreError
 from agent.run_stats import run_stats, tools_asked
 from agent.schemas import Step
-from agent.stats import ModelTokens, StatsFilters, StatsReader, Tokens, caching_savings
+from agent.stats import (
+    ModelTokens,
+    StatsFilters,
+    StatsReader,
+    Tokens,
+    caching_savings,
+    stats_reply,
+)
 from agent.web import ApiRequest
 from api import stats as stats_api
 from dev.api_server import ROUTES
@@ -231,8 +238,8 @@ def test_the_reader_calls_agent_stats_with_every_filter_named() -> None:
     "change",
     [
         lambda doc: doc["volume"].pop("gate"),  # a field the page needs is missing
-        lambda doc: doc["volume"].update(secret="x"),  # a field nobody asked for
         lambda doc: doc["verifiers"]["jev_confidence"].update(bins=[1, 2]),  # not ten bins
+        lambda doc: doc["volume"]["outcomes"].update(timed_out=1),  # an outcome with no words
     ],
 )
 def test_the_reader_refuses_a_reply_of_another_shape(
@@ -244,6 +251,23 @@ def test_the_reader_refuses_a_reply_of_another_shape(
 
     with pytest.raises(StoreError, match="statistics"):
         reader.agent_stats(StatsFilters())
+
+
+def test_the_reader_takes_a_reply_with_fields_added_later() -> None:
+    # A migration is pasted before the code that reads it deploys: the API must keep answering.
+    doc = deepcopy(SAMPLE)
+    doc["volume"]["added_later"] = 1
+    doc["filters"]["topic"] = None
+    doc["new_group"] = {"anything": 1}
+    reader, _ = stats_reader(doc)
+
+    stats = reader.agent_stats(StatsFilters())
+
+    assert stats.volume.runs == 3
+    # The new fields are not passed on until the models name them.
+    body = stats_reply(stats).model_dump(mode="json")
+    assert "added_later" not in body["stats"]["volume"] and "new_group" not in body["stats"]
+    assert "topic" not in body["stats"]["filters"]
 
 
 def test_caching_savings_price_tokens_with_and_without_the_cache() -> None:
@@ -327,6 +351,11 @@ def test_the_endpoint_answers_with_cacheable_aggregates_and_the_caps(
         {"source": "everyone"},
         {"days": "14"},  # only the periods the page offers
         {"days": "week"},
+        # Other spellings of 7 would each be another cache entry.
+        {"days": "07"},
+        {"days": "+7"},
+        {"days": " 7"},
+        {"days": "7.0"},
         {"page": "2"},  # unknown parameters would only make new cache entries
     ],
 )

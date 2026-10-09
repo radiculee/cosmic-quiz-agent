@@ -14,11 +14,11 @@ from __future__ import annotations
 
 import sys
 
-from pydantic import BaseModel, ConfigDict, ValidationError, field_validator
+from pydantic import BaseModel, ConfigDict, ValidationError
 
 from agent.rest import StoreError
 from agent.schemas import Difficulty, Mode
-from agent.stats import PERIODS, StatsFilters, StatsReader, stats_reply
+from agent.stats import Period, StatsFilters, StatsReader, stats_reply
 from agent.store import RunSource
 from agent.web import ApiRequest, ApiResponse, error_response, json_response, make_app
 
@@ -26,24 +26,21 @@ CACHE_SECONDS = 600
 
 
 class StatsQuery(BaseModel):
-    # Unknown parameters are refused rather than ignored, so they cannot make new cache entries.
+    # Unknown parameters and other spellings of a value are refused rather than read, so they
+    # cannot make new cache entries.
     model_config = ConfigDict(extra="forbid")
 
     mode: Mode | None = None
     difficulty: Difficulty | None = None
     source: RunSource | None = None
-    days: int | None = None
-
-    @field_validator("days")
-    @classmethod
-    def _offered_period(cls, days: int | None) -> int | None:
-        if days is not None and days not in PERIODS:
-            raise ValueError(f"days must be one of {PERIODS}")
-        return days
+    days: Period | None = None
 
     def filters(self) -> StatsFilters:
         return StatsFilters(
-            mode=self.mode, difficulty=self.difficulty, source=self.source, days=self.days
+            mode=self.mode,
+            difficulty=self.difficulty,
+            source=self.source,
+            days=None if self.days is None else int(self.days),
         )
 
 

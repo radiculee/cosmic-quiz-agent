@@ -24,9 +24,10 @@ from agent.rest import RETRIES, RestClient, StoreError, parse
 from agent.schemas import ClaimKind, Difficulty, JevVerdict, LayerVerdict, Mode, Outcome, Status
 from agent.store import RunSource
 
-# The ranges the page offers, in days; None is all time. agent_stats() accepts any number of
-# days, but the API takes only these, so each filter set is one edge-cache entry.
-PERIODS: tuple[int, ...] = (7, 30)
+# The ranges the page offers, in days, spelt as the API takes them; None is all time.
+# agent_stats() accepts any number of days, but the API takes only these spellings, so each
+# filter set is one edge-cache entry ("07", "+7" or "7.0" would each make another).
+Period = Literal["7", "30"]
 CONFIDENCE_BINS = 10
 
 BankStatus = Literal["published", "review", "discarded", "retired"]
@@ -35,7 +36,10 @@ BankStatus = Literal["published", "review", "discarded", "retired"]
 class StatsFilters(BaseModel):
     """Which runs the figures cover. None is "all"."""
 
-    model_config = ConfigDict(frozen=True, extra="forbid")
+    # agent_stats() echoes these in its reply, so extra keys are ignored for the reason given
+    # at `_Reply`. Code that builds one is still checked: mypy's pydantic plugin refuses an
+    # unknown keyword (pyproject.toml, init_forbid_extra).
+    model_config = ConfigDict(frozen=True, extra="ignore")
 
     mode: Mode | None = None
     difficulty: Difficulty | None = None
@@ -47,7 +51,13 @@ class StatsFilters(BaseModel):
 
 
 class _Reply(BaseModel):
-    model_config = ConfigDict(frozen=True, extra="forbid")
+    """Every field the page needs must be there with its type, but fields added later are
+    ignored. Migrations are pasted before the code that reads them deploys, so a new field in
+    agent_stats() must not take /api/stats down in between; it reaches the page only once these
+    models name it. (A new key in a count, such as a new outcome, is still refused: the page
+    has no words for it.)"""
+
+    model_config = ConfigDict(frozen=True, extra="ignore")
 
 
 class Percentiles(_Reply):
