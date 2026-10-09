@@ -84,6 +84,8 @@ describe("topic slugs", () => {
 function fakeHost(start = "/") {
   const target = new EventTarget();
   const entries = [start];
+  // Each entry's `history.state`, in step with `entries`.
+  const states: unknown[] = [null];
   let index = 0;
   const scrolls: number[] = [];
   const assigned: string[] = [];
@@ -106,12 +108,14 @@ function fakeHost(start = "/") {
   const host: RouterHost = {
     location,
     history: {
-      pushState: (_data: unknown, _unused: string, url?: string | URL | null) => {
+      pushState: (data: unknown, _unused: string, url?: string | URL | null) => {
         entries.splice(index + 1, entries.length, String(url));
+        states.splice(index + 1, states.length, data);
         index += 1;
       },
-      replaceState: (_data: unknown, _unused: string, url?: string | URL | null) => {
+      replaceState: (data: unknown, _unused: string, url?: string | URL | null) => {
         entries[index] = String(url);
+        states[index] = data;
       },
     },
     addEventListener: (type, listener) => target.addEventListener(type, listener),
@@ -123,7 +127,7 @@ function fakeHost(start = "/") {
     index -= 1;
     target.dispatchEvent(new Event("popstate"));
   };
-  return { host, entries, scrolls, assigned, back };
+  return { host, entries, states, scrolls, assigned, back };
 }
 
 describe("createHistoryRouter", () => {
@@ -167,6 +171,19 @@ describe("createHistoryRouter", () => {
     expect(entries).toEqual(["/learn/quasars"]);
     expect(scrolls).toEqual([]);
     expect(assigned).toEqual(["https://github.com/radiculee"]);
+  });
+
+  it("keeps a state on the entry it pushes or replaces, and none unless asked", () => {
+    const { host, entries, states } = fakeHost("/explore");
+    const router = createHistoryRouter(host);
+
+    router.navigate("/explore/stats", { state: { panel: "explore" } });
+    router.navigate("/quiz");
+    expect(states).toEqual([null, { panel: "explore" }, null]);
+
+    router.navigate("/learn", { replace: true, state: { from: "quiz" } });
+    expect(entries).toEqual(["/explore", "/explore/stats", "/learn"]);
+    expect(states).toEqual([null, { panel: "explore" }, { from: "quiz" }]);
   });
 });
 

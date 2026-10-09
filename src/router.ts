@@ -131,10 +131,18 @@ export interface RouterHost {
   scrollTo(x: number, y: number): void;
 }
 
+export interface NavigateOptions {
+  /** Replace the current history entry instead of adding one. */
+  replace?: boolean;
+  /** Kept on the history entry (`history.state`) through Back and Forward, so a page can tell
+   * later how the entry was made. */
+  state?: unknown;
+}
+
 export interface HistoryRouter {
   /** The current path and query, e.g. "/explore?topic=Pulsars". */
   current(): string;
-  navigate(to: string, options?: { replace?: boolean }): void;
+  navigate(to: string, options?: NavigateOptions): void;
   /** Call `listener` after every navigation, including Back and Forward. */
   subscribe(listener: () => void): () => void;
 }
@@ -144,7 +152,7 @@ const NAVIGATED = "cosmic-quiz:navigated";
 export function createHistoryRouter(host: RouterHost): HistoryRouter {
   return {
     current: () => host.location.pathname + host.location.search,
-    navigate(to, { replace = false } = {}) {
+    navigate(to, { replace = false, state = null } = {}) {
       const url = new URL(to, host.location.href);
       if (url.origin !== host.location.origin) {
         host.location.assign(url.href);
@@ -156,9 +164,9 @@ export function createHistoryRouter(host: RouterHost): HistoryRouter {
         return;
       }
       if (replace) {
-        host.history.replaceState(null, "", target);
+        host.history.replaceState(state, "", target);
       } else {
-        host.history.pushState(null, "", target);
+        host.history.pushState(state, "", target);
         // A new page starts at the top. Back and Forward keep the browser's own scroll handling.
         host.scrollTo(0, 0);
       }
@@ -183,7 +191,7 @@ function browser(): HistoryRouter {
 }
 
 /** Go to a path in this app without reloading the page. */
-export function navigate(to: string, options?: { replace?: boolean }): void {
+export function navigate(to: string, options?: NavigateOptions): void {
   browser().navigate(to, options);
 }
 

@@ -41,8 +41,21 @@ export function StatsPanel({
   const titleId = useId();
   const panelId = useId();
   const hasSearch = search !== null && (running || search.runs.length > 0);
+  // Whether this panel has asked to leave /explore/stats and the address has not changed yet.
+  const leaving = useRef(false);
+
+  /** Leave /explore/stats once per close. Going Back takes effect a moment later, so `open` is
+   * still true in between, and Esc can bring both a cancel and a close event: when the browser
+   * does not let the cancel be prevented, it closes the dialog straight after. */
+  function requestClose() {
+    if (!leaving.current) {
+      leaving.current = true;
+      onClose();
+    }
+  }
 
   useEffect(() => {
+    leaving.current = false;
     const element = dialog.current;
     if (!element) {
       return;
@@ -54,9 +67,13 @@ export function StatsPanel({
       setTab(hasSearch ? "search" : "agent");
       element.showModal();
       element.scrollTop = 0;
-    } else if (!open && element.open) {
-      element.close();
+    } else if (!open) {
+      // The browser may have closed the dialog already (see onClose below).
+      if (element.open) {
+        element.close();
+      }
       const back = returnFocus.current;
+      returnFocus.current = null;
       if (back?.isConnected) {
         back.focus({ preventScroll: true });
       }
@@ -85,7 +102,16 @@ export function StatsPanel({
       // Esc goes back through the address, like Close and Back, so all three agree.
       onCancel={(event) => {
         event.preventDefault();
-        onClose();
+        requestClose();
+      }}
+      // A browser can also close a modal dialog without a cancel event (its rules for repeated
+      // close requests), which would leave the address on /explore/stats with the panel shut. A
+      // close the panel did not make goes through the address too; its own comes once `open` is
+      // false.
+      onClose={() => {
+        if (open) {
+          requestClose();
+        }
       }}
       className="m-0 h-dvh max-h-none w-full max-w-none overscroll-contain bg-void p-0 text-ink backdrop:bg-void"
     >
@@ -97,7 +123,7 @@ export function StatsPanel({
             </span>
             <button
               type="button"
-              onClick={onClose}
+              onClick={requestClose}
               className={`${SECONDARY_BUTTON} px-4 py-2.5 text-[9px]`}
             >
               Close

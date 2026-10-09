@@ -8,6 +8,7 @@ import { QuizCard } from "../components/QuizCard";
 import { SegmentedControl } from "../components/SegmentedControl";
 import { TopicInput } from "../components/TopicInput";
 import { type AnswerScore, scoreAnswer } from "../game";
+import { isPlainObject } from "../guards";
 import { afterAnswer, afterLearn, afterLiveRun } from "../profile";
 import { GLOBAL_CAP_NOTICE, quotaLine } from "../quota";
 import { navigate, PATHS, useLocation, usePageTitle } from "../router";
@@ -68,6 +69,14 @@ function isDifficulty(value: string | null): value is Difficulty {
 const ENDED_EARLY = "The search ended before this was made.";
 const UNAVAILABLE = "Live research is not available right now.";
 
+/** The mark on the history entry that the Analytics for nerds button adds. It stays on that
+ * entry through Back and Forward, so Close can tell that Back leads to this page. */
+const PANEL_OPENED_HERE = { panel: "explore" } as const;
+
+function openedHere(state: unknown): boolean {
+  return isPlainObject(state) && state.panel === PANEL_OPENED_HERE.panel;
+}
+
 /**
  * The web page: a search researches a topic live and makes the whole of it, one agent run at a
  * time: the explanation at the chosen level, then a question at each level, the chosen level
@@ -117,23 +126,15 @@ export function ExplorePage({
   const awaitingAnswer = useRef(false);
   // A search counts once towards Web researcher, with its first live item.
   const counted = useRef(false);
-  // Whether this page opened the panel, so closing it can go Back rather than add a history entry.
-  const openedPanel = useRef(false);
-
-  useEffect(() => {
-    if (!statsOpen) {
-      openedPanel.current = false;
-    }
-  }, [statsOpen]);
 
   function openStats() {
-    openedPanel.current = true;
-    navigate(PATHS.exploreStats);
+    navigate(PATHS.exploreStats, { state: PANEL_OPENED_HERE });
   }
 
+  /** Back, when the button opened the panel, so no history entry is added. A shared link or a
+   * new tab has no web page to go back to, so the address is replaced with /explore instead. */
   function closeStats() {
-    if (openedPanel.current) {
-      openedPanel.current = false;
+    if (openedHere(window.history.state)) {
       window.history.back();
     } else {
       navigate(PATHS.explore, { replace: true });
@@ -422,7 +423,11 @@ export function ExplorePage({
           {quota.global_open ? quotaLine(quota) : GLOBAL_CAP_NOTICE}
         </p>
       )}
-      <button type="button" onClick={openStats} className={`${SECONDARY_BUTTON} mt-6 px-4 py-3 text-[9px]`}>
+      <button
+        type="button"
+        onClick={openStats}
+        className={`${SECONDARY_BUTTON} mt-6 px-4 py-3 text-[9px]`}
+      >
         Analytics for nerds
       </button>
 
