@@ -34,3 +34,6 @@ evals/results/
 
 # Agent run logs (local spike and CLI output)
 runs/
+
+# Full-size scene masters; only the web sizes in public/scenes/ are committed
+bg_images/

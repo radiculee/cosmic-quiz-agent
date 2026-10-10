@@ -8,6 +8,16 @@
       content="An astronomy quiz written by an AI agent that checks every answer against the pages it read."
     />
     <title>Cosmic Quiz</title>
+    <meta name="theme-color" content="#021a3d" />
+    <!-- The first scene, at the width the screen needs (src/slideshow.ts: SCENES[0], SCENE_SIZES). -->
+    <link
+      rel="preload"
+      as="image"
+      type="image/webp"
+      imagesrcset="/scenes/observatory-v1-1280.webp 1280w, /scenes/observatory-v1-1920.webp 1920w, /scenes/observatory-v1-2560.webp 2560w"
+      imagesizes="(max-aspect-ratio: 4/3) 100vw, (max-aspect-ratio: 85/48) 178vh, 100vw"
+      fetchpriority="high"
+    />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link

@@ -1,5 +1,6 @@
-"""Deployment packaging: the two dependency lists must not drift apart, and every response
-carries the security headers (docs/SECURITY_AUDIT.md S5)."""
+"""Deployment packaging: the two dependency lists must not drift apart, every response carries
+the security headers (docs/SECURITY_AUDIT.md S5), and the scene images are small, real WebP
+files that the app names and Vercel caches for good."""
 
 from __future__ import annotations
 
@@ -75,3 +76,76 @@ def test_the_page_has_no_inline_script_the_policy_would_block() -> None:
     assert scripts, "the page loads its bundle with a script tag"
     for attributes, body in scripts:
         assert 'src="' in attributes and not body.strip()
+
+
+# --- Scenes (public/scenes, src/slideshow.ts) -------------------------------------------------
+
+SCENES = ROOT / "public" / "scenes"
+SCENE_BUDGET = 350 * 1024
+# The masters are 2720 x 1536; every web size keeps that shape.
+MASTER_WIDTH, MASTER_HEIGHT = 2720, 1536
+SCENE_PATH = re.compile(r"/scenes/[a-z0-9-]+[.](?:webp|jpg)")
+SCENE_NAME = re.compile(r"(?P<scene>[a-z]+)-v(?P<version>[0-9]+)-(?P<width>[0-9]+)[.](?:webp|jpg)")
+JPEG_START = bytes([0xFF, 0xD8, 0xFF])
+
+
+def _webp_size(data: bytes) -> tuple[int, int]:
+    """Width and height from a WebP file's header, for each of its three encodings."""
+    assert data[:4] == b"RIFF" and data[8:12] == b"WEBP", "not a WebP file"
+    chunk = data[12:16]
+    if chunk == b"VP8 ":  # lossy
+        return (
+            int.from_bytes(data[26:28], "little") & 0x3FFF,
+            int.from_bytes(data[28:30], "little") & 0x3FFF,
+        )
+    if chunk == b"VP8L":  # lossless
+        bits = int.from_bytes(data[21:25], "little")
+        return (bits & 0x3FFF) + 1, ((bits >> 14) & 0x3FFF) + 1
+    if chunk == b"VP8X":  # extended
+        return (
+            int.from_bytes(data[24:27], "little") + 1,
+            int.from_bytes(data[27:30], "little") + 1,
+        )
+    raise AssertionError(f"unknown WebP chunk {chunk!r}")
+
+
+def _scene_files() -> list[Path]:
+    files = sorted(SCENES.iterdir())
+    assert files, "public/scenes has no images"
+    return files
+
+
+def test_every_scene_is_a_small_webp_at_the_width_its_name_says() -> None:
+    for file in _scene_files():
+        name = SCENE_NAME.fullmatch(file.name)
+        assert name, f"{file.name} does not follow <scene>-v<version>-<width>.<ext>"
+        data = file.read_bytes()
+        assert len(data) <= SCENE_BUDGET, f"{file.name} is {len(data) // 1024} KB"
+        if file.suffix == ".jpg":
+            assert data.startswith(JPEG_START), f"{file.name} is not a JPEG"
+            continue
+        width, height = _webp_size(data)
+        assert width == int(name["width"]), f"{file.name} is {width} px wide"
+        assert abs(height - round(width * MASTER_HEIGHT / MASTER_WIDTH)) <= 1, file.name
+
+
+def test_every_scene_the_app_names_exists_and_no_file_is_left_unused() -> None:
+    sources = [ROOT / "index.html", *(ROOT / "src").rglob("*.ts"), *(ROOT / "src").rglob("*.tsx")]
+    sources.append(ROOT / "src" / "index.css")
+    named = {match for source in sources for match in SCENE_PATH.findall(source.read_text("utf-8"))}
+
+    assert named, "nothing names a scene"
+    for scene in sorted(named):
+        assert (ROOT / "public" / scene.lstrip("/")).is_file(), f"{scene} is named but missing"
+    shipped = {f"/scenes/{file.name}" for file in _scene_files()}
+    assert shipped == named, f"in public/scenes but never used: {sorted(shipped - named)}"
+
+
+def test_scenes_are_cached_for_good_and_keep_the_security_headers() -> None:
+    config = json.loads((ROOT / "vercel.json").read_text(encoding="utf-8"))
+    rules = {rule["source"]: rule["headers"] for rule in config["headers"]}
+    cache = {header["key"]: header["value"] for header in rules["/scenes/(.*)"]}
+
+    # Safe because a changed image gets a new name (the -v1- in each file name).
+    assert cache["Cache-Control"] == "public, max-age=31536000, immutable"
+    assert "/(.*)" in rules  # the security headers still cover the scenes too
