@@ -11,6 +11,7 @@ import functools
 import json
 from collections.abc import Callable, Generator
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Any
 
 import httpx2
@@ -19,7 +20,7 @@ import pytest
 import agent.ondemand as ondemand
 from agent.bank import BankTopic, LearnItem, QuizQuestion, ShownStatus, SourceCheck
 from agent.config import Settings
-from agent.limits import LIMITS, LimitName, LimitSettings, RunSlot
+from agent.limits import LIMIT_MESSAGES, LIMITS, LimitName, LimitSettings, OnDemandUsage, RunSlot
 from agent.loop import run_learn, run_quiz
 from agent.ondemand import (
     FallbackEvent,
@@ -225,6 +226,17 @@ class FakeStore:
     finished: list[tuple[int, float, OnDemandOutcome, int | None]] = field(default_factory=list)
     payloads: list[ItemPayload] = field(default_factory=list)
     calls: list[str] = field(default_factory=list)
+    # What the limits have counted so far today and this month, read before the paid check.
+    usage: OnDemandUsage = field(
+        default_factory=lambda: OnDemandUsage(
+            visitor_searches_today=0, searches_today=0, usd_today=0.0, usd_this_month=0.0
+        )
+    )
+
+    def on_demand_usage(self, user_hash: str, now: datetime) -> OnDemandUsage:
+        if self.down:
+            raise StoreError("down")
+        return self.usage
 
     def begin_on_demand_run(
         self,
@@ -471,6 +483,39 @@ def test_a_visitor_over_the_daily_limit_keeps_what_the_bank_has() -> None:
     assert isinstance(last, FallbackEvent) and last.reason == "limit"
     assert "2 live searches today" in last.message
     assert store.finished == []
+
+
+@pytest.mark.parametrize(
+    ("counted", "limit"),
+    [
+        ({"visitor_searches_today": 2}, "user_day"),
+        ({"searches_today": 4}, "day_searches"),
+        ({"usd_today": 0.34, "usd_this_month": 0.34}, "day_usd"),
+        ({"usd_this_month": 3.90}, "month_usd"),
+    ],
+)
+def test_a_search_the_limits_would_refuse_never_pays_for_the_topic_check(
+    counted: dict[str, float], limit: LimitName
+) -> None:
+    usage = OnDemandUsage.model_validate(
+        {
+            "visitor_searches_today": 0,
+            "searches_today": 0,
+            "usd_today": 0.0,
+            "usd_this_month": 0.0,
+            **counted,
+        }
+    )
+    judge = FakeJudge(ACCEPT)
+    live, store = services(judge, store=FakeStore(usage=usage))
+
+    events = list(research(SEARCH, live))
+
+    assert isinstance(events[0], PlanEvent)
+    last = events[-1]
+    assert isinstance(last, FallbackEvent) and last.reason == "limit"
+    assert last.message == LIMIT_MESSAGES[limit]
+    assert judge.topics == [] and store.began == []  # nothing paid, nothing reserved
 
 
 def test_an_off_topic_search_is_rejected_before_anything_is_reserved() -> None:

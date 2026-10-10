@@ -99,24 +99,44 @@ def month_start(now: datetime) -> datetime:
     return day_start(now).replace(day=1)
 
 
-def quota(usage: OnDemandUsage, limits: LimitSettings, reserve_usd: float, now: datetime) -> Quota:
-    """The visitor's quota. The global check repeats `begin_on_demand_run`'s for a search's
-    first run (migration 006), so the page says "paused" exactly when a search would be refused;
+def _fits(spent: float, reserve_usd: float, cap: float) -> bool:
+    # Rounded as the reservation is sent to the database, so float noise cannot tip it.
+    return round(spent + reserve_usd, 6) <= cap
+
+
+def global_limit(
+    usage: OnDemandUsage, limits: LimitSettings, reserve_usd: float
+) -> LimitName | None:
+    """The global cap that would refuse a new search now, or None. It repeats
+    `begin_on_demand_run`'s checks for a search's first run (migration 006), in the same order;
     the database still decides."""
+    if usage.searches_today >= limits.searches_per_day:
+        return "day_searches"
+    if not _fits(usage.usd_today, reserve_usd, limits.usd_per_day):
+        return "day_usd"
+    if not _fits(usage.usd_this_month, reserve_usd, limits.usd_per_month):
+        return "month_usd"
+    return None
 
-    def fits(spent: float, cap: float) -> bool:
-        # Rounded as the reservation is sent to the database, so float noise cannot tip it.
-        return round(spent + reserve_usd, 6) <= cap
 
+def search_limit(
+    usage: OnDemandUsage, limits: LimitSettings, reserve_usd: float
+) -> LimitName | None:
+    """The limit that would refuse this visitor's new search now, or None: their own daily
+    searches first, as the database checks them, then the global caps."""
+    if usage.visitor_searches_today >= limits.user_searches_per_day:
+        return "user_day"
+    return global_limit(usage, limits, reserve_usd)
+
+
+def quota(usage: OnDemandUsage, limits: LimitSettings, reserve_usd: float, now: datetime) -> Quota:
+    """The visitor's quota. The page says "paused" exactly when the global caps would refuse a
+    search (`global_limit`)."""
     return Quota(
         remaining=max(0, limits.user_searches_per_day - usage.visitor_searches_today),
         limit=limits.user_searches_per_day,
         resets_at=day_start(now) + timedelta(days=1),
-        global_open=(
-            usage.searches_today < limits.searches_per_day
-            and fits(usage.usd_today, limits.usd_per_day)
-            and fits(usage.usd_this_month, limits.usd_per_month)
-        ),
+        global_open=global_limit(usage, limits, reserve_usd) is None,
     )
 
 

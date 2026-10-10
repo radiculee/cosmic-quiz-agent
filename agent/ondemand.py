@@ -7,7 +7,8 @@ at the chosen level and a QUIZ question at each level, leaving out any the bank 
 1. The plan: which items the search makes live and which the bank already has (free). When the
    bank has them all, that is the whole search: free, and not counted.
 2. The on-topic check (`agent/topic_check.py`) rejects anything that is not a plain astronomy
-   or space topic. It runs once per search.
+   or space topic. It runs once per search, and only after the visitor's limits and the global
+   caps are read: it is paid, so a search they would refuse ends before it.
 3. The first run is reserved, which opens the search and counts it against the visitor's daily
    limit and everyone's (`agent/limits.py`, migration 006). Over a limit, the player keeps what
    the bank has.
@@ -39,6 +40,7 @@ import time
 import traceback
 from collections.abc import Callable, Generator
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import Literal, Protocol
 from urllib.parse import urlsplit
 
@@ -46,7 +48,7 @@ from pydantic import BaseModel, ConfigDict
 
 from agent.bank import DIFFICULTY_ORDER, BankTopic, LearnItem, QuizQuestion
 from agent.config import Settings
-from agent.limits import LIMIT_MESSAGES, LimitSettings, RunSlot
+from agent.limits import LIMIT_MESSAGES, LimitSettings, OnDemandUsage, RunSlot, search_limit
 from agent.llm import LLMProvider
 from agent.loop import run_learn, run_quiz
 from agent.publish import verify_and_decide
@@ -190,6 +192,8 @@ ResearchEvent = (
 
 
 class LiveStore(Protocol):
+    def on_demand_usage(self, user_hash: str, now: datetime) -> OnDemandUsage: ...
+
     def begin_on_demand_run(
         self,
         user_hash: str,
@@ -322,6 +326,19 @@ def research(request: SearchRequest, services: Services) -> Generator[ResearchEv
     live = tuple(item for item in plan if item.source == "live")
     if not live:
         return  # the bank has the whole topic: free, and not counted
+
+    # The on-topic check is paid, so a search the limits would refuse ends before it
+    # (docs/SECURITY_AUDIT.md S3). The database still decides when the first run starts.
+    try:
+        usage = services.store.on_demand_usage(request.visitor, datetime.now(UTC))
+    except StoreError as error:
+        print(f"live search: could not read the limits: {error}", file=sys.stderr)
+        yield _unavailable()
+        return
+    refused = search_limit(usage, services.limits, services.settings.max_job_cost_usd)
+    if refused is not None:
+        yield FallbackEvent(reason="limit", message=LIMIT_MESSAGES[refused])
+        return
 
     try:
         verdict = services.judge.judge(topic)
