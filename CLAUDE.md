@@ -10,7 +10,7 @@ Persistent context for Claude Code. Read this, then `docs/DESIGN.md` and `docs/P
 Developer. An autonomous astronomy and space AI agent, surfaced as a Learn / Quiz web game.
 
 - **v1:** a Learn / Quiz web game on separate pages with real URLs. (Changed 2026-10-08 by Vedant; it was one Speedrun-style page.)
-  - Home: Learn and Quiz cards, a smaller "Try a new topic from the web" card, and the rank, points and a trophy shelf.
+  - Home: a full-screen hero over a slideshow of Vedant's scenes, with the title, the tagline and a compact row of Learn, Quiz and "Try a new topic" (from the web); the rank, points and a trophy shelf in a card below the fold. (Changed 2026-10-10 by Vedant; inner pages show the observatory scene as a still.)
   - Learn: a searchable grid of bank topics. Each gives a plain-language explanation with cited sources, at its own URL.
   - Quiz: runs of 10, 30 or 60 four-option MCQs, each on a different topic, against the clock. After each answer, the game shows the explanation and cited sources.
   - The web page (`/explore`): a typed topic researched live by the agent, behind guardrails. It also opens "Analytics for nerds", the agent's measured statistics by mode and difficulty (Session 9).
@@ -86,15 +86,22 @@ Vercel Python function (`api/research.py`), behind guardrails, with steps stream
 ## Design tokens (shared with the portfolio)
 
 ```
---bg-void        #05050A   page background
+--bg-void        #05050A   the analytics panel, inputs and tiles (the page shows a scene)
 --surface        #0D1117   cards, panels
 --accent-teal    #4ECDC4   primary accent (replaces the lime in the Speedrun mock)
 --accent-rust    #C1440E   secondary accent
 --accent-gold    #F5E6C8   star highlights, sparing use
 --muted-lavender #7B6B8A   midtones
 --text-primary   #F0EDE8   near-white, warm
---text-secondary #8B9BAA   slate grey body
+--text-secondary #8B9BAA   slate grey body (inside cards only, never on a scene)
+--sky-top        #021A3D   the page top above a scene on tall screens
+--sky-edge       #033770   the scenes' top edge, where the sky gradient meets the image
 ```
+
+Scenes (2026-10-10, `docs/PLAN.md` "Scenes"): the page background is Vedant's AI-generated
+scenes (`public/scenes/`, not covered by the MIT licence). Cards and controls on a scene are
+solid `--surface`; text straight on a scene is ink with a soft shadow (`on-scene`,
+`on-scene-muted`), and small lines below a page's intro sit on solid chips (`scene-note`).
 
 Fonts (Google Fonts):
 - Headings: **Space Grotesk** Bold.

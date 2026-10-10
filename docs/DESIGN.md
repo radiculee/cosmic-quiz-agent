@@ -15,8 +15,9 @@ runs on a schedule with no human trigger), and code that reads well to recruiter
 1. **Audience:** Vedant first, public later. Build for one user; keep the data model public-ready (opt-in, unsubscribe, GDPR).
 2. **Domain:** astronomy and space only.
 3. **Models:** Claude Code builds it. At runtime, `claude-haiku-4-5` for every step via the `anthropic` SDK, behind the provider interface in `agent/llm.py` (the model is config). Changed 2026-10-01; it was OpenRouter free models. See `docs/PLAN.md`.
-4. **UI:** separate pages with real URLs, styled with the portfolio tokens (void background, surface panels, teal accent, Space Grotesk headings, Press Start 2P only for small labels). Changed 2026-10-08 by Vedant; it was one page modelled on the "Wikipedia Speedrun" screenshot, with `[EASY|MEDIUM|HARD]`, `[LEARN|QUIZ]`, a topic input, `[Random topic]` and `[GO]`. Details in `docs/PLAN.md` Session 8.
-   - Home (`/`): Learn and Quiz as two large cards, "Try a new topic from the web" as a smaller card showing the visitor's live runs left today, then the rank, points and a trophy shelf.
+4. **UI:** separate pages with real URLs, styled with the portfolio tokens (surface panels, teal accent, Space Grotesk headings, Press Start 2P only for small labels) over scene backgrounds (2026-10-10; it was the void background). Changed 2026-10-08 by Vedant; it was one page modelled on the "Wikipedia Speedrun" screenshot, with `[EASY|MEDIUM|HARD]`, `[LEARN|QUIZ]`, a topic input, `[Random topic]` and `[GO]`. Details in `docs/PLAN.md` Session 8.
+   - Home (`/`): a full-screen hero over a slideshow of scenes: the title, the tagline and a compact row of the three ways in (Learn, Quiz, and "Try a new topic" from the web with the visitor's searches left today), a "Your progress" link and the slideshow's pause control. Just below the fold, one solid card holds the rank, points, trophy shelf and the bank's size. (Changed 2026-10-10 by Vedant; it was Learn and Quiz as two large cards and a smaller web card, then the progress.)
+   - Scenes (decided 2026-10-10, `docs/PLAN.md` "Scenes"): Vedant's AI-generated scenes replace the flat void background, as a fixed layer the content scrolls over. Home rotates three (the observatory, the piano, the glasshouse) every 10 s with a 1.5 s crossfade, never under reduced motion, while paused or in a hidden tab; every other page shows the observatory still. Cards and controls on a scene are solid; text straight on it is ink with a soft shadow, and small lines below a page's intro sit on solid chips. The art is not covered by the MIT licence.
    - Learn (`/learn`, `/learn/<topic-slug>`): a difficulty switch, a searchable grid of bank topics (read ones ticked) and Random. Each topic's explanation and sources has its own URL.
    - Quiz (`/quiz`): a difficulty and a run of 10, 30 or 60 questions, each on a different random topic (unplayed first). A length is offered only when the bank has that many topics at that difficulty.
    - The web page (`/explore`): a typed topic researched live (decision 9). A search makes the explanation at the chosen level and a question at each level, all shown on the page and stored in the bank (changed later on 2026-10-08 by Vedant; it was one explanation or one question). "Analytics for nerds" opens from it at `/explore/stats` (`docs/PLAN.md` Session 9): each of its two tabs opens on four key figures, with the rest in closed rows (decided by Vedant on 2026-10-08).
@@ -128,7 +129,10 @@ src/                   Vite + React UI: router.ts (History-API router), pages/ (
                        (tiers and what was just earned), profile.ts (progress in localStorage),
                        search.ts (a live search's items as the web page shows them), components/,
                        stats.ts and charts/ (Analytics for nerds, hand-written SVG), data/evals.json
-                       (the eval history, built in)
+                       (the eval history, built in), slideshow.ts and components/Scene.tsx (the
+                       scenes behind every page)
+public/scenes/         the scene images at 1280, 1920 and 2560 px (WebP), versioned names; the
+                       masters stay outside git (bg_images/)
 supabase/schema.sql    topics, items, sources, claim_checks (per-claim results of all three layers,
                        incl. Jev verdict, confidence, probabilities and model version), runs,
                        curator_runs, cited_pages, reports, rate_limits, on_demand_runs
