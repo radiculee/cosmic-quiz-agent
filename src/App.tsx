@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { Scene } from "./components/Scene";
+import { SiteFooter } from "./components/SiteFooter";
 import { SiteHeader } from "./components/SiteHeader";
 import { TrophyPopup } from "./components/TrophyPopup";
 import type { PageProps } from "./pages/common";
@@ -8,6 +9,7 @@ import { ExplorePage } from "./pages/ExplorePage";
 import { HomePage, type SlideshowControl } from "./pages/HomePage";
 import { LearnPage } from "./pages/LearnPage";
 import { NotFoundPage } from "./pages/NotFoundPage";
+import { PrivacyPage } from "./pages/PrivacyPage";
 import { QuizPage } from "./pages/QuizPage";
 import { TrophiesPage } from "./pages/TrophiesPage";
 import { matchRoute, PATHS, type Route, useLocation } from "./router";
@@ -36,6 +38,8 @@ function page(route: Route, props: PageProps, slideshow: SlideshowControl | null
       return <ExplorePage {...props} statsOpen={route.page === "explore-stats"} />;
     case "trophies":
       return <TrophiesPage topicsState={props.topicsState} profile={props.profile} />;
+    case "privacy":
+      return <PrivacyPage />;
     case "not-found":
       return <NotFoundPage />;
   }
@@ -102,6 +106,7 @@ export function App() {
         >
           {page(route, props, slideshow)}
         </main>
+        <SiteFooter />
         <TrophyPopup awards={popups[0]} onClose={closePopup} />
       </div>
     </>

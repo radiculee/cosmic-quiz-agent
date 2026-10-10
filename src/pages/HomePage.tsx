@@ -7,7 +7,7 @@ import { PATHS, usePageTitle } from "../router";
 import { prefersReducedMotion } from "../useBrowserState";
 import { loadedTopics } from "../useTopics";
 import { useQuota } from "../useQuota";
-import type { PageProps } from "./common";
+import { type PageProps, SCENE_CHIP } from "./common";
 
 /** The slideshow's pause control, for the hero. Null when it does not rotate (reduced motion). */
 export interface SlideshowControl {
@@ -16,8 +16,6 @@ export interface SlideshowControl {
 }
 
 const PROGRESS_ID = "progress";
-const CHIP =
-  "flex items-center gap-2 rounded-sm border border-white/15 bg-surface px-3 py-2 font-pixel text-[8px] uppercase text-ink transition-colors hover:border-white/40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal";
 
 /**
  * The front page. The first screen is a hero over the scene slideshow: the title, the tagline and
@@ -86,7 +84,7 @@ export function HomePage({
         </nav>
 
         <div className="absolute inset-x-0 bottom-5 flex items-center justify-between gap-4">
-          <a href={`#${PROGRESS_ID}`} onClick={toProgress} className={CHIP}>
+          <a href={`#${PROGRESS_ID}`} onClick={toProgress} className={SCENE_CHIP}>
             <svg viewBox="0 0 10 6" width="10" height="6" fill="currentColor" aria-hidden="true">
               <path d="M0 0h2v2H0zM2 2h2v2H2zM4 4h2v2H4zM6 2h2v2H6zM8 0h2v2H8z" />
             </svg>
@@ -97,7 +95,7 @@ export function HomePage({
               type="button"
               onClick={slideshow.onToggle}
               aria-label={slideshow.paused ? "Play the background slideshow" : "Pause the background slideshow"}
-              className={CHIP}
+              className={SCENE_CHIP}
             >
               <svg viewBox="0 0 8 8" width="8" height="8" fill="currentColor" aria-hidden="true">
                 <path d={slideshow.paused ? "M1 0h2v8H1zM3 1h2v6H3zM5 2h2v4H5zM7 3h1v2H7z" : "M1 0h2v8H1zM5 0h2v8H5z"} />

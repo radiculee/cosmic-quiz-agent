@@ -20,6 +20,7 @@ describe("matchRoute", () => {
     expect(matchRoute("/explore")).toEqual({ page: "explore" });
     expect(matchRoute("/explore/stats")).toEqual({ page: "explore-stats" });
     expect(matchRoute("/trophies")).toEqual({ page: "trophies" });
+    expect(matchRoute("/privacy")).toEqual({ page: "privacy" });
     expect(matchRoute("/learn/black-holes")).toEqual({ page: "learn-topic", slug: "black-holes" });
   });
 

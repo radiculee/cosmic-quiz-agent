@@ -20,6 +20,7 @@ export type Route =
   /** The analytics panel, over the web page (which stays mounted, so a search keeps going). */
   | { page: "explore-stats" }
   | { page: "trophies" }
+  | { page: "privacy" }
   | { page: "not-found" };
 
 export const PATHS = {
@@ -29,6 +30,7 @@ export const PATHS = {
   explore: "/explore",
   exploreStats: "/explore/stats",
   trophies: "/trophies",
+  privacy: "/privacy",
 } as const;
 
 const LEARN_PREFIX = "/learn/";
@@ -52,6 +54,8 @@ export function matchRoute(pathname: string): Route {
       return { page: "explore-stats" };
     case PATHS.trophies:
       return { page: "trophies" };
+    case PATHS.privacy:
+      return { page: "privacy" };
   }
   if (path.startsWith(LEARN_PREFIX)) {
     const slug = safeDecode(path.slice(LEARN_PREFIX.length)).toLowerCase();

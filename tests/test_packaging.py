@@ -193,3 +193,21 @@ def test_the_page_loads_nothing_from_another_site() -> None:
     config = json.loads((ROOT / "vercel.json").read_text(encoding="utf-8"))
     sources = {rule["source"]: rule["headers"] for rule in config["headers"]}
     assert sources["/fonts/(.*)"] == sources["/scenes/(.*)"]  # cached for good: names carry -v1-
+
+
+# --- The privacy page (src/pages/PrivacyPage.tsx) -----------------------------------------------
+
+
+def test_the_privacy_page_states_the_retention_the_database_applies() -> None:
+    page = (ROOT / "src" / "pages" / "PrivacyPage.tsx").read_text(encoding="utf-8")
+    schema = (ROOT / "supabase" / "schema.sql").read_text(encoding="utf-8")
+    start = schema.index("create or replace function public.purge_visitor_hashes()")
+    purge = schema[start : schema.index("$$;", start)]
+    words = " ".join(page.split())  # the page wraps its sentences across lines
+
+    # Live runs' codes and request windows go after a day, report codes after 30 days.
+    assert purge.count("interval '1 day'") == 2 and purge.count("interval '30 days'") == 1
+    assert "site. Deleted after a day." in words
+    assert "The visitor code is removed after a day; the rest is kept." in words
+    assert "The visitor code is removed after 30 days; the report is kept." in words
+    assert "A daily clean-up removes the codes" in words

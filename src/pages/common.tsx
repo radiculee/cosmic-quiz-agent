@@ -74,6 +74,10 @@ export function loadError(error: unknown): string {
     : "It could not be loaded. Try again in a moment.";
 }
 
+/** A small solid chip on the scene: the hero's Your progress and Pause, the footer's Privacy. */
+export const SCENE_CHIP =
+  "flex items-center gap-2 rounded-sm border border-white/15 bg-surface px-3 py-2 font-pixel text-[8px] uppercase text-ink transition-colors hover:border-white/40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal";
+
 // Solid in every state, including disabled and hover: a button on the scene must never let the
 // scene show through.
 export const PRIMARY_BUTTON =
