@@ -103,7 +103,8 @@ scenes (`public/scenes/`, not covered by the MIT licence). Cards and controls on
 solid `--surface`; text straight on a scene is ink with a soft shadow (`on-scene`,
 `on-scene-muted`), and small lines below a page's intro sit on solid chips (`scene-note`).
 
-Fonts (Google Fonts):
+Fonts (from Google Fonts, served from the site itself in `public/fonts/` under the SIL Open Font
+License, so no visit reaches Google; changed 2026-10-10):
 - Headings: **Space Grotesk** Bold.
 - Body: **Inter** Regular / Medium.
 - Pixel accents ONLY: **Press Start 2P** at 8-11px, for segmented-control labels, tags and small labels. Never for body text or headings.

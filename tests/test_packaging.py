@@ -55,13 +55,14 @@ def test_every_response_carries_the_security_headers() -> None:
         assert f"{feature}=()" in headers["Permissions-Policy"]
 
 
-def test_the_content_security_policy_allows_only_this_site_and_its_fonts() -> None:
+def test_the_content_security_policy_allows_only_this_site() -> None:
     policy = _csp()
 
     assert policy["default-src"] == ["'self'"]
     assert policy["script-src"] == ["'self'"]  # no inline or outside scripts
-    assert policy["style-src"] == ["'self'", "https://fonts.googleapis.com"]
-    assert policy["font-src"] == ["https://fonts.gstatic.com"]
+    # The fonts are served from the site itself, so no visit reaches Google.
+    assert policy["style-src"] == ["'self'"]
+    assert policy["font-src"] == ["'self'"]
     assert policy["connect-src"] == ["'self'"]  # the UI only calls its own /api
     assert policy["frame-ancestors"] == ["'none'"]  # no other site may frame the game
     assert policy["object-src"] == ["'none'"] and policy["base-uri"] == ["'none'"]
@@ -163,3 +164,32 @@ def test_the_css_fades_and_switches_layout_as_the_slideshow_expects() -> None:
     # The CSS switches to the whole scene at 4:3, where the sizes pick the full-width file.
     assert "@media (max-aspect-ratio: 4/3)" in css
     assert sizes[1].startswith("(max-aspect-ratio: 4/3) 100vw")
+
+
+# --- Fonts (public/fonts, src/index.css) ------------------------------------------------------
+
+FONTS = ROOT / "public" / "fonts"
+FONT_PATH = re.compile(r"/fonts/[a-z0-9-]+[.]woff2")
+
+
+def test_every_font_is_a_named_woff2_with_its_licence_and_none_is_unused() -> None:
+    css = (ROOT / "src" / "index.css").read_text(encoding="utf-8")
+    named = set(FONT_PATH.findall(css))
+    shipped = {f"/fonts/{file.name}" for file in FONTS.glob("*.woff2")}
+
+    assert named and named == shipped, f"unused: {shipped - named}, missing: {named - shipped}"
+    for file in FONTS.glob("*.woff2"):
+        assert file.read_bytes()[:4] == b"wOF2", f"{file.name} is not WOFF2"
+        family = file.name.split("-v1-")[0]
+        licence = FONTS / f"OFL-{family}.txt"
+        assert "SIL OPEN FONT LICENSE" in licence.read_text(encoding="utf-8").upper(), licence.name
+
+
+def test_the_page_loads_nothing_from_another_site() -> None:
+    html = (ROOT / "index.html").read_text(encoding="utf-8")
+    loads = re.findall(r'<(?:link|script)[^>]*(?:href|src)="(https?:[^"]+)"', html)
+
+    assert loads == [], f"third-party loads: {loads}"
+    config = json.loads((ROOT / "vercel.json").read_text(encoding="utf-8"))
+    sources = {rule["source"]: rule["headers"] for rule in config["headers"]}
+    assert sources["/fonts/(.*)"] == sources["/scenes/(.*)"]  # cached for good: names carry -v1-
