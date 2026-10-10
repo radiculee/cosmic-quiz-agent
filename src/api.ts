@@ -299,6 +299,15 @@ export async function reportItem(id: number, reason: string): Promise<boolean> {
   return isRecord(body) && body.already === true;
 }
 
+/** What the report form says when a report was not sent: the server's own words for the daily
+ * limit (HTTP 429), and a general line for anything else. */
+export function reportFailureMessage(error: unknown): string {
+  if (error instanceof ApiError && error.status === 429) {
+    return error.message;
+  }
+  return "The report could not be sent. Try again in a moment.";
+}
+
 /** Split text into complete lines and the unfinished remainder (a stream can end mid-line). */
 export function takeLines(buffer: string): [string[], string] {
   const parts = buffer.split("\n");

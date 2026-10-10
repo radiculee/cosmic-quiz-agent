@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { isResearchEvent, takeLines } from "./api";
+import { ApiError, isResearchEvent, reportFailureMessage, takeLines } from "./api";
 import { sampleRun } from "./testing/samples";
 
 describe("takeLines", () => {
@@ -83,5 +83,18 @@ describe("a run's figures", () => {
     expect(isResearchEvent({ type: "stats", key: "quiz-medium", stats: { ...stats, cost: null } })).toBe(
       false,
     );
+  });
+});
+
+describe("reportFailureMessage", () => {
+  it("passes on the server's words for the daily limit", () => {
+    const limit = new ApiError("You have sent 10 reports today, the daily limit.", 429);
+    expect(reportFailureMessage(limit)).toBe("You have sent 10 reports today, the daily limit.");
+  });
+
+  it("keeps any other failure general", () => {
+    const general = "The report could not be sent. Try again in a moment.";
+    expect(reportFailureMessage(new ApiError("There is no such item.", 404))).toBe(general);
+    expect(reportFailureMessage(new TypeError("Failed to fetch"))).toBe(general);
   });
 });

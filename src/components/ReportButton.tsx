@@ -1,6 +1,6 @@
 import { type FormEvent, useState } from "react";
 
-import { reportItem } from "../api";
+import { reportFailureMessage, reportItem } from "../api";
 
 type State = "idle" | "open" | "sending" | "sent" | "already" | "failed";
 
@@ -8,13 +8,15 @@ type State = "idle" | "open" | "sending" | "sent" | "already" | "failed";
 export function ReportButton({ itemId }: { itemId: number }) {
   const [state, setState] = useState<State>("idle");
   const [reason, setReason] = useState("");
+  const [failure, setFailure] = useState("");
 
   async function send(event: FormEvent) {
     event.preventDefault();
     setState("sending");
     try {
       setState((await reportItem(itemId, reason)) ? "already" : "sent");
-    } catch {
+    } catch (error) {
+      setFailure(reportFailureMessage(error));
       setState("failed");
     }
   }
@@ -71,7 +73,7 @@ export function ReportButton({ itemId }: { itemId: number }) {
       </div>
       {state === "failed" && (
         <p role="alert" className="text-sm text-rust">
-          The report could not be sent. Try again in a moment.
+          {failure}
         </p>
       )}
     </form>

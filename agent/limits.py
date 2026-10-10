@@ -10,6 +10,7 @@ can cost until it ends.
 
 from __future__ import annotations
 
+import math
 from datetime import UTC, datetime, timedelta
 from typing import Literal
 
@@ -39,6 +40,10 @@ class LimitSettings(BaseModel):
     # reservation fits, so the day's last search may end early (decided 2026-10-08).
     usd_per_day: float = Field(default=0.50, gt=0)
     usd_per_month: float = Field(default=4.00, gt=0)
+    # Per visitor: reports a day (UTC). Two reports from different visitors hide an item, so
+    # without a limit two connections could hide the whole bank (docs/SECURITY_AUDIT.md S2,
+    # set by Vedant on 2026-10-09).
+    reports_per_day: int = Field(default=10, gt=0)
 
 
 LIMITS = LimitSettings()
@@ -99,6 +104,11 @@ def month_start(now: datetime) -> datetime:
     return day_start(now).replace(day=1)
 
 
+def seconds_to_next_day(now: datetime) -> int:
+    """Whole seconds until the next midnight UTC, when the daily limits start again."""
+    return math.ceil((day_start(now) + timedelta(days=1) - now).total_seconds())
+
+
 def _fits(spent: float, reserve_usd: float, cap: float) -> bool:
     # Rounded as the reservation is sent to the database, so float noise cannot tip it.
     return round(spent + reserve_usd, 6) <= cap
@@ -152,3 +162,8 @@ LIMIT_MESSAGES: dict[LimitName, str] = {
     "month_usd": "Live research has used this month's budget and resumes next month.",
     "search": "This search cannot start another run.",
 }
+
+REPORTS_MESSAGE = (
+    f"You have sent {LIMITS.reports_per_day} reports today, the daily limit. "
+    "It resets at midnight UTC."
+)

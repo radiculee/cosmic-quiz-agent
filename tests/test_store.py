@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable
+from datetime import UTC, datetime
 
 import httpx2
 import pytest
@@ -391,3 +392,21 @@ def test_topics_are_read_with_their_news_articles() -> None:
 
     assert [t.kind for t in topics] == ["news", "evergreen"]
     assert topics[0].lead_url == "https://science.nasa.gov/x/"
+
+
+def test_reports_today_counts_the_visitor_since_midnight_utc() -> None:
+    seen: list[httpx2.Request] = []
+
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        seen.append(request)
+        return httpx2.Response(200, json=[{"id": 1}, {"id": 2}])
+
+    now = datetime(2026, 10, 9, 15, 30, tzinfo=UTC)
+    count = store_with(handler).reports_today("abc", now)
+
+    assert count == 2
+    params = seen[0].url.params
+    assert seen[0].url.path == "/rest/v1/reports"
+    assert params["user_hash"] == "eq.abc"
+    assert params["created_at"] == "gte.2026-10-09T00:00:00+00:00"
+    assert params["select"] == "id"  # never the hashes themselves

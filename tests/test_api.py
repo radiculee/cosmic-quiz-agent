@@ -12,7 +12,7 @@ import httpx2
 import pytest
 
 from agent.bank import BankReader, _ItemIndexRow, summarize
-from agent.limits import RequestCount
+from agent.limits import LIMITS, REPORTS_MESSAGE, RequestCount
 from agent.rest import PAGE_SIZE, RestClient, StoreError
 from agent.store import SupabaseStore
 from agent.web import (
@@ -474,6 +474,9 @@ def test_report_hashes_the_visitor_and_needs_a_published_item(
         def __exit__(self, *_: object) -> None:
             return None
 
+        def reports_today(self, user_hash: str, now: object) -> int:
+            return 0
+
         def add_report(self, item_id: int, user_hash: str, reason: str | None) -> bool:
             stored.append((item_id, user_hash, reason))
             return len(stored) == 1
@@ -496,3 +499,37 @@ def test_report_hashes_the_visitor_and_needs_a_published_item(
 def test_salted_hash_depends_on_the_salt() -> None:
     assert salted_hash("1.2.3.4", "a") != salted_hash("1.2.3.4", "b")
     assert len(salted_hash("1.2.3.4", "a")) == 64
+
+
+def test_a_visitor_can_send_ten_reports_a_day(monkeypatch: pytest.MonkeyPatch) -> None:
+    fake_reader(monkeypatch, items_client([{"id": 7}]))
+    sent: dict[str, int] = {}
+
+    class CountingStore:
+        def __enter__(self) -> CountingStore:
+            return self
+
+        def __exit__(self, *_: object) -> None:
+            return None
+
+        def reports_today(self, user_hash: str, now: object) -> int:
+            return sent.get(user_hash, 0)
+
+        def add_report(self, item_id: int, user_hash: str, reason: str | None) -> bool:
+            sent[user_hash] = sent.get(user_hash, 0) + 1
+            return True
+
+    monkeypatch.setattr(SupabaseStore, "from_env", classmethod(lambda cls: CountingStore()))
+    body = json.dumps({"id": 7}).encode()
+
+    def send(visitor: str) -> ApiResponse:
+        return report.handle(ApiRequest("POST", "/api/report", body=body, visitor=visitor))
+
+    statuses = [send("a").status for _ in range(LIMITS.reports_per_day + 1)]
+    refused = send("a")
+
+    assert statuses == [200] * LIMITS.reports_per_day + [429]
+    assert refused.status == 429 and sent["a"] == LIMITS.reports_per_day
+    assert refused.body == {"error": REPORTS_MESSAGE}
+    assert 0 < int(refused.headers["Retry-After"]) <= 86_400
+    assert send("b").status == 200  # another visitor is not affected

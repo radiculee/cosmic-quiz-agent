@@ -699,6 +699,21 @@ class SupabaseStore:
             raise
         return True
 
+    def reports_today(self, user_hash: str, now: datetime) -> int:
+        """How many reports this visitor has sent since midnight UTC (docs/SECURITY_AUDIT.md S2).
+        A small read: the daily limit keeps it to a handful of rows."""
+        reply = self._rest.send(
+            "GET",
+            "/reports",
+            params={
+                "select": "id",
+                "user_hash": f"eq.{user_hash}",
+                "created_at": f"gte.{day_start(now).isoformat()}",
+            },
+            retries=RETRIES,
+        )
+        return len(parse(_ID_ROWS, reply, "counting the visitor's reports"))
+
     def hit_request_limit(self, user_hash: str, limit: int) -> RequestCount:
         """Count one API request for a visitor in the current hour. Sent once: a retry could
         count the same request twice."""
