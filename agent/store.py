@@ -484,6 +484,16 @@ class ReviewItem(BaseModel):
     reports: list[ReviewReport] = Field(default_factory=list)
 
 
+class PurgeCounts(BaseModel):
+    """What `purge_visitor_hashes()` cleared (migration 008)."""
+
+    model_config = ConfigDict(frozen=True)
+
+    runs: int = Field(ge=0)
+    rate_limit_windows: int = Field(ge=0)
+    reports: int = Field(ge=0)
+
+
 class JevRecheck(BaseModel):
     """An item the gate sent to review because its Jev check failed, with what a re-check needs:
     the run's stored record (the answer and the other layers' results) and the page text it
@@ -567,6 +577,7 @@ _REVIEW_ITEMS = TypeAdapter(list[ReviewItem])
 _REQUEST_COUNT = TypeAdapter(RequestCount)
 _RUN_SLOT = TypeAdapter(RunSlot)
 _USAGE_ROWS = TypeAdapter(list[_UsageRow])
+_PURGE = TypeAdapter(PurgeCounts)
 _REVIEW_SELECT = (
     "id,mode,difficulty,question,options,correct_index,explanation,code_problems,haiku_reasons,"
     "jev_reasons,jev_criteria,jev_threshold,created_at,topics(name,kind),sources(ordinal,url,quote),"
@@ -877,6 +888,12 @@ class SupabaseStore:
 
     def retire_stale(self) -> int:
         return parse(_COUNT, self._rest.send("POST", "/rpc/retire_stale", json={}), "retire_stale")
+
+    def purge_visitor_hashes(self) -> PurgeCounts:
+        """Clear visitor hashes past their time (migration 008, docs/SECURITY_AUDIT.md S13):
+        live runs' and request windows' after a day, reports' after 30 days. Safe to repeat."""
+        reply = self._rest.send("POST", "/rpc/purge_visitor_hashes", json={}, retries=RETRIES)
+        return parse(_PURGE, reply, "purge_visitor_hashes")
 
     def review_queue(self) -> list[ReviewItem]:
         """Every item in review, oldest first, with its sources and Jev's claim checks."""

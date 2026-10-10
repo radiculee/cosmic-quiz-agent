@@ -410,3 +410,20 @@ def test_reports_today_counts_the_visitor_since_midnight_utc() -> None:
     assert params["user_hash"] == "eq.abc"
     assert params["created_at"] == "gte.2026-10-09T00:00:00+00:00"
     assert params["select"] == "id"  # never the hashes themselves
+
+
+def test_purge_visitor_hashes_calls_the_rpc_and_reads_its_counts() -> None:
+    seen: list[httpx2.Request] = []
+
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        seen.append(request)
+        if len(seen) == 1:
+            return httpx2.Response(503)  # safe to repeat, so retried
+        return httpx2.Response(200, json={"runs": 3, "rate_limit_windows": 12, "reports": 0})
+
+    purged = store_with(handler).purge_visitor_hashes()
+
+    assert (purged.runs, purged.rate_limit_windows, purged.reports) == (3, 12, 0)
+    assert seen[-1].method == "POST" and seen[-1].url.path == "/rest/v1/rpc/purge_visitor_hashes"
+    with pytest.raises(StoreError):
+        store_with(lambda _r: httpx2.Response(200, json={"runs": -1})).purge_visitor_hashes()

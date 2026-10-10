@@ -176,11 +176,12 @@ create table if not exists public.claim_checks (
 create index if not exists claim_checks_item_idx on public.claim_checks (item_id);
 
 -- Player reports. Users are salted hashes of IP addresses, never raw IPs (GDPR). Written only by
--- the server; 2 reports hide an item.
+-- the server; 2 reports hide an item. A visitor sends at most 10 a day (api/report.py), and the
+-- hash is cleared after 30 days by purge_visitor_hashes() (migration 008).
 create table if not exists public.reports (
     id bigint generated always as identity primary key,
     item_id bigint not null references public.items (id) on delete cascade,
-    user_hash text not null,
+    user_hash text,  -- cleared after 30 days
     reason text,
     created_at timestamptz not null default now(),
     unique (item_id, user_hash)
@@ -197,10 +198,10 @@ create table if not exists public.rate_limits (
 
 -- One row per live run of a custom topic (migration 004). The per-user and global limits are
 -- counted from it; a run that never finishes keeps counting at its reservation. Visitor hashes
--- are removed after two days.
+-- are cleared after a day by purge_visitor_hashes() (migration 008), at most about two days.
 create table if not exists public.on_demand_runs (
     id bigint generated always as identity primary key,
-    user_hash text,  -- removed after two days
+    user_hash text,  -- cleared after a day (migration 008)
     topic text not null,
     mode text not null check (mode in ('learn', 'quiz')),
     difficulty text not null check (difficulty in ('easy', 'medium', 'hard')),
@@ -532,6 +533,36 @@ begin
         'allowed', v_count <= p_limit,
         'count', v_count,
         'retry_after', ceil(extract(epoch from (v_window + interval '1 hour' - now())))::integer
+    );
+end;
+$$;
+
+-- Clear visitor hashes past their time (migration 008), run every day by `python -m curator
+-- upkeep` and `daily`, so the retention holds without traffic: live runs' hashes and request
+-- windows after 1 day (the limits only count today's), report hashes after 30 days.
+create or replace function public.purge_visitor_hashes()
+returns jsonb
+language plpgsql
+set search_path = ''
+as $$
+declare
+    v_runs integer;
+    v_windows integer;
+    v_reports integer;
+begin
+    update public.on_demand_runs set user_hash = null
+    where user_hash is not null and started_at < now() - interval '1 day';
+    get diagnostics v_runs = row_count;
+
+    delete from public.rate_limits where window_start < now() - interval '1 day';
+    get diagnostics v_windows = row_count;
+
+    update public.reports set user_hash = null
+    where user_hash is not null and created_at < now() - interval '30 days';
+    get diagnostics v_reports = row_count;
+
+    return jsonb_build_object(
+        'runs', v_runs, 'rate_limit_windows', v_windows, 'reports', v_reports
     );
 end;
 $$;
@@ -1140,6 +1171,8 @@ grant execute on function public.hit_request_limit(text, integer) to service_rol
 revoke execute on function public.apply_jev_recheck(bigint, text, jsonb)
     from public, anon, authenticated;
 grant execute on function public.apply_jev_recheck(bigint, text, jsonb) to service_role;
+revoke execute on function public.purge_visitor_hashes() from public, anon, authenticated;
+grant execute on function public.purge_visitor_hashes() to service_role;
 -- The one function the browser roles may run (migration 007).
 revoke execute on function public.agent_stats(text, text, text, integer)
     from public, anon, authenticated;

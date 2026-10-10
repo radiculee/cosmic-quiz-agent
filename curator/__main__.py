@@ -19,7 +19,8 @@ gate sent to review, with its sources, and publishes or discards it on your deci
 with --reported it shows the published items that players' reports have hidden instead, to keep
 or discard. upkeep does the free part of a daily run only: it stores runs an earlier run left on
 disk and retires news items past their date, with no model calls. The scheduled workflow runs it
-on days without a paid run, which also keeps the free database from pausing for inactivity.
+on days without a paid run, which also keeps the free database from pausing for inactivity. Both
+daily and upkeep clear visitor hashes past their time (migration 008).
 rejev re-runs Jev on items the gate sent to review because their Jev check failed (an outage or
 a wrong key), from the page text stored with each run, and applies the same gate rule again.
 It costs a fraction of a cent on TypeSafe and nothing on Anthropic.
@@ -163,7 +164,28 @@ def _unfinished_news_topic(
     return topic, left, len(MODES) * len(DIFFICULTIES) - len(left)
 
 
+def purge_visitor_hashes(store: SupabaseStore) -> int:
+    """Clear visitor hashes past their time, every day whatever else the run did, so the
+    retention holds without traffic (docs/SECURITY_AUDIT.md S13). Free. Returns 1 if it failed,
+    so the scheduled run shows the failure."""
+    try:
+        purged = store.purge_visitor_hashes()
+    except StoreError as error:
+        print(f"Visitor hashes were not cleared: {error}")
+        return 1
+    print(
+        f"Privacy: cleared {purged.runs} live-run and {purged.reports} report visitor hash(es); "
+        f"deleted {purged.rate_limit_windows} old request window(s)."
+    )
+    return 0
+
+
 def command_daily(args: argparse.Namespace, settings: Settings, store: SupabaseStore) -> int:
+    status = _daily(args, settings, store)
+    return max(status, purge_visitor_hashes(store))
+
+
+def _daily(args: argparse.Namespace, settings: Settings, store: SupabaseStore) -> int:
     curator = _curator(store, settings)
     if curator is None:
         return 1
@@ -220,7 +242,7 @@ def command_upkeep(args: argparse.Namespace, settings: Settings, store: Supabase
     flush_pending(store, pending_dir, print)
     retired = store.retire_stale()
     print(f"Upkeep: retired {retired} stale item(s). No model calls; nothing spent.")
-    return 0
+    return purge_visitor_hashes(store)
 
 
 def command_rejev(args: argparse.Namespace, settings: Settings, store: SupabaseStore) -> int:

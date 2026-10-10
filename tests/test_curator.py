@@ -19,6 +19,7 @@ from agent.store import (
     CuratorTrigger,
     ItemPayload,
     JobKey,
+    PurgeCounts,
     RecordedIds,
     StoreError,
     TopicRef,
@@ -32,6 +33,7 @@ from curator.__main__ import (
     _positive_float,
     _positive_int,
     _unfinished_news_topic,
+    command_daily,
     command_upkeep,
 )
 from curator.discover import NewsPick, build_prompt, choose, discover, read_news
@@ -64,6 +66,8 @@ class MemoryStore:
         self.fail_writes = False
         self.fail_retire = False
         self.retired = 0
+        self.purges = 0
+        self.fail_purge = False
 
     def start_curator_run(
         self, trigger: CuratorTrigger, topics: Sequence[str], dollar_cap: float
@@ -95,6 +99,12 @@ class MemoryStore:
         if self.fail_retire:
             raise RuntimeError("database went away")
         return self.retired
+
+    def purge_visitor_hashes(self) -> PurgeCounts:
+        if self.fail_purge:
+            raise StoreError("POST /rpc/purge_visitor_hashes: HTTP 404", 404)
+        self.purges += 1
+        return PurgeCounts(runs=2, rate_limit_windows=5, reports=1)
 
 
 def record_with(status: Status | None, cost: float = 0.03) -> ItemRecord:
@@ -447,4 +457,33 @@ def test_upkeep_stores_left_over_runs_and_retires_without_any_model(
 
     assert status == 0
     assert len(store.payloads) == 1 and not list(pending.glob("*.json"))
-    assert "retired 3 stale item(s)" in capsys.readouterr().out
+    out = capsys.readouterr().out
+    assert "retired 3 stale item(s)" in out
+    # The visitor hashes past their time are cleared every day (SECURITY_AUDIT.md S13).
+    assert store.purges == 1
+    assert "cleared 2 live-run and 1 report visitor hash(es); deleted 5 old" in out
+
+
+def test_daily_clears_visitor_hashes_even_when_it_stops_early(
+    settings: Settings, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    store = MemoryStore()
+    monkeypatch.delenv("TYPESAFE_API_KEY", raising=False)  # daily stops: it needs Jev
+
+    status = command_daily(argparse.Namespace(), settings, store)  # type: ignore[arg-type]
+
+    assert status == 1 and store.purges == 1
+    assert "the Curator needs Jev" in capsys.readouterr().out
+
+
+def test_a_failed_purge_fails_the_scheduled_run(
+    tmp_path: Path, settings: Settings, capsys: pytest.CaptureFixture[str]
+) -> None:
+    store = MemoryStore()
+    store.fail_purge = True
+    upkeep_settings = settings.model_copy(update={"runs_dir": str(tmp_path)})
+
+    status = command_upkeep(argparse.Namespace(), upkeep_settings, store)  # type: ignore[arg-type]
+
+    assert status == 1
+    assert "Visitor hashes were not cleared" in capsys.readouterr().out
