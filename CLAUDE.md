@@ -20,7 +20,7 @@ Developer. An autonomous astronomy and space AI agent, surfaced as a Learn / Qui
 It is a standalone project with its own repo, hosted on Vercel and served at `cosmic.vedantgaikwad.ie`, a
 subdomain of Vedant's existing domain. The repo goes public with an MIT licence in Session 10, after a
 security audit. (Changed 2026-10-08 by Vedant; it was "its own repo and domain".) It is **not** part of the
-portfolio repo (`c:\Users\vedan\Modernpersonalportfoliowebsite`), which is used only as a reference for
+portfolio repo (`Modernpersonalportfoliowebsite`, a separate folder), which is used only as a reference for
 patterns and design tokens. Recruiters will read this code, so code quality is part of the deliverable.
 
 The full decision record, repo layout, milestones and verification plan live in `docs/DESIGN.md`. Do not

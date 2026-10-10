@@ -12,7 +12,10 @@ a severity, where it is, what happens, the proposed fix and its test.
   accepted and documented.
 - **Vedant's own action:** S16.
 - **Accepted:** S18, as decided in planning.
-- **Pending:** S19, waiting on the SQL editor query.
+- **Pending:** S19, waiting on the SQL editor query (run on 2026-10-10; its results are still to
+  be pasted).
+- **After the push (2026-10-10):** migration 008 applied, and the production header scan
+  passed (S5).
 
 Each finding's **Resolution** line says what was done.
 
@@ -41,7 +44,7 @@ reason), or pending (waiting for information).
 | S2 | Medium | One visitor can report every item, two can hide the bank, and no command lists hidden items | fixed |
 | S3 | Medium | The paid on-topic check runs before the visitor's limits are checked | fixed |
 | S4 | Medium | `fetch_page` follows redirects before checking the allow-list | fixed |
-| S5 | Medium | No security headers: the game can be framed (clickjacking) and there is no CSP | fixed (production scan after the push) |
+| S5 | Medium | No security headers: the game can be framed (clickjacking) and there is no CSP | fixed (production scan passed 2026-10-10) |
 | S6 | Low | Allowed host names are not checked for private addresses | accepted for now |
 | S7 | Low | Pages are downloaded whole before the size cap applies | accepted for now |
 | S8 | Low | Some malformed inputs crash with HTTP 500 | accepted for now |
@@ -49,7 +52,7 @@ reason), or pending (waiting for information).
 | S10 | Low | Reveal tokens never expire | accepted for now |
 | S11 | Low | The agent log can show the model provider's raw error text | accepted for now |
 | S12 | Low | An unexpected tool error ends the whole run and loses its record | accepted for now |
-| S13 | Low | Visitor hashes are removed only when there is traffic, and report hashes never | fixed (migration 008 to apply) |
+| S13 | Low | Visitor hashes are removed only when there is traffic, and report hashes never | fixed (008 applied 2026-10-10) |
 | S14 | Low | A short `IP_HASH_SALT` would be accepted | accepted for now |
 | S15 | Low | Fetched pages can carry instructions to the agent | accepted |
 | S16 | Info | The local Python (3.12.1) is behind on security fixes | Vedant's action |
@@ -82,6 +85,11 @@ reason), or pending (waiting for information).
   `ApiRequest` gains `content_type` and `fetch_site`. Test:
   `test_adapter_refuses_requests_another_site_could_make_a_browser_send`. Also checked through
   a local server: a `text/plain` POST answered 415, and a cross-site GET answered 403.
+- **Production (2026-10-10, after the push):** a `text/plain` POST to `/api/report` answered
+  415, and a cross-site GET that reaches a function answered 403 (sent `no-store`, so a refusal
+  is never cached). A cross-site GET that the edge cache answers never reaches the function
+  and gets the cached reply. That is harmless: it is public bank data, nothing is counted or
+  written, and the other site cannot read it without a CORS header.
 
 ### S2. One visitor can report every item, and two can hide the bank
 
@@ -205,7 +213,9 @@ reason), or pending (waiting for information).
 - **Test:** `tests/test_packaging.py` reads `vercel.json` and checks each header and CSP
   directive. It also checks that `index.html` has no inline script, which the policy would
   block.
-- **Resolution (fixed; the production scan comes after the push):**
+- **Resolution (fixed; production scan passed 2026-10-10):**
+  - Changed in 10b (2026-10-10): the fonts are served from the site itself, so `style-src`
+    and `font-src` are `'self'` only, and a page contacts no other host.
   - The headers above are in `vercel.json`, with `img-src 'self'`: the build has no `data:`
     images.
   - Checked locally against `dist/`, served with exactly these headers and with `/api` passed to
@@ -214,6 +224,10 @@ reason), or pending (waiting for information).
     (all seven rows opened and their charts drawn), `/trophies` and a 404.
   - No CSP violation, no console error and no blocked load. All three fonts loaded, and the
     screenshots match the site.
+  - **Production scan (2026-10-10, after the push), read-only:** all six headers, exactly as
+    in `vercel.json`, on the home page, `/learn`, `/explore/stats`, a built asset, and the
+    `/api/topics` and `/api/quota` replies. Vercel's own HSTS is still sent. The scenes step
+    the same day added images under the same policy, with no CSP violation on production.
   - A page that put the site in an iframe got Chrome's error page instead (frame-ancestors and
     X-Frame-Options).
   - Note: Vercel's preview toolbar (preview deployments only) is an outside script, so the CSP
@@ -369,6 +383,13 @@ reason), or pending (waiting for information).
   - Tests: the upkeep test, `test_daily_clears_visitor_hashes_even_when_it_stops_early`,
     `test_a_failed_purge_fails_the_scheduled_run`, and the store's request and reply.
   - Vedant pastes 008 before the push. Otherwise the scheduled `upkeep` fails until 008 is in.
+  - **Applied 2026-10-10**, before the push. Counted again the same day at 18:11 UTC, read-only
+    (timestamps only, no hash read), after 008 but before the first purge: 7 of 16 live runs
+    still hold a hash, 6 of them over a day old (the oldest from 9 October, inside the old
+    two-day rule); 8 of 15 request windows are over a day old (the oldest from 8 October); the
+    one report keeps its hash (7 days old). The day's scheduled run (12:28 UTC) used the code
+    from before the push, so the first purge comes with the next one; after it, nothing over
+    a day old should hold a live-run hash or a request window.
 
 ### S14. A short `IP_HASH_SALT` would be accepted
 

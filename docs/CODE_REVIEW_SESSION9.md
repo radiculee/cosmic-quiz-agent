@@ -99,8 +99,7 @@ the grid hint on real figures ("From 32% published (learn hard) to 79% (learn ea
 ### 4. The SQL check and the browser drives live outside the repo (test coverage)
 
 - **Where:** the Python re-implementation of `agent_stats()` (used for the comparison above) and
-  the headless Chrome drives are scratchpad files of the 2026-10-08 session:
-  `C:\Users\vedan\AppData\Local\Temp\claude\c--Users-vedan-cosmic-quiz-agent\cc3818cf-7a80-4623-b4ab-32a005bb5547\scratchpad\`
+  the headless Chrome drives are files in the 2026-10-08 session's scratchpad folder
   (`reference_stats.py`, `drive_server.py`, `cdp.mjs`, `drive_stats2.mjs`). The scratchpad may
   be cleaned up, and nothing repeats these checks for a future migration.
 - **Fix (needs Vedant's yes; no new dependency):** move the comparison into the repo as a

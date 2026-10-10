@@ -141,7 +141,11 @@ supabase/migrations/   numbered changes after schema.sql (006 the web page's sea
                        007 adds agent_stats() and drops the 004 begin_on_demand_run, Session 9;
                        008 clears visitor hashes on a timer, Session 10a)
 .github/workflows/curator.yml   daily cron + manual dispatch
-LICENSE                MIT (Session 10, when the repo goes public)
+public/fonts/          the three fonts, self-hosted (WOFF2 subsets, each with its OFL licence)
+public/og-v1.jpg       the link preview: the observatory scene with the title and tagline
+README.md              the case study: what it does, how, what it costs, security and privacy
+LICENSE                MIT, for the code (Session 10b)
+NOTICE                 what MIT does not cover: the scene art, the link preview, the fonts
 ```
 
 ## Milestones (one at a time, verified before moving on)
@@ -162,7 +166,7 @@ Superseded on 2026-10-01 by the local-first session order in `docs/PLAN.md`. Kep
 ## Immediate step: handoff to a new VS Code window
 Done on 2026-10-01.
 
-Create `c:\Users\vedan\cosmic-quiz-agent\` with no app code:
+Create the project folder (`cosmic-quiz-agent`) with no app code:
 - `CLAUDE.md`: project identity, stack, commands, conventions carried over from the portfolio (no emojis, complete files, strict typing, one milestone at a time, explain before large changes, small commits), design tokens and font rules, citation rule, zero-cost rule.
 - `docs/DESIGN.md`: the full decision record, layout, milestones and verification (this plan).
 - `docs/HANDOFF.md`: where things stand and the first prompt to paste into the new session (start Milestone 1 spike).
