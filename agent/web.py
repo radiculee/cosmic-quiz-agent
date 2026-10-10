@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import ipaddress
 import json
 import os
 import sys
@@ -96,6 +97,25 @@ def salted_hash(value: str, salt: str) -> str:
     """A one-way, salted hash of a visitor's IP address. Only the hash is ever stored, never the
     address (GDPR); without the salt it cannot be matched back to an address."""
     return hashlib.sha256(f"{salt}:{value}".encode()).hexdigest()
+
+
+def visitor_address(ip: str) -> str:
+    """The part of an address that stands for one visitor, as it is hashed.
+
+    An IPv4 address is used as it is. An IPv6 address is cut to its /64 network: one connection
+    is usually given a whole /64, so each of its addresses would otherwise count as a new visitor
+    with limits of its own (docs/SECURITY_AUDIT.md S17). An IPv4 address written as IPv6
+    (::ffff:a.b.c.d) counts as the IPv4 address. Anything else is used unchanged.
+    """
+    try:
+        address = ipaddress.ip_address(ip)
+    except ValueError:
+        return ip
+    if isinstance(address, ipaddress.IPv6Address):
+        if address.ipv4_mapped is not None:
+            return str(address.ipv4_mapped)
+        return str(ipaddress.IPv6Network((address, 64), strict=False))
+    return str(address)
 
 
 def sign(purpose: str, value: str) -> str:
@@ -195,7 +215,7 @@ def request_from_environ(environ: WSGIEnvironment) -> ApiRequest:
         query=dict(parse_qsl(str(environ.get("QUERY_STRING", "")))),
         body=environ["wsgi.input"].read(length) if length > 0 else b"",
         client_ip=ip,
-        visitor=salted_hash(ip, salt) if salt and ip else "",
+        visitor=salted_hash(visitor_address(ip), salt) if salt and ip else "",
         content_type=str(environ.get("CONTENT_TYPE", "")),
         fetch_site=str(environ.get("HTTP_SEC_FETCH_SITE", "")).strip().lower(),
     )

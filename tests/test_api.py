@@ -24,6 +24,7 @@ from agent.web import (
     salted_hash,
     sign,
     verify_signature,
+    visitor_address,
 )
 from api import item, report, reveal, topics
 from dev.api_server import dispatch
@@ -248,6 +249,29 @@ def test_adapter_refuses_requests_another_site_could_make_a_browser_send() -> No
     assert len(handled) == 4
     assert handled[0].content_type == "application/json"
     assert handled[0].fetch_site == "same-origin"
+
+
+def test_ipv6_visitors_are_counted_by_their_64_network(monkeypatch: pytest.MonkeyPatch) -> None:
+    assert visitor_address("203.0.113.9") == "203.0.113.9"
+    assert visitor_address("2001:db8:1:2:aaaa::1") == "2001:db8:1:2::/64"
+    assert visitor_address("2001:db8:1:2:ffff:ffff:ffff:ffff") == "2001:db8:1:2::/64"
+    assert visitor_address("2001:db8:1:3::1") == "2001:db8:1:3::/64"
+    assert visitor_address("::ffff:203.0.113.9") == "203.0.113.9"
+    assert visitor_address("not an address") == "not an address"
+
+    monkeypatch.setenv("IP_HASH_SALT", "pepper")
+    seen: list[ApiRequest] = []
+
+    def remember(request: ApiRequest) -> ApiResponse:
+        seen.append(request)
+        return json_response({})
+
+    app = make_app(remember, counter=None)
+    for address in ("2001:db8:1:2::1", "2001:db8:1:2::abcd", "2001:db8:9::1"):
+        call(app, "/api/x", headers={"X-Forwarded-For": address})
+
+    assert seen[0].visitor == seen[1].visitor != seen[2].visitor
+    assert seen[0].client_ip == "2001:db8:1:2::1"  # the request keeps the address it came from
 
 
 def test_adapter_streams_events_as_lines_and_ends_a_broken_stream_cleanly() -> None:
