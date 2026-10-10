@@ -211,3 +211,33 @@ def test_the_privacy_page_states_the_retention_the_database_applies() -> None:
     assert "The visitor code is removed after a day; the rest is kept." in words
     assert "The visitor code is removed after 30 days; the report is kept." in words
     assert "A daily clean-up removes the codes" in words
+
+
+# --- The link preview (public/og-v1.jpg, index.html) ------------------------------------------
+
+OG_IMAGE = ROOT / "public" / "og-v1.jpg"
+
+
+def _jpeg_size(data: bytes) -> tuple[int, int]:
+    """Width and height from a JPEG's start-of-frame marker."""
+    assert data.startswith(JPEG_START), "not a JPEG"
+    at = 2
+    while at < len(data):
+        marker, length = data[at + 1], int.from_bytes(data[at + 2 : at + 4], "big")
+        if marker in (0xC0, 0xC1, 0xC2):
+            height = int.from_bytes(data[at + 5 : at + 7], "big")
+            return int.from_bytes(data[at + 7 : at + 9], "big"), height
+        at += 2 + length
+    raise AssertionError("no start-of-frame marker")
+
+
+def test_the_link_preview_is_a_small_1200_by_630_image_the_page_names() -> None:
+    data = OG_IMAGE.read_bytes()
+    html = " ".join((ROOT / "index.html").read_text(encoding="utf-8").split())  # tags may wrap
+    meta = dict(re.findall(r'<meta (?:property|name)="([^"]+)" content="([^"]+)"', html))
+
+    assert _jpeg_size(data) == (1200, 630) and len(data) <= SCENE_BUDGET
+    assert meta["og:image"] == meta["twitter:image"] == "https://cosmic.vedantgaikwad.ie/og-v1.jpg"
+    assert (meta["og:image:width"], meta["og:image:height"]) == ("1200", "630")
+    assert meta["og:description"] == meta["twitter:description"] == meta["description"]
+    assert meta["twitter:card"] == "summary_large_image"
