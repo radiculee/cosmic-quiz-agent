@@ -33,10 +33,24 @@ WIKI_API = "https://en.wikipedia.org/w/api.php"
         ("https://evilnasa.gov/page", False),  # not a subdomain of nasa.gov
         ("https://nasa.gov.example.com/page", False),
         ("https://example.com/page", False),
+        ("https://en.wikipedia.org:443/wiki/Moon", True),  # the default port, written out
+        ("https://en.wikipedia.org:8443/wiki/Moon", False),  # any other port
+        ("https://en.wikipedia.org:99999/wiki/Moon", False),  # not a port at all
+        ("https://en.wikipedia.org@evil.example/", False),  # user info before the real host
+        ("https://arxiv.org/abs/../list/astro-ph/new", False),  # dot segments resolved first
+        ("https://arxiv.org/abs/%2e%2e/pdf/2203.04890", False),
     ],
 )
 def test_allow_list(ctx: ToolContext, url: str, allowed: bool) -> None:
     assert ctx.is_allowed(url) is allowed
+
+
+def test_requests_go_only_to_allowed_hosts_whatever_the_path(ctx: ToolContext) -> None:
+    # The path rule is for pages fetch_page reads; the arXiv API host may still be requested.
+    assert ctx.host_allowed("https://export.arxiv.org/api/query")
+    assert not ctx.is_allowed("https://export.arxiv.org/api/query")
+    assert not ctx.host_allowed("https://169.254.169.254/latest/meta-data/")
+    assert not ctx.host_allowed("http://www.nasa.gov/")
 
 
 # --- HTTP retries -----------------------------------------------------------------------------
@@ -44,28 +58,74 @@ def test_allow_list(ctx: ToolContext, url: str, allowed: bool) -> None:
 
 def test_http_get_retries_server_errors_then_succeeds(ctx: ToolContext, web: FakeWeb) -> None:
     statuses = iter([503, 200])
-    web.add("https://example.org/", lambda _r: httpx2.Response(next(statuses), text="ok"))
+    web.add("https://www.nasa.gov/", lambda _r: httpx2.Response(next(statuses), text="ok"))
 
-    response = http_get(ctx, "https://example.org/page")
+    response = http_get(ctx, "https://www.nasa.gov/page")
 
     assert response.text == "ok"
     assert len(web.requests) == 2
 
 
 def test_http_get_gives_up_after_retries(ctx: ToolContext, web: FakeWeb) -> None:
-    web.add_text("https://example.org/", "busy", status=503)
+    web.add_text("https://www.nasa.gov/", "busy", status=503)
 
     with pytest.raises(ToolError, match="503 after 3 attempts"):
-        http_get(ctx, "https://example.org/page")
+        http_get(ctx, "https://www.nasa.gov/page")
     assert len(web.requests) == 3  # one try plus two retries
 
 
 def test_http_get_does_not_retry_client_errors(ctx: ToolContext, web: FakeWeb) -> None:
-    web.add_text("https://example.org/", "gone", status=404)
+    web.add_text("https://www.nasa.gov/", "gone", status=404)
 
     with pytest.raises(ToolError, match="404"):
-        http_get(ctx, "https://example.org/page")
+        http_get(ctx, "https://www.nasa.gov/page")
     assert len(web.requests) == 1
+
+
+# --- Redirects (docs/SECURITY_AUDIT.md S4) ----------------------------------------------------
+
+
+def test_a_url_off_the_allow_list_is_never_requested(ctx: ToolContext, web: FakeWeb) -> None:
+    with pytest.raises(ToolError, match="not on the allow-list"):
+        http_get(ctx, "https://example.org/page")
+    assert web.requests == []
+
+
+def test_a_redirect_off_the_allow_list_is_refused_before_it_is_requested(
+    ctx: ToolContext, web: FakeWeb
+) -> None:
+    web.add_redirect("https://www.nasa.gov/go", "http://169.254.169.254/latest/meta-data/")
+    web.add_text("http://169.254.169.254/", "secret")
+
+    with pytest.raises(ToolError, match=r"redirected to http://169\.254\.169\.254/"):
+        fetch_page({"url": "https://www.nasa.gov/go"}, ctx)
+    assert [str(request.url) for request in web.requests] == ["https://www.nasa.gov/go"]
+    assert ctx.fetched == {}
+
+
+def test_redirects_within_the_allow_list_are_followed_even_when_relative(
+    ctx: ToolContext, web: FakeWeb
+) -> None:
+    web.add_redirect("https://www.nasa.gov/old", "https://science.nasa.gov/moved")
+    web.add_redirect("https://science.nasa.gov/moved", "/final")
+    web.add_text("https://science.nasa.gov/final", "<main><p>The Moon orbits Earth.</p></main>")
+
+    output = fetch_page({"url": "https://www.nasa.gov/old"}, ctx)
+
+    assert output.startswith("URL: https://science.nasa.gov/final\n")
+    assert len(web.requests) == 3
+
+
+def test_a_redirect_chain_stops_after_five_hops(ctx: ToolContext, web: FakeWeb) -> None:
+    def loop(request: httpx2.Request) -> httpx2.Response:
+        hop = int(request.url.params.get("hop", "0"))
+        return httpx2.Response(301, headers={"location": f"/loop?hop={hop + 1}"})
+
+    web.add("https://www.nasa.gov/loop", loop)
+
+    with pytest.raises(ToolError, match="redirected more than 5 times"):
+        http_get(ctx, "https://www.nasa.gov/loop")
+    assert len(web.requests) == 6  # the request and five redirects, then it stops
 
 
 # --- Wikipedia --------------------------------------------------------------------------------

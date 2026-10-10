@@ -149,7 +149,7 @@ def http(web: FakeWeb, settings: Settings) -> Iterator[httpx2.Client]:
     client = httpx2.Client(
         transport=httpx2.MockTransport(web.handler),
         headers={"User-Agent": settings.user_agent},
-        follow_redirects=True,
+        follow_redirects=False,  # as in production: http_get follows them, checking each hop
     )
     yield client
     client.close()
