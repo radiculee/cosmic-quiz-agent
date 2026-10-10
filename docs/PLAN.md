@@ -1035,19 +1035,44 @@ Decisions to ask at the start:
   say so on the privacy page, or remove it after a set time.
 - Any finding whose fix needs a new tool, a paid feature or a change to a locked decision.
 
+Decided at the start of 10a (2026-10-09), each as recommended:
+- **Python dependency audit:** `pip-audit` 2.10.1, pinned in `requirements-dev.txt` (dev only).
+- **Report hashes:** cleared after 30 days by the daily upkeep; the report and its count stay.
+- **Header check:** locally first (the built `dist/` with the `vercel.json` headers, in headless
+  Chrome), then a scan of production after the push.
+
+Decided on the audit's 19 findings (2026-10-09; details in `docs/SECURITY_AUDIT.md`):
+- Fix the five Medium findings (S1 to S5): cross-site requests, report flooding, the paid
+  on-topic check before the limits, redirects before the allow-list, and security headers.
+- Also S13 (the daily purge of visitor hashes, migration 008), which carries the 30-day decision,
+  and S17 (IPv6 visitors counted by their /64).
+- The other Lows (S6 to S12, S14) are accepted for now, each with a reason, to revisit after
+  launch. S15 (instructions in fetched pages) is accepted and documented, with the defences in
+  code. 10 reports a day per visitor (S2).
+
 Claude Code (each finding recorded in `docs/SECURITY_AUDIT.md` with its fix and test):
-- [ ] Every API input: each endpoint's method, parameters and body checked, unknown fields
+- [x] Every API input: each endpoint's method, parameters and body checked, unknown fields
       refused, sizes bounded (topic length, ids, the stream's lifetime), and no error reply that
-      carries a stack trace, a database message or a key.
-- [ ] Rate limits on every endpoint, including `/api/quota` and `/api/stats`; that a 429 carries
+      carries a stack trace, a database message or a key. Found S1 (fixed: a POST must be JSON,
+      and a cross-site request is refused), S8 and S9 (accepted for now). No reply carries a
+      stack trace, a database message or a key.
+- [x] Rate limits on every endpoint, including `/api/quota` and `/api/stats`; that a 429 carries
       Retry-After; and that the global live-research caps hold when searches start at the same
-      moment (`begin_on_demand_run` under concurrency).
-- [ ] Reveal tokens: the signing key, a constant-time compare, purpose binding and expiry.
-- [ ] SSRF in `fetch_page`: host matching (exact or dot-suffix), IP literals and private ranges,
+      moment (`begin_on_demand_run` under concurrency). All hold (an advisory lock serialises
+      starts). Found S2 (fixed: 10 reports a day, and `curator review --reported`) and S3 (fixed:
+      the limits are read before the paid on-topic check).
+- [x] Reveal tokens: the signing key, a constant-time compare, purpose binding and expiry. All
+      fine except expiry: S10, accepted for now.
+- [x] SSRF in `fetch_page`: host matching (exact or dot-suffix), IP literals and private ranges,
       user info and ports in URLs, redirects to hosts off the allow-list, schemes, and size caps.
-- [ ] Prompt-injection paths: the typed topic (the on-topic check takes it as data), fetched page
-      text reaching the agent, tool arguments, and the citation rule enforced in code.
-- [ ] RLS and grants checked live, read-only: RLS on every table, and every function in `public`
+      Found S4 (fixed: redirects followed in code with each hop checked; the default port only;
+      dot segments resolved), S6 and S7 (accepted for now).
+- [x] Prompt-injection paths: the typed topic (the on-topic check takes it as data), fetched page
+      text reaching the agent, tool arguments, and the citation rule enforced in code. S15
+      accepted (the defences stay in code); S12 accepted for now.
+- [ ] RLS and grants checked live, read-only. The probe with the publishable key passed (every
+      private table refused, no write allowed); the SQL editor query below is still to run.
+      RLS on every table, and every function in `public`
       with its owner, `security definer` and who may execute it, and the browser roles'
       statement timeouts. Vedant runs this in the SQL editor (it lists, and changes nothing):
 
@@ -1065,21 +1090,34 @@ Claude Code (each finding recorded in `docs/SECURITY_AUDIT.md` with its fix and 
 
       This answers audit note 2: what created `public.rls_auto_enable`, and whether the browser
       roles can run it.
-- [ ] `agent_stats`: record the decision above (audit note 1) and its reasoning.
-- [ ] Secrets: none in the built `dist/` bundle, in a reply, or in a log line; `IP_HASH_SALT`
-      long and random; the visitor's IP read only from the last `X-Forwarded-For` entry.
-- [ ] Security headers in `vercel.json`: Content-Security-Policy (self, plus Google Fonts),
+- [x] `agent_stats`: record the decision above (audit note 1) and its reasoning (S18). The anon
+      statement timeout is to be confirmed from the query above.
+- [x] Secrets: none in the built `dist/` bundle, in a reply, or in a log line; `IP_HASH_SALT`
+      long and random; the visitor's IP read only from the last `X-Forwarded-For` entry. All
+      hold; the local salt is 256 bits. The production salt cannot be read from here (S14:
+      Vedant confirms it is 64 random hex characters).
+- [x] Security headers in `vercel.json`: Content-Security-Policy (self, plus Google Fonts),
       frame-ancestors, X-Content-Type-Options, Referrer-Policy and Permissions-Policy; HSTS as
-      Vercel serves it. Checked with a header scan of the deployed preview.
-- [ ] Dependencies: `pnpm audit`, and the Python audit as decided; pins up to date where a fix
-      exists.
-- [ ] GitHub Actions: least-privilege `permissions`, no `pull_request_target`, pinned actions
+      Vercel serves it (S5, fixed). Checked locally as decided: every page in headless Chrome
+      with no CSP violation, and framing refused. The production scan comes after the push.
+- [x] Dependencies: `pnpm audit`, and the Python audit as decided; pins up to date where a fix
+      exists. Both clean; no pin needed a change.
+- [x] GitHub Actions: least-privilege `permissions`, no `pull_request_target`, pinned actions
       (done in Session 7), secrets only in the steps that need them, and the past run logs read
-      for anything private, since they become public with the repo.
-- [ ] Data retention as the privacy page will state it, checked against the schema and the
-      live tables.
-- [ ] Tests for every fix, with the scripted fake model only; typecheck, build, pytest, ruff,
-      mypy --strict; `python -m dev.check_stats` if `agent_stats()` changes.
+      for anything private, since they become public with the repo. All 6 runs' logs read:
+      secrets masked, nothing private.
+- [x] Data retention as the privacy page will state it, checked against the schema and the
+      live tables. Holding today only because of traffic (S13, fixed with migration 008: live
+      runs' hashes and request windows cleared after a day, report hashes after 30 days).
+- [x] Tests for every fix, with the scripted fake model only; typecheck, build, pytest, ruff,
+      mypy --strict; `python -m dev.check_stats` if `agent_stats()` changes (it did not). 330
+      Python tests (28 new) and 116 TypeScript tests (2 new).
+
+Vedant, to finish 10a:
+- Run the SQL editor query above and paste the result (S18's timeout, S19).
+- Paste `supabase/migrations/008_purge_visitor_hashes.sql` into the SQL editor before the push;
+  until it is in, the scheduled `upkeep` fails.
+- Optional: install the latest Python 3.12 and recreate `.venv` (S16).
 
 Gate (Vedant): reads `docs/SECURITY_AUDIT.md` and confirms every finding is closed or accepted
 with a reason; a header scan of the deployed site; the checks above pass.
@@ -1228,3 +1266,11 @@ Vedant: the analytics page, the other v2 feature, moved into v1 as Session 9.)
   light shift index", 4 runs, $0.152, 2 items in review, then the limit message); its runs check
   out read-only and match his screenshots of "This search". Fixed "1 pages" in a run row. Next:
   Session 10a.
+- 2026-10-09 - Session 10a (in progress): Vedant took the recommended option on the three
+  starting decisions (pip-audit dev-only, report hashes cleared after 30 days, headers checked
+  locally first). The audit recorded 19 findings in `docs/SECURITY_AUDIT.md`: none High, 5
+  Medium, 10 Low and 4 Info. Fixed on Vedant's choice: S1 to S5, S13 (migration 008) and S17;
+  the other Lows are accepted for now, and S15 is accepted. `pnpm audit` and pip-audit are
+  clean, the Actions logs hold nothing private, and the live RLS probe passed. 330 Python and
+  116 TypeScript tests. No paid calls. Not committed. Next: Vedant runs the SQL editor query and
+  pastes 008, then the commit, the push and a header scan of production (the 10a gate).

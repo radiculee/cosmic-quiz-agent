@@ -48,6 +48,9 @@ runs on a schedule with no human trigger), and code that reads well to recruiter
    - Per-user limits, where a user is a salted hash of the IP address (never the raw IP, for GDPR). Decided 2026-10-01:
      - 2 searches a day per user, resetting at midnight UTC. A search is up to 4 agent runs, one at a time: the explanation at the chosen level and a question at each level, only for items the bank does not already have. Bank questions do not count. (Changed 2026-10-08 by Vedant; it was 3 custom-topic runs of one item each, lowered from 10 on 2026-10-05 after the Session 6 code review, since at 10 one visitor could use up the global daily cap.)
      - 300 API requests an hour per user, across all endpoints (bank questions, reports, stats), against scraping and runaway scripts. (Raised from 60 on 2026-10-04: a 10-question run is about 21 requests, so 60 stopped players during their third run in an hour.)
+     - 10 reports a day per user (added 2026-10-09 by the security audit, `docs/SECURITY_AUDIT.md` S2): two reports hide an item, so without a limit two connections could hide the whole bank.
+     - Visitor hashes are cleared on a timer by a daily purge (migration 008, added 2026-10-09): live runs' hashes and request windows after a day, report hashes after 30 days.
+     - The API serves this site's own pages only: a request another site's page sends is refused, and a POST must carry JSON (added 2026-10-09, `docs/SECURITY_AUDIT.md` S1).
      - Over a limit, custom topics fall back to the bank and other requests get HTTP 429 with a retry time.
    - A global cap that stays under the $10 limit (set 2026-10-04): 4 searches and $0.50 a day, and $4 a month for live runs, leaving room for the daily Curator. Each run reserves the most it can cost ($0.17) until it ends; a search runs one at a time, so it never reserves more than that. When a cap is reached, serve from the bank. (Changed 2026-10-08 by Vedant: the daily count was 10 live runs; a search costs about $0.12.) Since a run starts only if today's spend plus its reservation fits $0.50, 4 searches is a ceiling: the day's 4th search usually makes 1 or 2 items, or cannot start. Kept as is (decided 2026-10-08).
    - No run of a search starts after 3 minutes, and a run that starts after about 2 minutes gets a shorter agent time budget (what is left before 280 s, minus 40 s for the verifiers and the save), so a search always ends inside Vercel's 300 s (decided 2026-10-08).
@@ -77,7 +80,7 @@ runs on a schedule with no human trigger), and code that reads well to recruiter
     - Jev's verdict definitions are astronomy-specific (`astro-1`, chosen 2026-10-02): the same quantity in an equivalent unit or notation counts as support; a different value, order of magnitude, object or classification counts as a contradiction. A Jev-only re-check of the Session 3 eval at the same threshold kept planted faults handled at 38/40, with two more flagged by Jev itself; generated items went from 22/20/9 to 23/19/9 published/review/discarded. The wording's version is stored with every Jev result.
     - Decided 2026-10-01 from the Session 3 eval and Vedant's hand review: **all_must_pass** with a Jev threshold of **0.8**. Any layer failing discards; any doubt goes to review. Measured: 38 of 40 planted faults handled, 43% of generated items published directly. See `docs/EVALS.md`.
     - Amended 2026-10-02: when the Haiku verifier's own supporting quote is not word for word on a cited page, the item goes to `review` instead of being discarded. That is the verifier's mistake, not evidence against the item: re-scored on the Session 3 eval it caught 0 of 40 planted faults and discarded 5 items, which now go to review; none is newly published and 38 of 40 planted faults are still handled.
-    - A Report button on each question; 2 reports hide it.
+    - A Report button on each question; 2 reports hide it. A visitor sends at most 10 a day, and `python -m curator review --reported` keeps or discards each hidden item (added 2026-10-09).
 
 ## Defaults chosen without asking (change if wanted)
 - **Review queue:** Vedant decides borderline items with `python -m curator review`, which shows each item with its question, answer, explanation, why it is in review, every cited source with its quote, and Jev's source check (changed 2026-10-02: the table editor does not show an item's sources, and nothing is approved without seeing them). `items.reviewed_at` records when each item left review, so the verifiers' doubts can be compared with his decisions. No admin UI in v1.
@@ -131,7 +134,8 @@ supabase/schema.sql    topics, items, sources, claim_checks (per-claim results o
                        curator_runs, cited_pages, reports, rate_limits, on_demand_runs
                        (+ subscribers in v2)
 supabase/migrations/   numbered changes after schema.sql (006 the web page's searches, Session 8;
-                       007 adds agent_stats() and drops the 004 begin_on_demand_run, Session 9)
+                       007 adds agent_stats() and drops the 004 begin_on_demand_run, Session 9;
+                       008 clears visitor hashes on a timer, Session 10a)
 .github/workflows/curator.yml   daily cron + manual dispatch
 LICENSE                MIT (Session 10, when the repo goes public)
 ```

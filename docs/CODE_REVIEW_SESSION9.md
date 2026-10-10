@@ -135,6 +135,8 @@ the grid hint on real figures ("From 32% published (learn hard) to 79% (learn ea
 
 ## For the Session 10 audit (not Session 9 changes)
 
+Both are now in `docs/SECURITY_AUDIT.md`, as S18 (accepted) and S19.
+
 - Anyone holding the publishable key can call `/rpc/agent_stats` directly, past the edge cache
   and the 300-an-hour limit. It returns aggregates only and runs one small query. (Checked
   2026-10-09: neither the Supabase URL nor a key is in the browser bundle, so today only the
