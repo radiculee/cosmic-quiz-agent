@@ -2,7 +2,7 @@
 
 python -m curator build [--topics N] [--cap USD] [--workers N] [--yes]
 python -m curator daily [--cap USD] [--workers N] [--yes]
-python -m curator review [--mode learn|quiz] [--difficulty easy|medium|hard]
+python -m curator review [--mode learn|quiz] [--difficulty easy|medium|hard] [--reported]
 python -m curator upkeep
 python -m curator rejev [--yes]
 
@@ -15,10 +15,11 @@ difficulty. It can be re-run: jobs already in the bank are skipped, so an interr
 build continues where it stopped. daily first finishes a recent news topic that an earlier run
 left incomplete; otherwise it picks one new topic from the NASA and ESA news feeds. Either way it
 runs the same pipeline and retires news items past their date. review shows each item the
-gate sent to review, with its sources, and publishes or discards it on your decision (free).
-upkeep does the free part of a daily run only: it stores runs an earlier run left on disk and
-retires news items past their date, with no model calls. The scheduled workflow runs it on days
-without a paid run, which also keeps the free database from pausing for inactivity.
+gate sent to review, with its sources, and publishes or discards it on your decision (free);
+with --reported it shows the published items that players' reports have hidden instead, to keep
+or discard. upkeep does the free part of a daily run only: it stores runs an earlier run left on
+disk and retires news items past their date, with no model calls. The scheduled workflow runs it
+on days without a paid run, which also keeps the free database from pausing for inactivity.
 rejev re-runs Jev on items the gate sent to review because their Jev check failed (an outage or
 a wrong key), from the page text stored with each run, and applies the same gate rule again.
 It costs a fraction of a cent on TypeSafe and nothing on Anthropic.
@@ -55,7 +56,7 @@ from curator.pipeline import (
     flush_pending,
     job_cost_limit,
 )
-from curator.review import review
+from curator.review import review, review_reported
 from curator.topics import BUILD_TOPICS
 
 # More retries than the CLI: a Curator run sends many requests and may meet rate limits.
@@ -261,19 +262,26 @@ def command_rejev(args: argparse.Namespace, settings: Settings, store: SupabaseS
 
 
 def command_review(args: argparse.Namespace, settings: Settings, store: SupabaseStore) -> int:
+    queue = store.reported_queue() if args.reported else store.review_queue()
     items = [
         item
-        for item in store.review_queue()
+        for item in queue
         if (args.mode is None or item.mode == args.mode)
         and (args.difficulty is None or item.difficulty == args.difficulty)
     ]
     if not items:
-        print("Nothing to review.")
+        print("No item is hidden by reports." if args.reported else "Nothing to review.")
         return 0
-    print(f"{len(items)} item(s) in review. Source URLs can be opened with Ctrl+click.")
-    tally = review(store, items, input, print)
+    where = "hidden by reports" if args.reported else "in review"
+    print(f"{len(items)} item(s) {where}. Source URLs can be opened with Ctrl+click.")
+    if args.reported:
+        tally = review_reported(store, items, input, print)
+        done = f"Kept {tally.kept}, discarded {tally.discarded}, skipped {tally.skipped}"
+    else:
+        tally = review(store, items, input, print)
+        done = f"Published {tally.published}, discarded {tally.discarded}, skipped {tally.skipped}"
     print(
-        f"\nPublished {tally.published}, discarded {tally.discarded}, skipped {tally.skipped}"
+        f"\n{done}"
         + (f", {tally.changed_elsewhere} changed elsewhere" if tally.changed_elsewhere else "")
         + "."
     )
@@ -305,6 +313,11 @@ def main(argv: list[str] | None = None) -> int:
     queue = commands.add_parser("review", help="Publish or discard the items in review (free).")
     queue.add_argument("--mode", choices=get_args(Mode))
     queue.add_argument("--difficulty", choices=get_args(Difficulty))
+    queue.add_argument(
+        "--reported",
+        action="store_true",
+        help="Keep or discard the published items that players' reports have hidden instead.",
+    )
     commands.add_parser("upkeep", help="Store left-over runs and retire stale items (free).")
     rejev = commands.add_parser(
         "rejev", help="Re-run Jev on items whose Jev check failed (TypeSafe, under a cent)."

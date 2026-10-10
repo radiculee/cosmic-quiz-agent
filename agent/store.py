@@ -420,6 +420,8 @@ class Store(Protocol):
 # --- The review queue -------------------------------------------------------------------------
 
 ReviewDecision = Literal["published", "discarded"]
+# For an item hidden by reports: show it again ("kept"), or take it out of the bank.
+ReportDecision = Literal["kept", "discarded"]
 
 
 class ReviewSource(BaseModel):
@@ -448,6 +450,14 @@ class ReviewTopic(BaseModel):
     kind: TopicKind
 
 
+class ReviewReport(BaseModel):
+    """A player's report, as shown to the reviewer: the reason only, never the visitor."""
+
+    model_config = ConfigDict(frozen=True)
+
+    reason: str | None = None
+
+
 class ReviewItem(BaseModel):
     """An item waiting for a person, with everything needed to judge it."""
 
@@ -469,6 +479,9 @@ class ReviewItem(BaseModel):
     topics: ReviewTopic
     sources: list[ReviewSource]
     claim_checks: list[ReviewCheck] = Field(default_factory=list)
+    # Set for an item hidden by reports (`curator review --reported`); 0 and empty otherwise.
+    report_count: int = 0
+    reports: list[ReviewReport] = Field(default_factory=list)
 
 
 class JevRecheck(BaseModel):
@@ -514,6 +527,10 @@ class ReviewStore(Protocol):
 
     def decide_review(self, item_id: int, decision: ReviewDecision) -> bool: ...
 
+    def reported_queue(self) -> list[ReviewItem]: ...
+
+    def decide_reported(self, item_id: int, decision: ReportDecision) -> bool: ...
+
 
 class _AttemptedJob(BaseModel):
     topic: str
@@ -555,6 +572,8 @@ _REVIEW_SELECT = (
     "jev_reasons,jev_criteria,jev_threshold,created_at,topics(name,kind),sources(ordinal,url,quote),"
     "claim_checks(kind,claim,verdict,confidence)"
 )
+# Hidden by reports: published, with at least the two reports that hide an item from players.
+_HIDDEN = {"status": "eq.published", "report_count": "gte.2"}
 
 _TOPICS_LIMIT = 1000
 _NUL = chr(0)
@@ -871,3 +890,38 @@ class SupabaseStore:
             headers={"Prefer": "return=representation"},
         )
         return len(parse(_ID_ROWS, reply, "deciding a review item")) == 1
+
+    def reported_queue(self) -> list[ReviewItem]:
+        """Every published item hidden by reports, oldest first, with the reasons players gave
+        (never who gave them), its sources and Jev's claim checks."""
+        reply = self._rest.send(
+            "GET",
+            "/items",
+            params={
+                "select": f"{_REVIEW_SELECT},report_count,reports(reason)",
+                **_HIDDEN,
+                "order": "id.asc",
+                "sources.order": "ordinal.asc",
+                "claim_checks.layer": "eq.jev",
+                "claim_checks.order": "id.asc",
+                "reports.order": "id.asc",
+            },
+            retries=RETRIES,
+        )
+        return parse(_REVIEW_ITEMS, reply, "reading the reported items")
+
+    def decide_reported(self, item_id: int, decision: ReportDecision) -> bool:
+        """Decide an item hidden by reports. "kept" shows it again by starting its count from 0
+        (its reports stay, so the same visitors cannot report it twice); "discarded" takes it out
+        of the bank. False if it was no longer hidden (decided elsewhere)."""
+        update: dict[str, object] = (
+            {"report_count": 0} if decision == "kept" else {"status": "discarded"}
+        )
+        reply = self._rest.send(
+            "PATCH",
+            "/items",
+            json=update,
+            params={"id": f"eq.{item_id}", **_HIDDEN, "select": "id"},
+            headers={"Prefer": "return=representation"},
+        )
+        return len(parse(_ID_ROWS, reply, "deciding a reported item")) == 1

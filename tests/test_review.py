@@ -8,8 +8,8 @@ from typing import Any
 
 import httpx2
 
-from agent.store import ReviewDecision, ReviewItem
-from curator.review import format_item, review
+from agent.store import ReportDecision, ReviewDecision, ReviewItem
+from curator.review import format_item, review, review_reported
 from tests.test_store import store_with
 
 QUIZ_ROW: dict[str, Any] = {
@@ -60,6 +60,7 @@ def quiz_item(item_id: int = 6) -> ReviewItem:
 class QueueStore:
     def __init__(self, stale: set[int] | None = None) -> None:
         self.decisions: list[tuple[int, ReviewDecision]] = []
+        self.report_decisions: list[tuple[int, ReportDecision]] = []
         self.stale = stale or set()
 
     def review_queue(self) -> list[ReviewItem]:
@@ -70,6 +71,27 @@ class QueueStore:
             return False
         self.decisions.append((item_id, decision))
         return True
+
+    def reported_queue(self) -> list[ReviewItem]:
+        return [reported_item()]
+
+    def decide_reported(self, item_id: int, decision: ReportDecision) -> bool:
+        if item_id in self.stale:
+            return False
+        self.report_decisions.append((item_id, decision))
+        return True
+
+
+def reported_item(item_id: int = 6) -> ReviewItem:
+    return ReviewItem.model_validate(
+        {
+            **QUIZ_ROW,
+            "id": item_id,
+            "haiku_reasons": [],
+            "report_count": 2,
+            "reports": [{"reason": "The cycle is 22 years"}, {"reason": None}],
+        }
+    )
 
 
 def scripted(*answers: str) -> Iterator[str]:
@@ -146,3 +168,57 @@ def test_supabase_review_queue_and_guarded_decision() -> None:
     assert patch.url.params["status"] == "eq.review"  # only while still in review
     assert json.loads(patch.content) == {"status": "published"}
     assert first is True and second is False
+
+
+def test_a_hidden_item_shows_the_reasons_players_gave() -> None:
+    text = format_item(reported_item(), 1, 1)
+
+    assert "Hidden by 2 reports. The reasons players gave:" in text
+    assert "- The cycle is 22 years" in text and "- (no reason given)" in text
+    assert "Why it is in review:" not in text and "gate's notes" not in text
+    assert "A. About 11 years   <- marked correct" in text
+
+    noted = reported_item().model_copy(update={"jev_reasons": ["low confidence"]})
+    assert "- Jev: low confidence" in format_item(noted, 1, 1)
+
+
+def test_review_reported_keeps_discards_and_skips() -> None:
+    store = QueueStore(stale={4})
+    answers = scripted("p", "k", "d", "s", "k")
+    said: list[str] = []
+    items = [reported_item(n) for n in (1, 2, 3, 4)]
+
+    tally = review_reported(store, items, lambda _p: next(answers), said.append)
+
+    assert store.report_decisions == [(1, "kept"), (2, "discarded")]
+    assert (tally.kept, tally.discarded, tally.skipped, tally.changed_elsewhere) == (1, 1, 1, 1)
+    assert "Please answer k, d, s or q." in said  # p is not a choice here
+    assert store.decisions == []
+
+
+def test_supabase_reported_queue_and_guarded_decisions() -> None:
+    seen: list[httpx2.Request] = []
+    row = {**QUIZ_ROW, "report_count": 2, "reports": [{"reason": "wrong"}]}
+
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        seen.append(request)
+        if request.method == "GET":
+            return httpx2.Response(200, json=[row])
+        return httpx2.Response(200, json=[{"id": 6}] if len(seen) == 2 else [])
+
+    store = store_with(handler)
+    items = store.reported_queue()
+    kept = store.decide_reported(6, "kept")
+    discarded = store.decide_reported(6, "discarded")
+
+    assert items[0].report_count == 2 and items[0].reports[0].reason == "wrong"
+    params = seen[0].url.params
+    assert params["status"] == "eq.published" and params["report_count"] == "gte.2"
+    assert params["select"].endswith(",report_count,reports(reason)")  # reasons, never hashes
+    keep, discard = seen[1], seen[2]
+    assert json.loads(keep.content) == {"report_count": 0}
+    assert json.loads(discard.content) == {"status": "discarded"}
+    for request in (keep, discard):  # only while the item is still hidden
+        assert request.url.params["report_count"] == "gte.2"
+        assert request.url.params["status"] == "eq.published"
+    assert kept is True and discarded is False
