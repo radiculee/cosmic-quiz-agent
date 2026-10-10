@@ -419,7 +419,7 @@ export function ExplorePage({
         Go
       </button>
       {quota && (
-        <p role="status" className="mt-4 max-w-md text-center text-sm text-slate">
+        <p role="status" className="scene-note mt-4 max-w-md text-center text-sm">
           {quota.global_open ? quotaLine(quota) : GLOBAL_CAP_NOTICE}
         </p>
       )}
@@ -442,7 +442,7 @@ export function ExplorePage({
               outcome={logOutcome}
             />
             {search && search.runs.length > 0 && (
-              <p className="mt-3 text-sm text-slate">
+              <p className="scene-note mt-3 text-sm">
                 What each run cost and did:{" "}
                 <button
                   type="button"
@@ -550,7 +550,7 @@ function SlotTag({ slot }: { slot: Slot }) {
     return null;
   }
   return (
-    <p className="mb-3 font-pixel text-[8px] uppercase text-slate">
+    <p className="on-scene-muted mb-3 font-pixel text-[8px] uppercase">
       {slot.source === "bank" ? "From the bank, free" : "Researched just now"}
     </p>
   );
@@ -568,7 +568,7 @@ function SlotNote({ slot }: { slot: Slot }) {
   }[slot.state.kind];
   return (
     <p
-      className={`pixel-border rounded-sm bg-surface/50 px-5 py-4 text-sm ${
+      className={`pixel-border rounded-sm bg-surface px-5 py-4 text-sm ${
         slot.state.kind === "missed" ? "text-slate" : "text-ink/90"
       }`}
     >
@@ -602,7 +602,7 @@ function QuestionStrip({
     }
   }
   return (
-    <div className="flex flex-wrap items-baseline gap-x-5 gap-y-2">
+    <div className="on-scene flex flex-wrap items-baseline gap-x-5 gap-y-2">
       <h2 className="font-heading text-xl font-bold">Questions</h2>
       <ol className="flex flex-wrap gap-x-4 gap-y-1">
         {slots.map((slot, index) => (
@@ -610,10 +610,10 @@ function QuestionStrip({
             key={slot.key}
             aria-current={index === current ? "step" : undefined}
             className={`pixel-bullet font-pixel text-[8px] uppercase ${
-              index === current ? "text-teal" : "text-slate"
+              index === current ? "text-teal" : "text-ink"
             }`}
           >
-            {slot.difficulty} <span className="text-ink/60">{state(slot)}</span>
+            {slot.difficulty} <span className="text-ink/80">{state(slot)}</span>
           </li>
         ))}
       </ol>
@@ -625,7 +625,7 @@ function QuestionStrip({
 function BankLinks() {
   const link = "text-teal underline underline-offset-4 hover:text-ink";
   return (
-    <p className="text-center text-sm text-ink/90">
+    <p className="scene-note mx-auto text-center text-sm">
       <Link to={PATHS.learn} className={link}>
         Browse the topics in Learn
       </Link>{" "}
@@ -648,7 +648,7 @@ interface HintProps {
 
 /** One line under the topic box: what GO will do, or why it is not available. */
 function Hint({ state, status, difficulty, tooLong, onRetry }: HintProps) {
-  const base = "mt-3 min-h-5 text-sm text-slate";
+  const base = "scene-note mt-3 min-h-5 text-sm";
   if (state.kind === "loading") {
     return <p className={base}>Loading topics...</p>;
   }
@@ -663,7 +663,12 @@ function Hint({ state, status, difficulty, tooLong, onRetry }: HintProps) {
     );
   }
   if (tooLong) {
-    return <p className={`${base} text-rust`}>Keep the topic under {MAX_TOPIC_CHARS} characters.</p>;
+    // Not rust, which is under 4.5:1 on the chip.
+    return (
+      <p className={`${base} font-medium`}>
+        Keep the topic under {MAX_TOPIC_CHARS} characters.
+      </p>
+    );
   }
   const level = difficulty.toUpperCase();
   switch (status.kind) {

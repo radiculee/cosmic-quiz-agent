@@ -85,7 +85,7 @@ export function TopicInput({
         onFocus={() => setOpen(true)}
         onBlur={() => setOpen(false)}
         onKeyDown={onKeyDown}
-        className="w-full rounded-lg border border-white/10 bg-surface px-5 py-4 text-base text-ink placeholder:text-slate/70 focus:border-teal focus:outline-none disabled:opacity-50"
+        className="w-full rounded-lg border border-white/10 bg-surface px-5 py-4 text-base text-ink placeholder:text-slate/70 focus:border-teal focus:outline-none disabled:text-slate"
       />
       {showList && (
         <ul

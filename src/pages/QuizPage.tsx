@@ -52,7 +52,7 @@ type View =
 function Row({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="flex flex-col items-center gap-2 sm:flex-row sm:gap-4">
-      <span aria-hidden="true" className="font-pixel text-[8px] uppercase text-slate sm:w-24 sm:text-right">
+      <span aria-hidden="true" className="on-scene-muted font-pixel text-[8px] uppercase sm:w-24 sm:text-right">
         {label}
       </span>
       {children}
@@ -233,7 +233,7 @@ export function QuizPage({
             />
           </Row>
           {note && (
-            <p id={noteId} className="max-w-md text-center text-sm text-slate">
+            <p id={noteId} className="scene-note max-w-md text-center text-sm">
               {note}
             </p>
           )}
@@ -250,12 +250,12 @@ export function QuizPage({
         >
           Start
         </button>
-        <p className="mt-4 max-w-md text-center text-xs leading-relaxed text-slate">
+        <p className="scene-note mt-4 max-w-md text-center text-xs leading-relaxed">
           EASY 100, MEDIUM 200, HARD 300 points a correct answer. x1.5 from 3 in a row, x2 from 5,
           and +25% for answering within 15 seconds.
         </p>
 
-        <div className="mt-14 w-full max-w-xl">
+        <div className="pixel-border mt-14 w-full max-w-xl rounded-sm bg-surface px-5 py-5">
           <ProfileStrip profile={profile} />
         </div>
       </div>
@@ -278,14 +278,14 @@ export function QuizPage({
             <button
               type="button"
               onClick={endRun}
-              className="font-pixel text-[8px] uppercase text-slate underline-offset-4 hover:text-ink hover:underline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-teal"
+              className="on-scene-muted font-pixel text-[8px] uppercase underline-offset-4 hover:text-ink hover:underline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-teal"
             >
               End run
             </button>
           </div>
         </>
       )}
-      {view.kind === "loading" && <p className="text-center text-sm text-slate">{view.label}</p>}
+      {view.kind === "loading" && <p className="scene-note mx-auto text-center text-sm">{view.label}</p>}
       {view.kind === "failed" && <LoadFailed message={view.message} onRetry={view.retry} />}
       {view.kind === "question" && (
         <QuizCard

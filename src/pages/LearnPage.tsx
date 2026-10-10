@@ -96,7 +96,7 @@ function LearnIndex({ topicsState, retryTopics, profile, difficulty, setDifficul
         <TopicsNotice state={topicsState} onRetry={retryTopics} />
         {topicsState.kind === "loaded" && (
           <>
-            <p aria-live="polite" className="mb-4 text-sm text-slate">
+            <p aria-live="polite" className="scene-note mb-4 text-sm">
               {query.trim()
                 ? `${shown.length} of ${available.length} topics match.`
                 : `${read} of ${available.length} read at ${difficulty.toUpperCase()}.`}
@@ -128,16 +128,16 @@ function NoMatch({
   if (status.kind === "elsewhere" && status.difficulties.length > 0) {
     const others = status.difficulties.map((level) => level.toUpperCase()).join(" or ");
     return (
-      <p className="text-sm text-ink/90">
+      <p className="scene-note text-sm">
         {status.topic.name} has no explanation at {difficulty.toUpperCase()} yet. Try {others}.
       </p>
     );
   }
   if (typed.length < MIN_TOPIC_CHARS || typed.length > MAX_TOPIC_CHARS) {
-    return <p className="text-sm text-slate">No topics match.</p>;
+    return <p className="scene-note text-sm">No topics match.</p>;
   }
   return (
-    <p className="text-sm text-ink/90">
+    <p className="scene-note text-sm">
       &ldquo;{typed}&rdquo; is not in the bank yet.{" "}
       <Link
         to={explorePath(typed, difficulty)}
@@ -216,7 +216,7 @@ function LearnTopic({
   const back = (
     <Link
       to={PATHS.learn}
-      className="font-pixel text-[8px] uppercase text-slate hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-teal"
+      className="on-scene-muted font-pixel text-[8px] uppercase hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-teal"
     >
       &lt; All topics
     </Link>
@@ -236,7 +236,7 @@ function LearnTopic({
     return (
       <div className="pt-8">
         {back}
-        <p className="mt-10 text-center text-ink/90">
+        <p className="scene-note mx-auto mt-10 text-center">
           {topic
             ? `${topic.name} has no LEARN explanation yet.`
             : "There is no topic at this address."}{" "}
@@ -264,7 +264,7 @@ function LearnTopic({
       </div>
       <div className="mt-6" aria-live="polite">
         {view.kind === "loading" && (
-          <p className="text-center text-sm text-slate">Loading {topic.name}...</p>
+          <p className="scene-note mx-auto text-center text-sm">Loading {topic.name}...</p>
         )}
         {view.kind === "failed" && (
           <LoadFailed message={view.message} onRetry={() => setAttempt((n) => n + 1)} />

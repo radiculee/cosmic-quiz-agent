@@ -39,7 +39,7 @@ export function TrophiesPage({ topicsState, profile }: Pick<PageProps, "topicsSt
       <PageHeading title="Trophies">
         {tiersEarned(profile.trophies)} of {TIER_COUNT} tiers earned. Kept in this browser.
       </PageHeading>
-      <p className="mt-3 text-center text-xs text-slate">
+      <p className="on-scene-muted mt-3 text-center text-xs">
         {counted(profile.finishedRuns, "run finished", "runs finished")} &middot;{" "}
         {counted(profile.learned.length, "topic read", "topics read")} &middot;{" "}
         {counted(profile.liveRuns, "live search", "live searches")}
@@ -49,7 +49,7 @@ export function TrophiesPage({ topicsState, profile }: Pick<PageProps, "topicsSt
         {TROPHIES.map((entry) => {
           const have = profile.trophies[entry.id];
           return (
-            <li key={entry.id} className="pixel-border rounded-sm bg-surface/70 px-5 py-4">
+            <li key={entry.id} className="pixel-border rounded-sm bg-surface px-5 py-4">
               <div className="flex items-center gap-4">
                 <TrophyIcon glyph={entry.id} tone={have ?? "locked"} size="lg" />
                 <h2 className="font-heading text-xl font-bold">

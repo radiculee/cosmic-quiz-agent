@@ -24,12 +24,12 @@ export interface PageProps {
 export const MIN_TOPIC_CHARS = 2;
 export const MAX_TOPIC_CHARS = 80;
 
-/** A page's title and the sentence under it. */
+/** A page's title and the sentence under it, straight on the scene. */
 export function PageHeading({ title, children }: { title: string; children: ReactNode }) {
   return (
     <div className="flex flex-col items-center pt-8 text-center sm:pt-10">
-      <h1 className="font-heading text-5xl font-bold uppercase tracking-tight">{title}</h1>
-      <p className="mt-4 max-w-lg leading-relaxed text-ink/90">{children}</p>
+      <h1 className="on-scene font-heading text-5xl font-bold uppercase tracking-tight">{title}</h1>
+      <p className="on-scene-muted mt-4 max-w-lg leading-relaxed">{children}</p>
     </div>
   );
 }
@@ -37,11 +37,11 @@ export function PageHeading({ title, children }: { title: string; children: Reac
 /** While the topics load, or after they failed to. Nothing once they are loaded. */
 export function TopicsNotice({ state, onRetry }: { state: TopicsState; onRetry: () => void }) {
   if (state.kind === "loading") {
-    return <p className="text-center text-sm text-slate">Loading topics...</p>;
+    return <p className="scene-note mx-auto text-center text-sm">Loading topics...</p>;
   }
   if (state.kind === "failed") {
     return (
-      <p role="alert" className="text-center text-sm text-slate">
+      <p role="alert" className="scene-note mx-auto text-center text-sm">
         Could not load the topics.{" "}
         <button type="button" onClick={onRetry} className="text-teal underline underline-offset-4">
           Try again
@@ -55,7 +55,7 @@ export function TopicsNotice({ state, onRetry }: { state: TopicsState; onRetry: 
 /** A failed load, with a retry. */
 export function LoadFailed({ message, onRetry }: { message: string; onRetry: () => void }) {
   return (
-    <p role="alert" className="text-center text-sm text-slate">
+    <p role="alert" className="scene-note mx-auto text-center text-sm">
       {message}{" "}
       <button type="button" onClick={onRetry} className="text-teal underline underline-offset-4">
         Try again
@@ -74,7 +74,9 @@ export function loadError(error: unknown): string {
     : "It could not be loaded. Try again in a moment.";
 }
 
+// Solid in every state, including disabled and hover: a button on the scene must never let the
+// scene show through.
 export const PRIMARY_BUTTON =
-  "rounded-lg bg-teal font-pixel uppercase text-void transition-opacity hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal disabled:opacity-40";
+  "rounded-lg bg-teal font-pixel uppercase text-void transition enabled:hover:brightness-110 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal disabled:bg-[color-mix(in_oklab,var(--color-teal)_35%,var(--color-surface))] disabled:text-void/70";
 export const SECONDARY_BUTTON =
-  "flex items-center gap-3 rounded-lg border border-white/10 bg-surface font-pixel uppercase text-ink transition-colors hover:border-white/25 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal disabled:opacity-50";
+  "flex items-center gap-3 rounded-lg border border-white/10 bg-surface font-pixel uppercase text-ink transition-colors hover:border-white/25 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal disabled:text-slate/60";

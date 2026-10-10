@@ -32,7 +32,7 @@ export function RunHud({
         ))}
       </dl>
       {run.repeats && (
-        <p className="mt-2 text-xs text-slate">
+        <p className="scene-note mt-2 text-xs">
           You have played every other topic at this level, so some questions repeat.
         </p>
       )}

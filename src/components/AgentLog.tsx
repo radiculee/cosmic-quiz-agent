@@ -72,7 +72,7 @@ export function AgentLog({
   return (
     <section
       aria-label={`Agent log for ${topic}`}
-      className="pixel-border w-full rounded-sm bg-surface/80 px-4 py-5 sm:px-6"
+      className="pixel-border w-full rounded-sm bg-surface px-4 py-5 sm:px-6"
     >
       <header className="flex items-baseline justify-between gap-4 border-b border-white/5 pb-3">
         <p className="font-pixel text-[9px] uppercase text-teal">

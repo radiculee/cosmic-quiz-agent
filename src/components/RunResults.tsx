@@ -42,7 +42,7 @@ export function RunResults({
   ];
 
   return (
-    <article className="pixel-border w-full rounded-sm bg-surface/70 px-5 py-8 text-center sm:px-8">
+    <article className="pixel-border w-full rounded-sm bg-surface px-5 py-8 text-center sm:px-8">
       <p className="font-pixel text-[9px] uppercase text-slate">
         {finished ? "Run complete" : "Run ended"} / {run.difficulty}
       </p>

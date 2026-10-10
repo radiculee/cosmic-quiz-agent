@@ -11,6 +11,10 @@
   --color-lavender: #7b6b8a;
   --color-ink: #f0ede8;
   --color-slate: #8b9baa;
+  /* The sky above a scene on tall screens, sampled from the scenes (2026-10-10): the top of the
+     page, and the scenes' own top edge (#023063 to #043b77), where the image takes over. */
+  --color-sky-top: #021a3d;
+  --color-sky-edge: #033770;
 
   --font-heading: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
   --font-body: "Inter", ui-sans-serif, system-ui, sans-serif;
@@ -22,12 +26,100 @@
   color-scheme: dark;
 }
 
+/* The page shows a scene (.scene below); the sky colour is what overscrolling reveals. bg-void stays
+   for the analytics panel, inputs and tiles. */
 body {
   margin: 0;
-  background-color: var(--color-void);
+  background-color: var(--color-sky-top);
   color: var(--color-ink);
   font-family: var(--font-body);
   -webkit-font-smoothing: antialiased;
+}
+
+/* The scene behind every page (src/components/Scene.tsx). A fixed layer rather than
+   background-attachment: fixed, which iOS ignores, so the content scrolls over it. Above the image
+   on tall screens, the sky carries on up from its top edge: 56.47vw is the image's height at full
+   width (1536 / 2720). */
+.scene {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+  pointer-events: none;
+  background: linear-gradient(
+    to bottom,
+    var(--color-sky-top),
+    var(--color-sky-edge) max(0%, calc(100% - 56.47vw))
+  );
+}
+
+/* From 4:3 up, the scene fills the screen, anchored at the bottom. Each scene is a layer: the one
+   showing on top (fading in over the one before), the one it replaces under it until the fade
+   ends, and the rest hidden. The fade time is FADE_MS in src/slideshow.ts. */
+.scene img {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: 50% 100%;
+  opacity: 0;
+}
+
+.scene img[data-layer="top"] {
+  z-index: 2;
+  opacity: 1;
+  transition: opacity 1500ms ease-in-out;
+}
+
+.scene img[data-layer="under"] {
+  z-index: 1;
+  opacity: 1;
+}
+
+/* Narrower than 4:3 (phones, portrait tablets): the whole scene at full width, pinned to the
+   bottom, its top edge fading into the sky above so the seam never shows. */
+@media (max-aspect-ratio: 4/3) {
+  .scene img {
+    height: auto;
+    -webkit-mask-image: linear-gradient(to bottom, transparent, #000 14%);
+    mask-image: linear-gradient(to bottom, transparent, #000 14%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .scene img[data-layer="top"] {
+    transition: none;
+  }
+}
+
+/* Text straight on a scene, not in a card: ink with a soft dark shadow, so it reads over the sky
+   and the field; secondary lines at 80%. Never slate on a scene. Cards stay solid bg-surface. */
+@utility on-scene {
+  color: var(--color-ink);
+  text-shadow:
+    0 1px 2px rgb(0 0 0 / 0.55),
+    0 0 14px rgb(0 0 0 / 0.35);
+}
+
+@utility on-scene-muted {
+  color: color-mix(in oklab, var(--color-ink) 80%, transparent);
+  text-shadow:
+    0 1px 2px rgb(0 0 0 / 0.55),
+    0 0 14px rgb(0 0 0 / 0.35);
+}
+
+/* A small line below a page's intro (a count, a note, a hint, a loading or error line): on a
+   solid chip, because the fixed scene can put any line over a subject's white stone, where ink
+   does not read. Titles and intros stay on the scene's sky. */
+@utility scene-note {
+  width: fit-content;
+  border: 1px solid rgb(255 255 255 / 0.1);
+  border-radius: 0.125rem;
+  background-color: var(--color-surface);
+  padding: 0.45rem 0.8rem;
+  color: color-mix(in oklab, var(--color-ink) 90%, transparent);
 }
 
 /* Pixel-dashed border: 4px on, 4px off, drawn with gradients so the dash length is exact

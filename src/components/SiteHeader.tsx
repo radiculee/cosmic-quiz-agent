@@ -15,7 +15,7 @@ export function SiteHeader({ showHomeLink }: { showHomeLink: boolean }) {
       {showHomeLink ? (
         <Link
           to={PATHS.home}
-          className="font-heading text-base font-bold uppercase tracking-tight text-ink hover:text-teal focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-teal"
+          className="on-scene font-heading text-base font-bold uppercase tracking-tight hover:text-teal focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-teal"
         >
           Cosmic Quiz
         </Link>
@@ -28,7 +28,7 @@ export function SiteHeader({ showHomeLink }: { showHomeLink: boolean }) {
         rel="noopener noreferrer"
         aria-label={GITHUB_LABEL}
         title="GitHub"
-        className="rounded-sm p-1 text-slate transition-colors hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal"
+        className="rounded-sm p-1 text-ink drop-shadow-[0_1px_2px_rgb(0_0_0/0.6)] transition-colors hover:text-teal focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal"
       >
         <GitHubIcon />
       </a>

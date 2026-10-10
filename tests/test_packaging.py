@@ -149,3 +149,17 @@ def test_scenes_are_cached_for_good_and_keep_the_security_headers() -> None:
     # Safe because a changed image gets a new name (the -v1- in each file name).
     assert cache["Cache-Control"] == "public, max-age=31536000, immutable"
     assert "/(.*)" in rules  # the security headers still cover the scenes too
+
+
+def test_the_css_fades_and_switches_layout_as_the_slideshow_expects() -> None:
+    # Vitest reads CSS files as empty, so this cross-check lives here.
+    css = (ROOT / "src" / "index.css").read_text(encoding="utf-8")
+    slideshow = (ROOT / "src" / "slideshow.ts").read_text(encoding="utf-8")
+    fade = re.search(r"export const FADE_MS = ([0-9_]+);", slideshow)
+    sizes = re.search(r'export const SCENE_SIZES = "([^"]+)";', slideshow)
+
+    assert fade and sizes
+    assert f"transition: opacity {int(fade[1].replace('_', ''))}ms" in css
+    # The CSS switches to the whole scene at 4:3, where the sizes pick the full-width file.
+    assert "@media (max-aspect-ratio: 4/3)" in css
+    assert sizes[1].startswith("(max-aspect-ratio: 4/3) 100vw")

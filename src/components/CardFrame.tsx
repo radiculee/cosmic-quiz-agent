@@ -20,7 +20,7 @@ export function CardFrame({
   children: ReactNode;
 }) {
   return (
-    <article className="pixel-border w-full rounded-sm bg-surface/70 px-5 py-7 sm:px-8">
+    <article className="pixel-border w-full rounded-sm bg-surface px-5 py-7 sm:px-8">
       <p className="flex flex-wrap items-center gap-x-4 gap-y-2">
         <span className="pixel-bullet font-pixel text-[8px] uppercase text-slate">
           {mode} / {difficulty}
