@@ -7,8 +7,10 @@ which is how /api/research sends the agent's steps as they happen (one JSON obje
 The local dev server (`dev/api_server.py`) serves the same applications with the standard
 library's `wsgiref`, so a function behaves the same locally and on Vercel. Standard library only.
 
-Before a function runs, the request is counted against the visitor's hourly limit
-(`agent/limits.py`). A visitor is a salted hash of their IP address, never the address.
+Before a function runs, a request from another site's page is refused, and so is a POST body
+that is not JSON (docs/SECURITY_AUDIT.md S1). Then the request is counted against the visitor's
+hourly limit (`agent/limits.py`). A visitor is a salted hash of their IP address, never the
+address.
 """
 
 from __future__ import annotations
@@ -46,6 +48,10 @@ class ApiRequest:
     client_ip: str = ""
     # The salted hash of `client_ip`, or "" when it cannot be made (no salt configured).
     visitor: str = ""
+    # The body's media type as sent, and the browser's Sec-Fetch-Site header ("same-origin",
+    # "same-site", "cross-site" or "none"); both "" when the client did not send them.
+    content_type: str = ""
+    fetch_site: str = ""
 
 
 @dataclass(frozen=True)
@@ -117,6 +123,28 @@ def read_json(request: ApiRequest) -> object:
         return None
 
 
+def media_type(content_type: str) -> str:
+    """The media type of a Content-Type header, without its parameters: "application/json"."""
+    return content_type.split(";", 1)[0].strip().lower()
+
+
+def refuse_other_sites(request: ApiRequest) -> ApiResponse | None:
+    """Refuse what another site's page could make a visitor's browser send (cross-site request
+    forgery, docs/SECURITY_AUDIT.md S1), or None to let the request through.
+
+    Browsers mark a request from another site's page with `Sec-Fetch-Site: cross-site`. Older
+    browsers do not send the header, so a POST must also carry a JSON body: a page can send
+    plain text to another site without asking first, but JSON needs a CORS preflight, which this
+    API never approves. The site's own pages send JSON from the same origin, and clients that
+    are not browsers (which still meet every limit) send no Sec-Fetch-Site at all.
+    """
+    if request.fetch_site == "cross-site":
+        return error_response(403, "Only this site's own pages can use its API.")
+    if request.method == "POST" and media_type(request.content_type) != "application/json":
+        return error_response(415, "Send the request body as JSON (application/json).")
+    return None
+
+
 # --- Request limits ---------------------------------------------------------------------------
 
 _shared: SupabaseStore | None = None
@@ -168,6 +196,8 @@ def request_from_environ(environ: WSGIEnvironment) -> ApiRequest:
         body=environ["wsgi.input"].read(length) if length > 0 else b"",
         client_ip=ip,
         visitor=salted_hash(ip, salt) if salt and ip else "",
+        content_type=str(environ.get("CONTENT_TYPE", "")),
+        fetch_site=str(environ.get("HTTP_SEC_FETCH_SITE", "")).strip().lower(),
     )
 
 
@@ -211,6 +241,10 @@ def make_app(handle: Handle, counter: RequestCounter | None = count_request) -> 
 
     def app(environ: WSGIEnvironment, start_response: StartResponse) -> Iterable[bytes]:
         request = request_from_environ(environ)
+        # Refused before counting, so another site's page costs no database call.
+        refused = refuse_other_sites(request)
+        if refused is not None:
+            return _send(refused, start_response)
         if counter is not None and request.visitor:
             counted = counter(request.visitor)
             if counted is not None and not counted.allowed:

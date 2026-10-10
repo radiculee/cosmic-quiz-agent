@@ -139,7 +139,9 @@ def call(
         }
     )
     for name, value in (headers or {}).items():
-        environ["HTTP_" + name.upper().replace("-", "_")] = value
+        key = name.upper().replace("-", "_")
+        # WSGI passes Content-Type without the HTTP_ prefix.
+        environ[key if key == "CONTENT_TYPE" else "HTTP_" + key] = value
     started: dict[str, object] = {}
 
     def start_response(status: str, response_headers: list[tuple[str, str]], *_: object) -> None:
@@ -210,6 +212,44 @@ def test_adapter_refuses_a_visitor_over_the_hourly_limit(monkeypatch: pytest.Mon
     assert len(counted) == before
 
 
+def test_adapter_refuses_requests_another_site_could_make_a_browser_send() -> None:
+    handled: list[ApiRequest] = []
+
+    def handle(request: ApiRequest) -> ApiResponse:
+        handled.append(request)
+        return json_response({"ok": True})
+
+    counted: list[str] = []
+
+    def counter(visitor: str) -> RequestCount:
+        counted.append(visitor)
+        return RequestCount(allowed=True, count=len(counted), retry_after=60)
+
+    app = make_app(handle, counter=counter)
+    body = b'{"id": 7}'
+
+    def post(headers: dict[str, str]) -> str:
+        return call(app, "/api/report", method="POST", body=body, headers=headers)[0][:3]
+
+    # A page on another site can send plain text or a form without a preflight: refused.
+    assert post({"Content-Type": "text/plain"}) == "415"
+    assert post({"Content-Type": "application/x-www-form-urlencoded"}) == "415"
+    assert post({}) == "415"
+    # The browser marks a request from another site's page, whatever its method or body.
+    assert post({"Content-Type": "application/json", "Sec-Fetch-Site": "cross-site"}) == "403"
+    assert call(app, "/api/item", headers={"Sec-Fetch-Site": "cross-site"})[0][:3] == "403"
+    assert handled == [] and counted == []
+
+    # The site's own pages, and clients that send no Sec-Fetch-Site, are served.
+    assert post({"Content-Type": "application/json", "Sec-Fetch-Site": "same-origin"}) == "200"
+    assert post({"Content-Type": "Application/JSON; charset=utf-8"}) == "200"
+    assert call(app, "/api/item", headers={"Sec-Fetch-Site": "same-origin"})[0][:3] == "200"
+    assert call(app, "/api/item", headers={"Sec-Fetch-Site": "none"})[0][:3] == "200"
+    assert len(handled) == 4
+    assert handled[0].content_type == "application/json"
+    assert handled[0].fetch_site == "same-origin"
+
+
 def test_adapter_streams_events_as_lines_and_ends_a_broken_stream_cleanly() -> None:
     def events() -> Iterator[object]:
         yield {"type": "log", "label": "one"}
@@ -217,7 +257,9 @@ def test_adapter_streams_events_as_lines_and_ends_a_broken_stream_cleanly() -> N
         raise RuntimeError("secret detail")
 
     app = make_app(lambda _request: StreamResponse(events()), counter=None)
-    status, headers, body = call(app, "/api/research", method="POST")
+    status, headers, body = call(
+        app, "/api/research", method="POST", headers={"Content-Type": "application/json"}
+    )
 
     lines = [json.loads(line) for line in body.decode().splitlines()]
     assert status.startswith("200")
