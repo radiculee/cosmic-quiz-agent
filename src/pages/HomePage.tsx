@@ -4,7 +4,7 @@ import { ModeCard } from "../components/ModeCard";
 import { ProfileStrip } from "../components/ProfileStrip";
 import { quotaShort } from "../quota";
 import { PATHS, usePageTitle } from "../router";
-import { prefersReducedMotion } from "../useBrowserState";
+import { scrollBehavior } from "../useBrowserState";
 import { loadedTopics } from "../useTopics";
 import { useQuota } from "../useQuota";
 import { type PageProps, SCENE_CHIP } from "./common";
@@ -23,6 +23,9 @@ const PROGRESS_ID = "progress";
  * the scene's empty sky, with a link down to the player's progress and the slideshow's pause
  * control at its foot. Just below the fold, one solid card holds the rank, points, trophy shelf
  * and the bank's size.
+ *
+ * The hero is as tall as the small viewport (svh: Safari's toolbars shown), not the dynamic one
+ * (dvh), which changes as the toolbars hide during a scroll and made the page below it jump.
  */
 export function HomePage({
   topicsState,
@@ -43,7 +46,7 @@ export function HomePage({
       return;
     }
     event.preventDefault();
-    target.scrollIntoView({ behavior: prefersReducedMotion() ? "auto" : "smooth", block: "start" });
+    target.scrollIntoView({ behavior: scrollBehavior(), block: "start" });
     target.focus({ preventScroll: true });
   }
 
@@ -51,7 +54,7 @@ export function HomePage({
     <div className="flex flex-col items-center">
       <section
         aria-label="Cosmic Quiz"
-        className="relative flex min-h-[calc(100dvh-3.5rem)] w-full flex-col items-center pt-2 pb-24 sm:pt-4"
+        className="relative flex min-h-[calc(100svh-3.5rem)] w-full flex-col items-center pt-2 pb-24 sm:pt-4"
       >
         <h1 className="on-scene text-center font-heading text-5xl font-bold uppercase tracking-tight sm:text-6xl xl:text-7xl">
           Cosmic Quiz

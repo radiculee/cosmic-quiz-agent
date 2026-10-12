@@ -97,7 +97,7 @@ export function App() {
   return (
     <>
       <Scene home={route.page === "home"} paused={scenesPaused} reducedMotion={reducedMotion} />
-      <div className="flex min-h-dvh flex-col">
+      <div className="flex min-h-svh flex-col">
         <SiteHeader showHomeLink={route.page !== "home"} />
         <main
           ref={main}

@@ -11,6 +11,11 @@ export function prefersReducedMotion(): boolean {
   return window.matchMedia(REDUCED_MOTION).matches;
 }
 
+/** How to scroll something into view: smoothly, unless the visitor prefers reduced motion. */
+export function scrollBehavior(): ScrollBehavior {
+  return prefersReducedMotion() ? "auto" : "smooth";
+}
+
 function subscribeToMotion(onChange: () => void): () => void {
   const query = window.matchMedia(REDUCED_MOTION);
   query.addEventListener("change", onChange);

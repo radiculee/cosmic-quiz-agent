@@ -166,6 +166,43 @@ def test_the_css_fades_and_switches_layout_as_the_slideshow_expects() -> None:
     assert sizes[1].startswith("(max-aspect-ratio: 4/3) 100vw")
 
 
+def _rule(css: str, selector: str) -> str:
+    """The body of the first CSS rule for `selector`."""
+    match = re.search(re.escape(selector) + r"\s*\{([^}]*)\}", css)
+    assert match, f"no rule for {selector}"
+    return match[1]
+
+
+def test_the_scene_holds_still_while_a_phone_s_toolbar_shows_and_hides() -> None:
+    # Fixed 2026-10-10: on an iPhone the scene dropped by the toolbar's height, and the home page
+    # below the hero jumped, each time Safari's toolbar hid during a scroll.
+    css = (ROOT / "src" / "index.css").read_text(encoding="utf-8")
+    scene = _rule(css, ".scene")
+    assert "height: 100lvh;" in scene and "inset:" not in scene
+
+    # The page's own layout uses the small viewport, which does not change during a scroll. (The
+    # analytics panel is a dialog that scrolls inside itself, so it may follow the visible area.)
+    dynamic = re.compile(r"\b(?:min-h|h|max-h)-dvh\b|\d+dvh")
+    for name in ("App.tsx", "pages/HomePage.tsx"):
+        source = (ROOT / "src" / name).read_text(encoding="utf-8")
+        assert not dynamic.search(source), f"{name} sizes the layout with the dynamic viewport"
+    assert "min-h-svh" in (ROOT / "src" / "App.tsx").read_text(encoding="utf-8")
+    assert "100svh" in (ROOT / "src" / "pages" / "HomePage.tsx").read_text(encoding="utf-8")
+
+
+def test_a_turn_of_the_slideshow_only_changes_opacity() -> None:
+    css = (ROOT / "src" / "index.css").read_text(encoding="utf-8")
+    assert "will-change: opacity;" in _rule(css, ".scene img")
+    # No mask on the images: on phones one band over them fades the scene's top edge instead.
+    assert "mask-image" not in css
+    band = _rule(css, ".scene::after")
+    image_vw = float(re.findall(r"calc\(100% - ([0-9.]+)vw\)", _rule(css, ".scene"))[0])
+    fade_vw = round(image_vw * 0.14, 2)  # the top 14% of the image, as the old mask did
+    assert f"height: {fade_vw}vw;" in band
+    assert f"bottom: calc({image_vw}vw - {fade_vw}vw);" in band
+    assert "var(--color-sky-edge), transparent" in band
+
+
 # --- Fonts (public/fonts, src/index.css) ------------------------------------------------------
 
 FONTS = ROOT / "public" / "fonts"

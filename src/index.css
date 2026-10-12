@@ -114,10 +114,19 @@ body {
 /* The scene behind every page (src/components/Scene.tsx). A fixed layer rather than
    background-attachment: fixed, which iOS ignores, so the content scrolls over it. Above the image
    on tall screens, the sky carries on up from its top edge: 56.47vw is the image's height at full
-   width (1536 / 2720). */
+   width (1536 / 2720).
+
+   It is as tall as the large viewport (lvh: Safari's toolbars hidden) and never resizes. With
+   inset: 0 it followed the visible area, so on an iPhone the whole scene dropped by the toolbar's
+   height whenever the toolbar hid during a scroll (fixed 2026-10-10). Now, while the toolbar
+   shows, the bottom of the scene sits behind it instead. (Every browser Tailwind v4 supports
+   knows lvh.) */
 .scene {
   position: fixed;
-  inset: 0;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 100lvh;
   z-index: -1;
   overflow: hidden;
   pointer-events: none;
@@ -130,7 +139,9 @@ body {
 
 /* From 4:3 up, the scene fills the screen, anchored at the bottom. Each scene is a layer: the one
    showing on top (fading in over the one before), the one it replaces under it until the fade
-   ends, and the rest hidden. The fade time is FADE_MS in src/slideshow.ts. */
+   ends, and the rest hidden. The fade time is FADE_MS in src/slideshow.ts. Each image keeps a
+   compositor layer of its own from the start, so a turn only changes opacity; without it each
+   image was drawn into a new layer as its fade began, which made the fade stutter. */
 .scene img {
   position: absolute;
   left: 0;
@@ -140,6 +151,7 @@ body {
   object-fit: cover;
   object-position: 50% 100%;
   opacity: 0;
+  will-change: opacity;
 }
 
 .scene img[data-layer="top"] {
@@ -154,12 +166,24 @@ body {
 }
 
 /* Narrower than 4:3 (phones, portrait tablets): the whole scene at full width, pinned to the
-   bottom, its top edge fading into the sky above so the seam never shows. */
+   bottom, its top edge fading into the sky above so the seam never shows. The fade is one band
+   over the images, from the sky's edge colour to clear across the image's top 14% (56.47vw x 0.14
+   = 7.91vw), rather than a mask on each image: the sky behind that band is the solid edge colour,
+   so it looks the same, and no masked layer is redrawn while two scenes cross-fade. */
 @media (max-aspect-ratio: 4/3) {
   .scene img {
     height: auto;
-    -webkit-mask-image: linear-gradient(to bottom, transparent, #000 14%);
-    mask-image: linear-gradient(to bottom, transparent, #000 14%);
+  }
+
+  .scene::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: calc(56.47vw - 7.91vw);
+    height: 7.91vw;
+    z-index: 3;
+    background: linear-gradient(to bottom, var(--color-sky-edge), transparent);
   }
 }
 

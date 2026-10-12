@@ -1,5 +1,6 @@
 import { Fragment, useEffect, useRef, useState } from "react";
 
+import { stillFollowing } from "../scroll";
 import { itemLabel } from "../search";
 import type { Difficulty, ItemKey, Tone, Verdict } from "../types";
 
@@ -49,7 +50,9 @@ function useElapsed(running: boolean): number {
   return elapsed;
 }
 
-/** The live agent log: each step of a search's runs as it happens, grouped by item. */
+/** The live agent log: each step of a search's runs as it happens, grouped by item. New lines
+ * scroll the log's own box, and only while the reader is at its end; they never move the page,
+ * so a player answering a question further down stays where they are. */
 export function AgentLog({
   topic,
   difficulty,
@@ -63,11 +66,25 @@ export function AgentLog({
 }) {
   const running = outcome.kind === "running";
   const elapsed = useElapsed(running);
-  const end = useRef<HTMLLIElement>(null);
+  const list = useRef<HTMLOListElement>(null);
+  // Whether the log keeps its newest line in view: until the reader scrolls up in it.
+  const following = useRef(true);
+  // Where the log last put the box's scroll position.
+  const pinned = useRef(0);
 
   useEffect(() => {
-    end.current?.scrollIntoView({ block: "nearest" });
+    const box = list.current;
+    if (box && following.current) {
+      box.scrollTop = box.scrollHeight;
+      pinned.current = box.scrollTop;
+    }
   }, [lines.length]);
+
+  function onScroll() {
+    if (list.current) {
+      following.current = stillFollowing(list.current, pinned.current);
+    }
+  }
 
   return (
     <section
@@ -83,7 +100,13 @@ export function AgentLog({
         </p>
       </header>
 
-      <ol role="log" aria-live="polite" className="mt-3 max-h-96 space-y-1 overflow-y-auto font-mono text-[13px] leading-6">
+      <ol
+        ref={list}
+        role="log"
+        aria-live="polite"
+        onScroll={onScroll}
+        className="mt-3 max-h-96 space-y-1 overflow-y-auto font-mono text-[13px] leading-6"
+      >
         {lines.map((line, index) => (
           <Fragment key={index}>
             {line.key !== null && line.key !== lines[index - 1]?.key && (
@@ -108,7 +131,7 @@ export function AgentLog({
             </li>
           </Fragment>
         ))}
-        <li ref={end} className="pt-1">
+        <li className="pt-1">
           {running ? (
             <span className="text-slate">
               <span className="motion-safe:animate-pulse">_</span> working
