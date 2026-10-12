@@ -146,18 +146,18 @@ def keys(items: list[PlannedItem], source: str | None = None) -> list[str]:
     return [item.key for item in items if source is None or item.source == source]
 
 
-def test_a_search_plans_the_explanation_then_the_chosen_question_first() -> None:
+def test_a_search_plans_the_questions_first_and_the_explanation_last() -> None:
     assert keys(plan_search("medium", None)) == [
-        "learn-medium",
         "quiz-medium",
         "quiz-easy",
         "quiz-hard",
+        "learn-medium",
     ]
     assert keys(plan_search("hard", None)) == [
-        "learn-hard",
         "quiz-hard",
         "quiz-easy",
         "quiz-medium",
+        "learn-hard",
     ]
     assert all(item.source == "live" for item in plan_search("easy", None))
 
@@ -168,7 +168,7 @@ def test_the_plan_takes_from_the_bank_what_it_already_has() -> None:
 
     plan = plan_search("medium", have)
 
-    assert keys(plan, "live") == ["learn-medium", "quiz-medium"]
+    assert keys(plan, "live") == ["quiz-medium", "learn-medium"]
     assert keys(plan, "bank") == ["quiz-easy", "quiz-hard"]
 
 
@@ -327,7 +327,7 @@ def services(
 
 ACCEPT = verdict(0.98, 0.97, "jev-1.13.0")
 SEARCH = SearchRequest(topic="Neutron stars", difficulty="medium", visitor="v1")
-EVERY_ITEM = ["learn-medium", "quiz-medium", "quiz-easy", "quiz-hard"]
+EVERY_ITEM = ["quiz-medium", "quiz-easy", "quiz-hard", "learn-medium"]
 
 
 @dataclass
@@ -395,9 +395,9 @@ def test_a_search_makes_every_item_one_run_at_a_time_and_counts_once(
     assert keys(plan.items, "live") == EVERY_ITEM
     results = of_type(events, ResultEvent)
     assert [result.key for result in results] == EVERY_ITEM
-    assert results[0].reveal_token is None  # the explanation needs no token
-    assert [result.reveal_token for result in results[1:]] == [
-        f"signed:reveal:{result.item.id}" for result in results[1:]
+    assert results[-1].reveal_token is None  # the explanation needs no token
+    assert [result.reveal_token for result in results[:-1]] == [
+        f"signed:reveal:{result.item.id}" for result in results[:-1]
     ]
     assert "correct_index" not in json.dumps([r.model_dump(mode="json") for r in results])
 
@@ -415,10 +415,10 @@ def test_a_search_makes_every_item_one_run_at_a_time_and_counts_once(
         spent == pytest.approx(record.anthropic_cost_usd) for _, spent, _, _ in store.finished
     )
     assert [(p.run.mode, p.run.difficulty, p.run.source) for p in store.payloads] == [
-        ("learn", "medium", "on_demand"),
         ("quiz", "medium", "on_demand"),
         ("quiz", "easy", "on_demand"),
         ("quiz", "hard", "on_demand"),
+        ("learn", "medium", "on_demand"),
     ]
 
     # Every line after the on-topic check names its item.
@@ -426,8 +426,9 @@ def test_a_search_makes_every_item_one_run_at_a_time_and_counts_once(
     assert lines[0].label == "On-topic check (Jev)" and lines[0].key is None
     assert all(line.key in EVERY_ITEM for line in lines[1:])
     budgets = [line.detail for line in lines if line.label == "Budget"]
-    assert budgets[0] == "up to $0.17 reserved for the MEDIUM explanation"
-    assert budgets[2] == "up to $0.17 reserved for the EASY question"
+    assert budgets[0] == "up to $0.17 reserved for the MEDIUM question"
+    assert budgets[1] == "up to $0.17 reserved for the EASY question"
+    assert budgets[3] == "up to $0.17 reserved for the MEDIUM explanation"
     # Which option the sources support would give a quiz answer away.
     jev_lines = [line for line in lines if line.label.startswith("Jev")]
     assert jev_lines and all(line.verdict is None for line in jev_lines)
@@ -462,12 +463,12 @@ def test_a_bank_topic_with_gaps_makes_only_the_missing_items(
     assert isinstance(plan, PlanEvent) and plan.topic == "Black holes"  # the bank's spelling
     assert keys(plan.items, "bank") == ["quiz-easy", "quiz-hard"]
     assert [result.key for result in of_type(events, ResultEvent)] == [
-        "learn-medium",
         "quiz-medium",
+        "learn-medium",
     ]
     assert [(topic, mode, level) for _, topic, mode, level, _ in store.began] == [
-        ("Black holes", "learn", "medium"),
         ("Black holes", "quiz", "medium"),
+        ("Black holes", "learn", "medium"),
     ]
 
 
@@ -553,12 +554,12 @@ def test_a_discarded_item_is_reported_and_the_search_goes_on(
     assert (missed.key, missed.reason) == ("quiz-medium", "discarded")
     assert "the MEDIUM question" in missed.message
     assert [result.key for result in of_type(events, ResultEvent)] == [
-        "learn-medium",
         "quiz-easy",
         "quiz-hard",
+        "learn-medium",
     ]
     assert len(store.payloads) == 4  # the discarded run is still stored
-    assert store.finished[1][2] == "discarded"
+    assert store.finished[0][2] == "discarded"
 
 
 def test_every_run_that_made_a_record_sends_its_figures_before_its_item(
@@ -573,12 +574,13 @@ def test_every_run_that_made_a_record_sends_its_figures_before_its_item(
     # The discarded run cost money too, so it counts towards the search; the crashed run made
     # no record, so it has no figures.
     assert [(s.key, s.stats.mode, s.stats.status) for s in stats] == [
-        ("learn-medium", "learn", "published"),
         ("quiz-medium", "quiz", "discarded"),
         ("quiz-easy", "quiz", "published"),
+        ("learn-medium", "learn", "published"),
     ]
-    first_result = next(i for i, e in enumerate(events) if isinstance(e, ResultEvent))
-    assert events.index(stats[0]) < first_result
+    for result in of_type(events, ResultEvent):
+        [figures] = [s for s in stats if s.key == result.key]
+        assert events.index(figures) < events.index(result)
     answer = quiz_record().run.answer
     assert answer is not None and hasattr(answer, "options")
     sent = json.dumps([event.model_dump(mode="json") for event in stats])
@@ -604,13 +606,13 @@ def test_figures_that_cannot_be_built_never_cost_the_run(monkeypatch: pytest.Mon
 def test_a_crashed_run_keeps_its_reservation_and_the_search_goes_on(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    script(monkeypatch, crash=frozenset({"learn-medium"}))
+    script(monkeypatch, crash=frozenset({"quiz-medium"}))
     live, store = services()
 
     events = list(research(SEARCH, live))
 
     [missed] = of_type(events, MissedEvent)
-    assert (missed.key, missed.reason) == ("learn-medium", "failed")
+    assert (missed.key, missed.reason) == ("quiz-medium", "failed")
     assert store.finished[0] == (100, Settings().max_job_cost_usd, "failed", None)
     assert [result.key for result in of_type(events, ResultEvent)] == EVERY_ITEM[1:]
 
@@ -626,9 +628,10 @@ def test_a_later_run_refused_by_a_cap_leaves_out_the_rest(
 
     assert [result.key for result in of_type(events, ResultEvent)] == EVERY_ITEM[:2]
     skipped = of_type(events, MissedEvent)
+    # The explanation runs last, so a search cut short loses it before any question.
     assert [(m.key, m.reason) for m in skipped] == [
-        ("quiz-easy", "skipped"),
         ("quiz-hard", "skipped"),
+        ("learn-medium", "skipped"),
     ]
     assert "today's budget" in skipped[0].message
     assert len(store.began) == 3 and len(store.finished) == 2
@@ -641,7 +644,7 @@ def test_no_run_starts_after_the_cutoff(monkeypatch: pytest.MonkeyPatch) -> None
 
     events = list(research(SEARCH, live))
 
-    assert [result.key for result in of_type(events, ResultEvent)] == ["learn-medium"]
+    assert [result.key for result in of_type(events, ResultEvent)] == ["quiz-medium"]
     skipped = of_type(events, MissedEvent)
     assert [m.key for m in skipped] == EVERY_ITEM[1:]
     assert all("ran out of time" in m.message for m in skipped)
@@ -733,15 +736,15 @@ def test_a_whole_search_through_the_real_loop_and_verifiers(
     llm = FakeLLM(
         [
             completion(FETCH),
-            completion(learn_answer("medium")),
-            completion(FETCH),
             completion(quiz_answer("medium")),
             completion(FETCH),
             completion(quiz_answer("easy")),
             completion(FETCH),
             completion(quiz_answer("hard")),
+            completion(FETCH),
+            completion(learn_answer("medium")),
         ],
-        json_replies=[{"explanation_problems": []}, haiku_reply(), haiku_reply(), haiku_reply()],
+        json_replies=[haiku_reply(), haiku_reply(), haiku_reply(), {"explanation_problems": []}],
     )
     # The real loops, reading the fake web instead of the network.
     monkeypatch.setattr(ondemand, "run_learn", functools.partial(run_learn, http_client=http))

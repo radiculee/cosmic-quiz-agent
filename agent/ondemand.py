@@ -1,7 +1,9 @@
 """Live searches on the web page: the guardrails, the runs, and the events streamed to the player.
 
-A search makes a whole topic (docs/PLAN.md Session 8, decided 2026-10-08): the LEARN explanation
-at the chosen level and a QUIZ question at each level, leaving out any the bank already has.
+A search makes a whole topic (docs/PLAN.md Session 8, decided 2026-10-08): a QUIZ question at
+each level and the LEARN explanation at the chosen level, leaving out any the bank already has.
+The questions come first and the explanation last (changed 2026-10-10 by Vedant), so the first
+question is ready sooner and the explanation, which can give answers away, is read after them.
 `research` yields events while it works:
 
 1. The plan: which items the search makes live and which the bank already has (free). When the
@@ -281,11 +283,13 @@ class _Clock:
 
 
 def plan_search(difficulty: Difficulty, have: BankTopic | None) -> list[PlannedItem]:
-    """What a search shows, in order: the explanation at the chosen level, then a question at
-    the chosen level and at the other two, easiest first. An item the bank already has is served
-    from it, free."""
-    wanted: list[tuple[Mode, Difficulty]] = [("learn", difficulty), ("quiz", difficulty)]
+    """What a search makes, in order: a question at the chosen level, then at the other two,
+    easiest first, then the explanation at the chosen level. Live items run in this order, so
+    when a cap or the time limit cuts a search short, the explanation is what is left out. An
+    item the bank already has is served from it, free."""
+    wanted: list[tuple[Mode, Difficulty]] = [("quiz", difficulty)]
     wanted += [("quiz", level) for level in DIFFICULTY_ORDER if level != difficulty]
+    wanted.append(("learn", difficulty))
 
     def in_bank(mode: Mode, level: Difficulty) -> bool:
         if have is None:

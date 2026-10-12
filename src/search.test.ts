@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   ended,
+  explanationLock,
   explanationSlot,
   fromPlan,
   itemLabel,
@@ -18,12 +19,13 @@ import {
 import { sampleRun } from "./testing/samples";
 import type { LearnItem, PlannedItem, QuizQuestion } from "./types";
 
-// A MEDIUM search on a topic the bank has an EASY question for.
+// A MEDIUM search on a topic the bank has an EASY question for: the questions first, the
+// explanation last (agent/ondemand.py plan_search).
 const PLAN: PlannedItem[] = [
-  { key: "learn-medium", mode: "learn", difficulty: "medium", source: "live" },
   { key: "quiz-medium", mode: "quiz", difficulty: "medium", source: "live" },
   { key: "quiz-easy", mode: "quiz", difficulty: "easy", source: "bank" },
   { key: "quiz-hard", mode: "quiz", difficulty: "hard", source: "live" },
+  { key: "learn-medium", mode: "learn", difficulty: "medium", source: "live" },
 ];
 
 const EXPLANATION: LearnItem = {
@@ -56,8 +58,8 @@ describe("a search's slots", () => {
 
     expect(search.slots.map((slot) => slot.state.kind)).toEqual([
       "waiting",
-      "waiting",
       "loading",
+      "waiting",
       "waiting",
     ]);
     expect(explanationSlot(search)?.key).toBe("learn-medium");
@@ -95,10 +97,10 @@ describe("a search's slots", () => {
 
     expect(search.ended).toBe(true);
     expect(search.slots.map((slot) => slot.state.kind)).toEqual([
-      "ready",
       "missed",
       "loading",
       "missed",
+      "ready",
     ]);
   });
 
@@ -117,6 +119,64 @@ describe("the question order", () => {
     expect(nextOpen(questions, 0)).toBe(1); // the EASY question from the bank
     expect(nextOpen(questions, 2)).toBe(2); // HARD, still being researched
     expect(nextOpen(questions, 3)).toBeNull();
+  });
+});
+
+describe("the explanation's lock", () => {
+  function allQuestionsReady() {
+    let search = fromPlan(1, "Pulsars", PLAN);
+    search = resolved(search, "quiz-medium", question(2, "medium"), "token");
+    search = resolved(search, "quiz-easy", question(9, "easy"));
+    search = resolved(search, "quiz-hard", question(3, "hard"), "token");
+    return search;
+  }
+
+  it("stays locked while any question is still to answer, ready or still coming", () => {
+    const search = fromPlan(1, "Pulsars", PLAN);
+    expect(explanationLock(search, new Set())).toEqual({ kind: "locked", left: 3 });
+
+    const ready = resolved(allQuestionsReady(), "learn-medium", EXPLANATION);
+    expect(explanationLock(ready, new Set([2, 9]))).toEqual({ kind: "locked", left: 1 });
+  });
+
+  it("opens once every question is answered and the explanation is ready", () => {
+    const search = allQuestionsReady();
+    expect(explanationLock(search, new Set([2, 9, 3]))).toEqual({ kind: "coming" });
+
+    const ready = resolved(search, "learn-medium", EXPLANATION);
+    expect(explanationLock(ready, new Set([2, 9, 3]))).toEqual({ kind: "open" });
+  });
+
+  it("does not wait for questions that were left out", () => {
+    let search = fromPlan(1, "Pulsars", PLAN);
+    search = missed(search, "quiz-medium", "x");
+    search = resolved(search, "quiz-easy", question(9, "easy"));
+    search = missed(search, "quiz-hard", "x");
+    search = resolved(search, "learn-medium", EXPLANATION);
+
+    expect(explanationLock(search, new Set())).toEqual({ kind: "locked", left: 1 });
+    expect(explanationLock(search, new Set([9]))).toEqual({ kind: "open" });
+  });
+
+  it("opens as soon as it is ready when the search made no question", () => {
+    let search = fromPlan(1, "Pulsars", PLAN);
+    for (const key of ["quiz-medium", "quiz-easy", "quiz-hard"] as const) {
+      search = missed(search, key, "x");
+    }
+    expect(explanationLock(search, new Set())).toEqual({ kind: "coming" });
+    expect(explanationLock(resolved(search, "learn-medium", EXPLANATION), new Set())).toEqual({
+      kind: "open",
+    });
+  });
+
+  it("says why when the explanation was left out", () => {
+    const search = missed(fromPlan(1, "Pulsars", PLAN), "learn-medium", "Not backed.");
+    expect(explanationLock(search, new Set())).toEqual({ kind: "missed", message: "Not backed." });
+  });
+
+  it("is undefined for a plan without an explanation", () => {
+    const search = fromPlan(1, "Pulsars", PLAN.filter((item) => item.mode === "quiz"));
+    expect(explanationLock(search, new Set())).toBeUndefined();
   });
 });
 
