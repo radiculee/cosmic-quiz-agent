@@ -693,8 +693,13 @@ a second grill-me session on 2026-10-08, folded into Session 8 before its gate:
    first (shown at about 20 s), then the question at the chosen level (about 40 s), then the
    other two while the player reads (about 80 s in all). No run starts after about 3 minutes,
    so a slow search may skip a background question rather than pass Vercel's 300 s limit.
+   Changed 2026-10-10 by Vedant: the questions first (the chosen level at about 20 s), the
+   explanation last, so a search cut short loses the explanation rather than a question (see
+   "Fixes and design questions" under Session 10).
 6. **Display:** all 3 questions can be answered on the page, each labelled with its difficulty:
-   the chosen level first, then "Next: MEDIUM question" and so on as the runs finish.
+   the chosen level first, then "Next: MEDIUM question" and so on as the runs finish. Changed
+   2026-10-10 by Vedant: the explanation comes after the questions, behind a button that opens
+   once every question is answered.
 7. **Failures:** every run goes ahead (the search is already counted). A discarded item is
    reported in the agent log and skipped; if the explanation fails, the page goes straight to
    the questions. Items in review are shown to the player with their doubts, as before.
@@ -1294,12 +1299,99 @@ Gate (Vedant): the repo public and clean (gitleaks clean, or every key it found 
 site at the new domain with the old address redirecting, the OG preview right where he shares
 it, the privacy page, and the README readable to someone who has never seen the project.
 
+### Fixes and design questions (2026-10-10, after 10b's pause)
+
+Planned in `docs/NEXT_SESSION.md` at the end of 10b. Vedant described the scroll bugs first, on
+an iPhone with Safari: on the web page the page pulls him back up while he answers a question,
+and on the home page scrolling stutters, the content shifts and the slideshow's fade stutters.
+Back and Forward work, and the analytics panel is fine (his note about it was the web page).
+
+Decided (Vedant, each as recommended, asked one at a time):
+- **The web page's order:** the questions first and the explanation last, on the server too
+  (`plan_search`): the first question comes at about 20 s instead of about 40 s. The reason is
+  that the explanation can give answers away. The trade-off, accepted: when the $0.50 daily cap
+  or the 3-minute cutoff cuts a search short, the explanation is what is left out. Each answer
+  still shows its own explanation and sources.
+- **When the explanation opens:** once every question the search shows is answered or left
+  out, and the explanation is ready; a search that made no question opens it as soon as it is
+  ready. Opening it counts towards Explorer (not its arrival).
+- **Learn:** the difficulty switch, search and Random in one solid bar that sticks to the top
+  while the grid scrolls. A box that scrolls on its own and a sideways carousel were turned
+  down: the box traps the page's scroll on a phone, and the carousel hides most topics.
+- **Saving progress:** accounts in v2, decided with the newsletter; nothing built now. A save
+  link (no server) and an anonymous cloud save were the other options. Checked:
+  `navigator.storage.persist()` does not stop Safari's 7-day deletion (it only guards against
+  eviction when space runs low, and Safari usually refuses it in a tab).
+- **The iPhone check:** Vedant tests the fixes on his phone over his Wi-Fi before the commit.
+
+Reproduced first (headless Chrome over the built `dist/` with every `vercel.json` header, and a
+scratchpad stub of the API: fake agent runs with a dozen log lines each, nothing spent):
+- **The web page:** once the reader scrolled to the question, the next log line pulled the
+  window back to the log: from 1780 to 1134 px at 1440x900 (the question's top at 863 of 900)
+  and from 2408 to 1210 px at 390x844 (the question off screen), and it stayed pinned to the log
+  with every line until the search ended, about 22 s. Cause: `AgentLog` called `scrollIntoView`
+  on its last line, which scrolls the window as well as the log's box.
+- **Home at phone size,** Safari's toolbar simulated by changing the viewport from 664 to 745 px:
+  the hero grew 81 px, the progress card moved down 81 px, and the scene layer resized, so the
+  scene dropped 81 px; all of it came back with the toolbar. Causes: the hero's `100dvh` and the
+  scene layer's `inset: 0`.
+- **The fade:** Chrome cannot show it. Traced around one turn alone, Chrome paints the same
+  before and after the fix (2 paints). The likely cause on an iPhone is WebKit making a layer,
+  and on phones a mask, for an image when its fade starts; only the phone can confirm the fix.
+
+Built:
+- [x] `agent/ondemand.py`: `plan_search` puts the questions first and the explanation last;
+      `tests/test_ondemand.py` follows the new order (a search cut short now loses the
+      explanation first).
+- [x] `src/search.ts`: `explanationLock()` (locked with the questions left, coming, open, or
+      left out), 6 tests. `src/scroll.ts`: `atEnd`, `stillFollowing` and `startsOffScreen`, 8
+      tests.
+- [x] `src/components/AgentLog.tsx`: new lines scroll the log's own box, only while the reader
+      is at its end; the window is never moved.
+- [x] `src/pages/ExplorePage.tsx`: the questions, then the explanation behind "Read the
+      explanation" (the reason it is locked, or why it was left out); after the last answer,
+      Next reads "Read the explanation"; Next brings the next question into view when it starts
+      off screen, and the opened explanation is brought into view; Explorer counts on opening;
+      the intro and hints say the new order. A topic the bank has in full uses the same order.
+- [x] iPhone: the hero's minimum height in `svh` and the shell's in `min-h-svh`; the scene
+      layer `top: 0; height: 100lvh`, so it never resizes; every scene image on its own layer
+      (`will-change: opacity`); on phones one gradient band over the images instead of a mask on
+      each (the same look). `tests/test_packaging.py` holds all of it (2 new tests).
+- [x] `src/pages/LearnPage.tsx`: the sticky bar (one row from 768 px, two on a phone); the
+      topic cards keep clear of it when keyboard focus scrolls to them.
+- [x] Docs: DESIGN.md decisions 4 and 9 and the player-state default; this record.
+
+Checked: 340 Python tests (2 new) and 148 TypeScript tests (14 new); typecheck, build, ruff and
+mypy --strict. Driven in headless Chrome over the built site with the `vercel.json` headers:
+- A live search at 1440x900 and 390x844 (28 checks): the first question at 12 s with the stub;
+  the explanation locked below the questions; the window never moved while 8 or 9 log lines
+  arrived; the log's box followed its newest line, and stayed where the reader scrolled it;
+  questions 2 and 3 brought into view by Next; no Explorer credit until the explanation was
+  opened, which brought it into view.
+- Every page at 1920x1080, 1440x900, 1024x768, 768x1024 and 390x844 (37 checks): no sideways
+  scroll; the Learn bar stuck at the top (74 px tall, 130 px on a phone); a topic the bank has
+  in full shown free in the same order; no CSP violation or console error. Shift+Tab back up the
+  grid kept each focused card at least 30 px below the stuck bar.
+- The scene at 390x844: the CSS as intended; a scroll repaints nothing; the band against the old
+  mask on production, the content hidden: at most 5 levels apart (mean 0.47) across the band.
+
+Gate (Vedant): the fixes on his iPhone over his Wi-Fi (the web page while a search streams, the
+home page's scroll and fade, the Learn bar), the screenshots and the diff; then the commit and
+push on his word, and the same checks on production.
+- [x] iPhone check passed on 2026-10-12, on Vedant's word ("it works"): the built site served on
+      his PC's home-network address with the free stub API.
+- [x] Committed on his word as three commits (the scroll fixes; the questions first; the Learn
+      bar and these docs). Not pushed yet.
+- [ ] Push, then the same checks on production (Vedant on his iPhone).
+
 ---
 
 ## Later - v2: Newsletter
 Planned in detail once v1 is live. Curator email output via Resend (portfolio `api/contact.ts`
 pattern), subscribers with double opt-in and unsubscribe, then WhatsApp. (Changed 2026-10-08 by
-Vedant: the analytics page, the other v2 feature, moved into v1 as Session 9.)
+Vedant: the analytics page, the other v2 feature, moved into v1 as Session 9.) Also accounts,
+so players keep their progress across devices (Supabase Auth, passkeys or email links, free
+tier), decided together with the newsletter's subscribers (Vedant, 2026-10-10).
 
 ---
 
@@ -1433,3 +1525,12 @@ Vedant: the analytics page, the other v2 feature, moved into v1 as Session 9.)
   preview, LICENSE, NOTICE and a draft README; 338 Python and 134 TypeScript tests. The 10a
   production scan and retention counts are recorded. Committed and pushed on his word; the
   repo stays private. Next: the fixes and design questions in `docs/NEXT_SESSION.md`.
+- 2026-10-10 - Fixes and design questions: Vedant described the scroll bugs (iPhone Safari) and
+  took the recommended option on each decision (questions first on the server too, the
+  explanation opening after every answer, a sticky bar on Learn, accounts in v2). Both bugs
+  reproduced in headless Chrome first (the web page's jump of 646 px and 1198 px; the home page
+  shifting 81 px with the toolbar). Built the fixes, the new order and the bar; 340 Python and
+  148 TypeScript tests; drives of 28, 37 and 8 checks (one scene check, paints during a turn, is
+  not something Chrome can show). No paid calls. On 2026-10-12 Vedant checked the fixes on his
+  iPhone over Wi-Fi ("it works"); committed on his word as three commits, not pushed. Next: the
+  push and a check on production, then the README session.

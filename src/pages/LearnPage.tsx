@@ -36,6 +36,12 @@ export function LearnPage({ slug, ...props }: PageProps & { slug?: string | unde
 
 // --- The topic grid ---------------------------------------------------------------------------
 
+/**
+ * The topics: a difficulty switch, a search box and Random, then the grid. The controls sit in one
+ * solid bar that sticks to the top of the screen while the grid scrolls under it (decided
+ * 2026-10-10), so they are always at hand with a single scroll; a box that scrolled on its own
+ * would trap the page's scroll on a phone.
+ */
 function LearnIndex({ topicsState, retryTopics, profile, difficulty, setDifficulty }: PageProps) {
   usePageTitle("Learn");
   const searchId = useId();
@@ -59,17 +65,18 @@ function LearnIndex({ topicsState, retryTopics, profile, difficulty, setDifficul
         Pick a topic for a plain-language explanation and the pages it is based on.
       </PageHeading>
 
-      <div className="mt-10 flex flex-col items-center gap-5">
+      <div className="pixel-border sticky top-0 z-10 mt-10 flex flex-col items-center gap-3 rounded-sm bg-surface p-3 md:flex-row">
         <SegmentedControl
           label="Difficulty"
           options={DIFFICULTIES}
           value={difficulty}
           onChange={setDifficulty}
         />
-        <div className="flex w-full max-w-xl gap-3">
+        <div className="flex w-full min-w-0 gap-3 md:flex-1">
           <label htmlFor={searchId} className="sr-only">
             Search topics
           </label>
+          {/* 16px text: iOS zooms the page into any smaller input. */}
           <input
             id={searchId}
             type="search"
@@ -78,13 +85,13 @@ function LearnIndex({ topicsState, retryTopics, profile, difficulty, setDifficul
             placeholder="Search topics, e.g. Black holes"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            className="min-w-0 flex-1 rounded-lg border border-white/10 bg-surface px-5 py-4 text-base text-ink placeholder:text-slate/70 focus:border-teal focus:outline-none"
+            className="min-w-0 flex-1 rounded-lg border border-white/10 bg-void px-4 py-3 text-base text-ink placeholder:text-slate/70 focus:border-teal focus:outline-none"
           />
           <button
             type="button"
             onClick={pickRandom}
             disabled={available.length === 0}
-            className={`${SECONDARY_BUTTON} shrink-0 px-5 py-4 text-[9px]`}
+            className={`${SECONDARY_BUTTON} shrink-0 px-4 py-3 text-[9px]`}
           >
             <DiceIcon />
             Random
@@ -92,7 +99,7 @@ function LearnIndex({ topicsState, retryTopics, profile, difficulty, setDifficul
         </div>
       </div>
 
-      <div className="mt-8">
+      <div className="mt-6">
         <TopicsNotice state={topicsState} onRetry={retryTopics} />
         {topicsState.kind === "loaded" && (
           <>

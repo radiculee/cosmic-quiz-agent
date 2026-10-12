@@ -20,7 +20,8 @@ function Tick() {
   );
 }
 
-/** The LEARN topics as cards, each opening its explanation at its own address. */
+/** The LEARN topics as cards, each opening its explanation at its own address. Each card keeps
+ * clear of the Learn page's sticky bar when keyboard focus scrolls it into view. */
 export function TopicGrid({
   topics,
   learned,
@@ -36,7 +37,7 @@ export function TopicGrid({
           <li key={topic.name}>
             <Link
               to={learnTopicPath(topic.name)}
-              className={`flex h-full items-center justify-between gap-3 rounded-lg border bg-surface px-4 py-3.5 transition-colors hover:border-white/30 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal ${
+              className={`flex h-full scroll-mt-40 items-center justify-between gap-3 rounded-lg border bg-surface px-4 py-3.5 transition-colors md:scroll-mt-28 hover:border-white/30 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal ${
                 read ? "border-teal/25" : "border-white/10"
               }`}
             >
