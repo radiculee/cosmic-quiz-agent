@@ -283,7 +283,9 @@ def test_the_link_preview_is_a_small_1200_by_630_image_the_page_names() -> None:
 def test_the_old_address_sends_every_page_to_the_site_s_own_domain() -> None:
     # Decided 2026-10-13: cosmic-quiz-agent.vercel.app redirects for good to the domain the link
     # preview names, keeping the path (Vercel keeps the query). Only that host: preview
-    # deployments keep their own addresses.
+    # deployments keep their own addresses. The source is "/:path(.*)", not "/:path*": Vercel
+    # matches sources strictly, so "/:path*" misses "/" and any path ending in a slash, and the
+    # old home page went on being served (seen on production on 2026-10-13).
     config = json.loads((ROOT / "vercel.json").read_text(encoding="utf-8"))
     html = " ".join((ROOT / "index.html").read_text(encoding="utf-8").split())
     meta = dict(re.findall(r'<meta (?:property|name)="([^"]+)" content="([^"]+)"', html))
@@ -292,6 +294,6 @@ def test_the_old_address_sends_every_page_to_the_site_s_own_domain() -> None:
     [redirect] = config["redirects"]
     assert site == "https://cosmic.vedantgaikwad.ie"
     assert redirect["has"] == [{"type": "host", "value": "cosmic-quiz-agent.vercel.app"}]
-    assert redirect["source"] == "/:path*"
-    assert redirect["destination"] == f"{site}/:path*"
+    assert redirect["source"] == "/:path(.*)"
+    assert redirect["destination"] == f"{site}/:path"
     assert redirect["permanent"] is True

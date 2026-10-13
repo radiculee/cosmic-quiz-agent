@@ -7,9 +7,9 @@
   "regions": ["dub1"],
   "redirects": [
     {
-      "source": "/:path*",
+      "source": "/:path(.*)",
       "has": [{ "type": "host", "value": "cosmic-quiz-agent.vercel.app" }],
-      "destination": "https://cosmic.vedantgaikwad.ie/:path*",
+      "destination": "https://cosmic.vedantgaikwad.ie/:path",
       "permanent": true
     }
   ],
