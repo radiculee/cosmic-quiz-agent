@@ -1,19 +1,29 @@
 # Cosmic Quiz
 
+[![Checks](https://github.com/radiculee/cosmic-quiz-agent/actions/workflows/checks.yml/badge.svg)](https://github.com/radiculee/cosmic-quiz-agent/actions/workflows/checks.yml)
+
 An astronomy quiz written by an AI agent that checks every answer against the pages it read.
 
 **Live:** [cosmic.vedantgaikwad.ie](https://cosmic.vedantgaikwad.ie)
 
 ![COSMIC QUIZ over a white observatory in a pink grass field under a navy sky](public/og-v1.jpg)
 
-Cosmic Quiz is a Learn and Quiz game about astronomy and space. Every explanation and question in
-it was researched and written by an AI agent that reads NASA, ESA, Wikipedia and arXiv, may cite
-only pages it actually fetched, and must pass three independent checks before anything reaches a
-player. A scheduled job grows the question bank every day with no one pressing a button, and
-visitors can ask the agent to research a new topic live and watch it work.
+- **It checks itself.** The agent may cite only pages it fetched in that run, a rule enforced in
+  code rather than trusted to the prompt, and everything it writes passes three separate checks
+  before a player sees it. In an eval with 40 planted faults, 38 never reached a player.
+- **It runs on its own.** The model chooses its own tools in a hand-rolled loop, with no agent
+  framework, and a scheduled job grows the question bank every day with no one pressing a button.
+- **It is live, at a capped cost.** A visitor can watch it research a new topic, at about $0.12
+  a search, under a $10 a month spend cap. Every model call's tokens and cost are logged, and the
+  site shows them.
+
+**Stack:** Python 3.12 with the Anthropic SDK and Pydantic; Claude Haiku 4.5; TypeSafe's Jev as
+a second-opinion model; React, TypeScript, Tailwind CSS and Vite; Supabase Postgres; Vercel;
+GitHub Actions.
 
 Built by [Vedant Gaikwad](https://www.vedantgaikwad.ie), a data analyst and full-stack developer
-in Dublin.
+in Dublin: "I love astronomy, so I built the quiz I wanted to play, and made the agent that
+writes it prove every answer."
 
 ## What you can do
 
@@ -31,28 +41,20 @@ in Dublin.
 ## How it works
 
 ```mermaid
-flowchart LR
-    subgraph daily["Every day, on GitHub Actions"]
-        curator["Curator<br/>python -m curator daily"]
-    end
-    subgraph live["On demand, on Vercel"]
-        research["/api/research<br/>live search, behind guardrails"]
-    end
-    curator --> agent
-    research --> agent
-    agent["Agent loop<br/>Claude Haiku 4.5 + tools"] -- "search and fetch" --> sources["NASA, ESA, Wikipedia, arXiv<br/>allow-listed sites only"]
-    agent --> gate["Publish gate<br/>1. code checks<br/>2. Haiku verifier<br/>3. Jev second opinion"]
-    gate -- "published or review" --> bank[("Supabase Postgres<br/>question bank")]
-    bank --> api["/api on Vercel<br/>topics, items, answers, stats"]
-    api --> ui["React UI<br/>Learn, Quiz, the web page"]
-    ui -- "a new topic" --> research
+flowchart TB
+    curator["The Curator, every day<br/>on GitHub Actions"] --> agent
+    research["A visitor's new topic<br/>/api/research on Vercel<br/>behind guardrails"] --> agent
+    agent["Agent loop<br/>Claude Haiku 4.5<br/>chooses its own tools"] -- "search and fetch" --> sources["Allow-listed sites<br/>NASA, ESA,<br/>Wikipedia, arXiv"]
+    agent --> gate["Publish gate<br/>1. code checks<br/>2. Haiku verifier<br/>3. Jev"]
+    gate -- "published or review" --> bank[("Question bank<br/>Supabase Postgres")]
+    bank --> site["The site on Vercel<br/>React UI and /api"]
 ```
 
 ### The agent
 
-- A hand-rolled tool-calling loop of about 150 lines (`agent/loop.py`) behind a small provider
-  interface (`agent/llm.py`). No agent framework. The model chooses the tools; a step budget
-  bounds every run.
+- A hand-rolled tool-calling loop (`run_agent` in `agent/loop.py`, about 120 lines) behind a
+  small provider interface (`agent/llm.py`). No agent framework. The model chooses the tools,
+  and a budget of steps, time, tokens and cost bounds every run.
 - Tools (`agent/tools/`): Wikipedia search, arXiv search, the NASA Image Library, APOD, NASA and
   ESA news feeds, and `fetch_page`, which reads only an allow-list of science sites. Every
   request, and every redirect, is checked against the allow-list before it is made.
@@ -60,21 +62,30 @@ flowchart LR
 - **The citation rule is enforced in code, not trusted to the prompt** (`agent/verify.py`): a
   source can only be a URL fetched in that run. Anything else is dropped.
 
+A live search on the site, 19 seconds in: the on-topic check, the budget reserved for the run,
+then the model choosing its own searches and pages, and the first of the checks. The whole
+search, on "James Webb Space Telescope" on 13 October 2026, made all four items it set out to
+make, in 86 seconds of agent and checks, for $0.097.
+
+![The agent log of a live search on James Webb Space Telescope: an on-topic check, a budget of up to $0.17 reserved, the model choosing search_wikipedia and search_nasa_images, a fetch of the Wikipedia page, the question written and the code checks passed](docs/images/agent-log.webp)
+
 ### The publish gate
 
 Three layers, cheapest and most certain first:
 
-1. **Code checks:** every cited URL was fetched; every quote is word for word on its page; every
-   number in the answer appears on a fetched page.
+1. **Code checks:** every cited URL was fetched in the run; every quote is word for word on its
+   page; every number in the answer appears on a fetched page.
 2. **Haiku verifier:** a separate Claude Haiku 4.5 pass, with its own prompt, confirms the quotes
    support the answer and that each wrong option is wrong.
-3. **Jev second opinion:** TypeSafe's Jev checks each claim against its quoted passage and
-   answers supports, contradicts or says nothing, with a confidence. It cannot check numbers
-   reliably, which is why layer 1 does.
+3. **Jev second opinion:** TypeSafe's Jev checks each claim (the answer, each wrong option, each
+   sentence of the explanation) against the full text of the cited pages, and answers supports,
+   contradicts or says nothing, with a confidence. It cannot check numbers reliably, which is
+   why layer 1 does.
 
-An item is published only if all three pass (Jev at 0.8 or above). Any doubt sends it to human
-review (`python -m curator review`); a failure discards it. Measured on a 60-item eval with 40
-planted faults ([`docs/EVALS.md`](docs/EVALS.md)):
+An item is published only if all three pass: Jev must back the right answer at a confidence of
+0.8 or more, and back no wrong option and contradict no sentence. Any doubt sends the item to
+human review (`python -m curator review`); a failure discards it. Measured on a 60-item eval
+with 40 planted faults ([`docs/EVALS.md`](docs/EVALS.md)):
 
 | Fault planted | Kept from players |
 |---|---|
@@ -84,8 +95,16 @@ planted faults ([`docs/EVALS.md`](docs/EVALS.md)):
 | A wrong option rewritten to be true | 10 of 10 |
 | **All** | **38 of 40** |
 
-The cost of that strictness: 43% of generated items publish directly, and the rest go to review
-or are discarded. The two misses are planted sentences the sources arguably do support.
+The two misses are planted sentences the sources arguably do support. The cost of that
+strictness: on the live site, 115 of 213 runs (54%) published directly by 13 October 2026; 80
+went to review and 17 were discarded.
+
+What a player sees after answering: the explanation, Jev's verdict on every option, and the
+quote each source was cited for.
+
+<p align="center">
+  <img src="docs/images/quiz-answer.webp" width="560" alt="A quiz answer on The Big Bang: the right option marked, the explanation, a source check in which Jev finds the right option supported and the three others contradicted at confidence 1.00, and the cited Wikipedia sentence">
+</p>
 
 ### Live research, behind guardrails
 
@@ -103,90 +122,32 @@ or are discarded. The two misses are planted sentences the sources arguably do s
 - One model for every step: Claude Haiku 4.5. Anthropic usage is capped at $10 a month by a
   Console spend limit. Jev runs on a prepaid TypeSafe balance ($0.042 per million input tokens).
   Everything else is on a free tier: Vercel Hobby, Supabase and GitHub Actions.
-- Measured: about $0.024 an item in the eval (EASY $0.019, HARD $0.029), a live search of up to
-  four items about $0.12, and the daily Curator about $0.17, capped at $0.40.
-- Every model call's tokens and cost are logged, and Analytics for nerds shows them.
+- Measured on the live site by 13 October 2026: 213 runs for $5.89, all checks included, which
+  is about $0.028 a run and $0.051 for each item published directly. A median run takes 19.2 s
+  (95% within 36.2 s), and prompt caching cut the agent's cost by about a quarter.
+- A live search of four items costs about $0.12. The daily Curator, paid from 1 November, about
+  $0.17, capped at $0.40.
+- Every model call's tokens and cost are logged, and Analytics for nerds shows them:
 
-## Security
+![Analytics for nerds on the live site: 54% published, 115 of 213 runs; $0.051 per published item; median run 19.2 s; October spend $5.84 of the $10.00 Anthropic limit](docs/images/analytics.webp)
+
+## Security and privacy
 
 Audited before the repo went public ([`docs/SECURITY_AUDIT.md`](docs/SECURITY_AUDIT.md)): 19
-findings, none High. The five Medium ones are fixed, each with a test.
+findings, none High; the five Medium ones are fixed, each with a test, and every other finding is
+recorded with what was done about it. The site sends a Content-Security-Policy that allows only
+itself, the API refuses requests from other sites' pages, the browser-safe database key can read
+only published items, and the git history was scanned for secrets.
 
-- Security headers on every response, including a Content-Security-Policy that allows this site
-  only. The fonts and images are served from the site itself.
-- The API refuses requests that another site's page sends, and a POST must carry JSON.
-- `fetch_page` checks every redirect against the allow-list before following it.
-- Row-level security: the browser-safe key can read only published items, and even that key
-  stays on the server. The secret key never reaches the browser.
-- `agent_stats()`, the statistics behind Analytics for nerds, returns aggregates only. It is the
-  one database function the browser-safe key may run; the site calls it through its own API.
-- Secrets live only in environment variables. The git history was scanned with gitleaks before
-  the repo went public.
+No accounts, cookies, ads or tracking: progress stays in your browser. An IP address is never
+stored; it becomes a salted hash, kept for about a day (30 days with a report). The full text is at
+[/privacy](https://cosmic.vedantgaikwad.ie/privacy).
 
-## Privacy
+## Run it yourself
 
-The same text is on the site at [/privacy](https://cosmic.vedantgaikwad.ie/privacy).
-
-- No accounts, no cookies, no ads and no tracking. Your progress stays in your browser.
-- **In your browser:** your rank, points, trophies, the topics you have read and the questions
-  you have seen are saved in local storage. The numbers of the questions you have seen are sent
-  with each request for a new one, so you are not shown them again; the server does not keep
-  them.
-- **On the server:** your IP address is turned into a visitor code, a salted hash (for IPv6, of
-  the address's first half). The address is never stored. The code is kept with request counts
-  (deleted after a day), with live searches (the topic, level, time, cost and outcome; the code
-  is removed after a day and the rest is kept) and with reports (the question, the reason and
-  the time; the code is removed after 30 days). A daily clean-up removes the codes, so one can
-  last up to a day longer.
-- **Others who handle data:** Vercel hosts the site and runs its functions in Dublin; Supabase
-  holds the database in Ireland. A live search sends the topic you type, and nothing else about
-  you, to Anthropic and TypeSafe, and uses it to search Wikipedia, NASA, ESA and arXiv.
-- **Your rights:** under the GDPR you can ask what is kept about you and ask for it to be
-  corrected or deleted, through the
-  [contact form on vedantgaikwad.ie](https://www.vedantgaikwad.ie/#contact).
-
-## Run it locally
-
-You need Python 3.12, Node.js with pnpm, a Supabase project (the free tier is enough), an
-Anthropic API key and a TypeSafe API key.
-
-```bash
-python -m venv .venv
-source .venv/bin/activate            # Windows: .venv\Scripts\activate
-pip install -r requirements-dev.txt
-pnpm install
-cp .env.example .env                 # then fill in the keys
-```
-
-Paste `supabase/schema.sql` into the Supabase SQL editor. It includes every migration;
-`supabase/migrations/` keeps the changes made after the first build, in order.
-
-```bash
-python -m curator build --topics 3   # research a few topics into the bank (paid; asks first)
-python -m dev.api_server             # the API, on port 8787
-pnpm dev                             # the site, on port 5173
-```
-
-Checks (none of them calls a paid API):
-
-```bash
-pytest
-ruff check . && ruff format --check .
-mypy --strict
-pnpm typecheck && pnpm test && pnpm build
-```
-
-## Repository
-
-| Path | What it holds |
-|---|---|
-| `agent/` | the agent core: the loop, tools, verifiers, the publish gate, storage and the HTTP layer |
-| `curator/` | the scheduled Curator: build, daily, review, upkeep |
-| `api/` | the Vercel functions, one file per endpoint |
-| `src/` | the React and TypeScript site |
-| `evals/` | the fixed eval set and its scoring |
-| `supabase/` | the schema and its migrations |
-| `docs/` | the design record, the session-by-session plan, the evals and the security audit |
+Setup, the checks and a map of the repository are in
+[`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md). The checks run on every push (the badge above);
+none of them calls a paid API.
 
 ## How it was built
 
@@ -196,6 +157,6 @@ checks and costs are recorded in [`docs/PLAN.md`](docs/PLAN.md), and the design 
 
 ## Licence
 
-The code is under the [MIT License](LICENSE). The scene images and the link-preview image are not:
-they were generated by Vedant Gaikwad with One Prompt Design, and all rights are reserved. The
-fonts are under the SIL Open Font License. Details are in [`NOTICE`](NOTICE).
+The code is under the [MIT License](LICENSE). The scene images, the link-preview image and the
+screenshots in `docs/images/` are not: all rights are reserved. The fonts are under the SIL Open
+Font License. Details are in [`NOTICE`](NOTICE).
