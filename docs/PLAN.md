@@ -1365,6 +1365,13 @@ draft). He adds the `cosmic` CNAME later. Kept from the review: the "How it was 
         under `docs/images/`. `NOTICE` names them, since they show the scene art.
       - **Voice:** neutral, with one first-person line near the top on why Vedant built it.
         "How it was built" stays (decided 2026-10-10).
+      - **CI** (asked after the session's other questions, as recommended): a second workflow,
+        `.github/workflows/checks.yml`, runs every check on each push and pull request
+        (pytest, ruff, ruff format, mypy --strict, typecheck, Vitest and the build), with no
+        secrets and no paid calls, actions pinned to commits and read-only permissions as in
+        the Curator; the README shows its badge. Free: Actions minutes are free on a public
+        repo, and a run is a few minutes of the 2,000 a month on a private one. Until now
+        every check ran only on Vedant's PC.
 
 Gate (Vedant): the repo public and clean (gitleaks clean, or every key it found rotated), the
 site at the new domain with the old address redirecting, the OG preview right where he shares
@@ -1627,6 +1634,6 @@ tier), decided together with the newsletter's subscribers (Vedant, 2026-10-10).
   210 to review). He pasted the SQL editor tables: S18's timeout is 3 s and S19 is accepted
   (Supabase's RLS event-trigger function; two trigger functions keep the default grant, also
   harmless). S13's counts after the purges recorded. Planned the README session in seven
-  questions (each as recommended). 341 Python and 148 TypeScript tests. About $0.10 spent (the
+  questions (each as recommended), and Vedant added a CI workflow for every check to it. 341 Python and 148 TypeScript tests. About $0.10 spent (the
   search). Vedant shared the link in WhatsApp: the preview shows the image, the title and the
   tagline. Next: the README session, then going public.

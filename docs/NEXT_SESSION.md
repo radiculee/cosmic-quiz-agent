@@ -35,7 +35,8 @@ The README is redone in this session, as decided on 2026-10-13 (`docs/PLAN.md`, 
 README session"): recruiters first, then engineers; the draft's depth with a sharper first
 screen; three highlights (it checks itself, it runs on its own, live at a capped cost); the
 gate table and costs, the Mermaid diagram, and security and privacy kept; setup and the repo
-map moved to `docs/DEVELOPMENT.md`; three screenshots; neutral voice with one "I" line.
+map moved to `docs/DEVELOPMENT.md`; three screenshots; neutral voice with one "I" line; and a
+CI workflow that runs every check on each push, with its badge in the README.
 
 1. **Ask first,** one at a time, each with a recommendation:
    - The "I" line: Vedant's own reason for building it, or a draft for him to edit.
@@ -44,15 +45,22 @@ map moved to `docs/DEVELOPMENT.md`; three screenshots; neutral voice with one "I
      whose log lines are made up. A README should not show invented agent output.
    - Security and privacy: as long as the draft, or a few lines each with links to
      `docs/SECURITY_AUDIT.md` and `/privacy`.
+   - How pnpm gets onto the CI runner: `package.json` pins no pnpm version (no
+     `packageManager` field; pnpm 11.5.0 and Node 24 locally). The options are the pinned
+     `pnpm/action-setup` action (third party) or a `packageManager` field with corepack, if
+     Node 24 on the runner still ships it.
    - Anything that would need a new tool or a cost.
 2. **Build:** the new `README.md`; `docs/DEVELOPMENT.md` (setup, the checks, the repo map from
    the draft); the three screenshots under `docs/images/`, made with headless Chrome at a
-   size that reads on GitHub; `NOTICE` naming the screenshots (they show the scene art). Every
-   number in the README checked against its source (`docs/EVALS.md`, `docs/PLAN.md`, the
-   live analytics).
+   size that reads on GitHub; `NOTICE` naming the screenshots (they show the scene art);
+   `.github/workflows/checks.yml` (every check on each push and pull request, no secrets, no
+   paid calls, actions pinned to commits, `permissions: contents: read`) and its badge at the
+   top of the README. Every number in the README checked against its source
+   (`docs/EVALS.md`, `docs/PLAN.md`, the live analytics).
 3. **Check:** the README as GitHub renders it (the Mermaid diagram, the images, the links),
    including on a phone; every relative link resolves; the usual checks pass.
-4. **Vedant reads it** as someone who has never seen the project; then the commit on his word.
+4. **Vedant reads it** as someone who has never seen the project; then the commit and push on
+   his word, and the first run of the checks workflow on GitHub passes (its badge green).
 
 ## Later: going public (on Vedant's word)
 
@@ -70,7 +78,7 @@ That closes the 10b gate.
 > This is the README session (10b). Work through the to-do list in docs/NEXT_SESSION.md:
 > 1. Ask me the open questions first, one at a time, each with a recommendation.
 > 2. Rewrite README.md as decided on 2026-10-13, move setup and the repo map to
->    docs/DEVELOPMENT.md, and make the three screenshots.
+>    docs/DEVELOPMENT.md, make the three screenshots, and add the checks workflow.
 > 3. Check it as GitHub renders it, and every number against its source.
 > 4. Show me the result; commit and push only when I say so.
 >
