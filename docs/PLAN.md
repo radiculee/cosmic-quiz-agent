@@ -1294,6 +1294,10 @@ draft). He adds the `cosmic` CNAME later. Kept from the review: the "How it was 
       `cosmic` at Web Hosting Ireland with the value Vercel shows; then redirect
       `cosmic-quiz-agent.vercel.app` to it. Check deep links, the API and the live search on the
       new domain.
+      Decided 2026-10-13 (Vedant, each as recommended): the domain comes first, then the README
+      session, then going public; the old address redirects in `vercel.json` (a permanent 308
+      that matches only the host `cosmic-quiz-agent.vercel.app` and keeps the path and query,
+      held by a packaging test), deployed only once the new domain answers over HTTPS.
 
 Gate (Vedant): the repo public and clean (gitleaks clean, or every key it found rotated), the
 site at the new domain with the old address redirecting, the OG preview right where he shares
@@ -1380,9 +1384,19 @@ home page's scroll and fade, the Learn bar), the screenshots and the diff; then 
 push on his word, and the same checks on production.
 - [x] iPhone check passed on 2026-10-12, on Vedant's word ("it works"): the built site served on
       his PC's home-network address with the free stub API.
-- [x] Committed on his word as three commits (the scroll fixes; the questions first; the Learn
-      bar and these docs). Not pushed yet.
-- [ ] Push, then the same checks on production (Vedant on his iPhone).
+- [x] Committed on his word as three commits (`5ce29d6` the scroll fixes, `ebf68d8` the
+      questions first, `71a5712` the Learn bar and these docs), each passing every check on its
+      own.
+- [x] Pushed on his word on 2026-10-12. Vercel deployed it to production at 15:33 UTC, about
+      15 minutes after the push. Production serves the exact build tested locally (the same
+      asset files), checked read-only in headless Chrome: the new scene CSS (`100lvh`, no
+      mask), the explanation button, the Learn bar, and no CSP violation or console error.
+- Seen on 2026-10-12: for a while Vercel's Security Checkpoint answered every non-browser
+  request with HTTP 403 (`x-vercel-mitigated: challenge`); browsers passed it. By 2026-10-13 it
+  was off again (the home page, the link preview's image and `/api/topics` answer 200, also to
+  a Facebook crawler's user agent), so it was Vercel's automatic protection, not a setting.
+- [ ] Vedant's iPhone check on production: moved to the domain step, as one check on the new
+  domain.
 
 ---
 
@@ -1532,5 +1546,6 @@ tier), decided together with the newsletter's subscribers (Vedant, 2026-10-10).
   shifting 81 px with the toolbar). Built the fixes, the new order and the bar; 340 Python and
   148 TypeScript tests; drives of 28, 37 and 8 checks (one scene check, paints during a turn, is
   not something Chrome can show). No paid calls. On 2026-10-12 Vedant checked the fixes on his
-  iPhone over Wi-Fi ("it works"); committed on his word as three commits, not pushed. Next: the
-  push and a check on production, then the README session.
+  iPhone over Wi-Fi ("it works"); committed on his word as three commits and pushed the same
+  day (deployed at 15:33 UTC; production checked read-only). Next: the domain, then the README
+  session, then going public.
