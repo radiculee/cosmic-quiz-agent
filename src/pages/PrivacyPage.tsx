@@ -50,7 +50,7 @@ export function PrivacyPage() {
               besides the host.
             </Point>
             <Point>
-              Analytics for nerds shows totals about the agent&rsquo;s own work, never about
+              Mission Control shows totals about the agent&rsquo;s own work, never about
               visitors.
             </Point>
           </Points>

@@ -2,7 +2,7 @@
 
     python -m dev.check_stats
 
-Analytics for nerds publishes what `agent_stats()` (supabase/migrations/007_agent_stats.sql)
+Mission Control publishes what `agent_stats()` (supabase/migrations/007_agent_stats.sql)
 counts, so this checks the SQL the way a reader would: it reads the raw rows (runs, items,
 claim_checks, on_demand_runs) with the secret key, works every figure out again in Python, calls
 the live function with the publishable key as /api/stats does, and compares the two documents

@@ -21,9 +21,8 @@ An astronomy quiz written by an AI agent that checks every answer against the pa
 a second-opinion model; React, TypeScript, Tailwind CSS and Vite; Supabase Postgres; Vercel;
 GitHub Actions.
 
-Built by [Vedant Gaikwad](https://www.vedantgaikwad.ie), a data analyst and full-stack developer
-in Dublin: "I love astronomy, so I built the quiz I wanted to play, and made the agent that
-writes it prove every answer."
+Built by [Vedant Gaikwad](https://www.vedantgaikwad.ie). "I love astronomy, so I built the quiz
+I wanted to play, and made the agent that writes it prove every answer."
 
 ## What you can do
 
@@ -34,7 +33,7 @@ writes it prove every answer."
   found in the cited pages for every option.
 - **Try a new topic:** type any astronomy topic and the agent researches it live, streaming each
   step, including every claim it checks. Two searches a day per visitor.
-- **Analytics for nerds:** what the agent costs, how long it takes and how its checks judge it,
+- **Mission Control:** what the agent costs, how long it takes and how its checks judge it,
   from live data.
 - Ranks, streaks and tiered trophies, kept in your browser.
 
@@ -127,9 +126,9 @@ quote each source was cited for.
   (95% within 36.2 s), and prompt caching cut the agent's cost by about a quarter.
 - A live search of four items costs about $0.12. The daily Curator, paid from 1 November, about
   $0.17, capped at $0.40.
-- Every model call's tokens and cost are logged, and Analytics for nerds shows them:
+- Every model call's tokens and cost are logged, and Mission Control shows them:
 
-![Analytics for nerds on the live site: 54% published, 115 of 213 runs; $0.051 per published item; median run 19.2 s; October spend $5.84 of the $10.00 Anthropic limit](docs/images/analytics.webp)
+![Mission Control on the live site: 54% published, 115 of 213 runs; $0.051 per published item; median run 19.2 s; October spend $5.84 of the $10.00 Anthropic limit](docs/images/analytics.webp)
 
 ## Security and privacy
 
@@ -154,6 +153,11 @@ none of them calls a paid API.
 Planned and built by Vedant Gaikwad in sessions with Claude Code. Each session's decisions,
 checks and costs are recorded in [`docs/PLAN.md`](docs/PLAN.md), and the design record is
 [`docs/DESIGN.md`](docs/DESIGN.md).
+
+## Contact
+
+For anything else, including questions about the project or requests for more details, please
+use the [contact form on vedantgaikwad.ie](https://www.vedantgaikwad.ie/#contact).
 
 ## Licence
 

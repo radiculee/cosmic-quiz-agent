@@ -1,4 +1,4 @@
-"""GET /api/stats: Analytics for nerds, "The agent" tab (docs/PLAN.md Session 9).
+"""GET /api/stats: Mission Control, "The agent" tab (docs/PLAN.md Session 9).
 
     /api/stats?mode=learn|quiz&difficulty=easy|medium|hard&source=curator|on_demand&days=7|30
 

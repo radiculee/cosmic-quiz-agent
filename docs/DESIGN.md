@@ -2,7 +2,7 @@
 
 ## Context
 Vedant wants an autonomous AI agent themed on astronomy and space. v1 is a Learn/Quiz web game with an
-analytics page of the agent's measured statistics by mode and difficulty ("Analytics for nerds",
+analytics page of the agent's measured statistics by mode and difficulty ("Mission Control",
 `docs/PLAN.md` Session 9); v2 adds an astronomy newsletter (email, then WhatsApp) produced by the same
 agent. (Changed 2026-10-08 by Vedant: the analytics page, added to v2 on 2026-10-01, moved into v1.) It
 started as a portfolio feature but is now a **standalone project**: its own repo (public with an MIT
@@ -20,7 +20,7 @@ runs on a schedule with no human trigger), and code that reads well to recruiter
    - Scenes (decided 2026-10-10, `docs/PLAN.md` "Scenes"): Vedant's AI-generated scenes replace the flat void background, as a fixed layer the content scrolls over. Home rotates three (the observatory, the piano, the glasshouse) every 10 s with a 1.5 s crossfade, never under reduced motion, while paused or in a hidden tab; every other page shows the observatory still. Cards and controls on a scene are solid; text straight on it is ink with a soft shadow, and small lines below a page's intro sit on solid chips. The art is not covered by the MIT licence.
    - Learn (`/learn`, `/learn/<topic-slug>`): a difficulty switch, a searchable grid of bank topics (read ones ticked) and Random. Each topic's explanation and sources has its own URL. The switch, the search box and Random sit in one solid bar that sticks to the top while the grid scrolls (decided 2026-10-10 by Vedant; a box that scrolls on its own was turned down because it traps the page's scroll on a phone).
    - Quiz (`/quiz`): a difficulty and a run of 10, 30 or 60 questions, each on a different random topic (unplayed first). A length is offered only when the bank has that many topics at that difficulty.
-   - The web page (`/explore`): a typed topic researched live (decision 9). A search makes a question at each level and the explanation at the chosen level, all shown on the page and stored in the bank (changed later on 2026-10-08 by Vedant; it was one explanation or one question). The questions come first and the explanation last, behind a button that opens once every question is answered, so it cannot give an answer away; opening it counts towards Explorer (changed 2026-10-10 by Vedant; the explanation came first). "Analytics for nerds" opens from it at `/explore/stats` (`docs/PLAN.md` Session 9): each of its two tabs opens on four key figures, with the rest in closed rows (decided by Vedant on 2026-10-08).
+   - The web page (`/explore`): a typed topic researched live (decision 9). A search makes a question at each level and the explanation at the chosen level, all shown on the page and stored in the bank (changed later on 2026-10-08 by Vedant; it was one explanation or one question). The questions come first and the explanation last, behind a button that opens once every question is answered, so it cannot give an answer away; opening it counts towards Explorer (changed 2026-10-10 by Vedant; the explanation came first). "Mission Control" opens from it at `/explore/stats` (`docs/PLAN.md` Session 9): each of its two tabs opens on four key figures, with the rest in closed rows (decided by Vedant on 2026-10-08).
    - Trophies (`/trophies`): tiered bronze, silver and gold trophies, which replace the v1 badges and pop up when earned.
    - Privacy (`/privacy`, Session 10b, decided 2026-10-09): what is stored, why and for how long, in plain words, linked from a footer on every page.
    - A slim header on every page with a GitHub link. Routing is a hand-rolled History-API router, with no routing library.
@@ -120,7 +120,7 @@ api/item.py            a random published item (a quiz item without its answer)
 api/reveal.py          a quiz item's answer, explanation, sources and source check
 api/report.py          report an item (salted IP hash; two reports hide it)
 api/quota.py           the visitor's live runs left today and whether the global cap is open
-api/stats.py           Analytics for nerds: aggregates only, edge-cached (Session 9)
+api/stats.py           Mission Control: aggregates only, edge-cached (Session 9)
 dev/api_server.py      local server for api/ (Vite proxies /api to it); never deployed
 dev/check_stats.py     read-only check of the live agent_stats() against a Python version of it
 evals/                 fixed topic set + scoring script; `export` writes the eval history for the UI
@@ -128,7 +128,7 @@ src/                   Vite + React UI: router.ts (History-API router), pages/ (
                        the web page, trophies), game.ts (points, streaks, ranks, runs), trophies.ts
                        (tiers and what was just earned), profile.ts (progress in localStorage),
                        search.ts (a live search's items as the web page shows them), components/,
-                       stats.ts and charts/ (Analytics for nerds, hand-written SVG), data/evals.json
+                       stats.ts and charts/ (Mission Control, hand-written SVG), data/evals.json
                        (the eval history, built in), slideshow.ts and components/Scene.tsx (the
                        scenes behind every page)
 public/scenes/         the scene images at 1280, 1920 and 2560 px (WebP), versioned names; the

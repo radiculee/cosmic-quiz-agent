@@ -13,7 +13,7 @@ Developer. An autonomous astronomy and space AI agent, surfaced as a Learn / Qui
   - Home: a full-screen hero over a slideshow of Vedant's scenes, with the title, the tagline and a compact row of Learn, Quiz and "Try a new topic" (from the web); the rank, points and a trophy shelf in a card below the fold. (Changed 2026-10-10 by Vedant; inner pages show the observatory scene as a still.)
   - Learn: a searchable grid of bank topics. Each gives a plain-language explanation with cited sources, at its own URL.
   - Quiz: runs of 10, 30 or 60 four-option MCQs, each on a different topic, against the clock. After each answer, the game shows the explanation and cited sources.
-  - The web page (`/explore`): a typed topic researched live by the agent, behind guardrails. It also opens "Analytics for nerds", the agent's measured statistics by mode and difficulty (Session 9).
+  - The web page (`/explore`): a typed topic researched live by the agent, behind guardrails. It also opens "Mission Control", the agent's measured statistics by mode and difficulty (Session 9).
   - Tiered bronze, silver and gold trophies that pop up when earned.
 - **v2:** an astronomy newsletter (email via Resend, then WhatsApp) produced by the same agent. (The analytics page moved from v2 into v1 on 2026-10-08.)
 

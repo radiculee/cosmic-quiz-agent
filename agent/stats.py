@@ -1,4 +1,4 @@
-"""Analytics for nerds: the agent's measured statistics, as "The agent" tab shows them.
+"""Mission Control: the agent's measured statistics, as "The agent" tab shows them.
 
 `agent_stats()` (migration 007) does the counting in the database and returns aggregates only;
 it is the one thing the publishable key may run against the private tables, so salted IP

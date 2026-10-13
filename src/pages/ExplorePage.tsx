@@ -72,7 +72,7 @@ function isDifficulty(value: string | null): value is Difficulty {
 const ENDED_EARLY = "The search ended before this was made.";
 const UNAVAILABLE = "Live research is not available right now.";
 
-/** The mark on the history entry that the Analytics for nerds button adds. It stays on that
+/** The mark on the history entry that the Mission Control button adds. It stays on that
  * entry through Back and Forward, so Close can tell that Back leads to this page. */
 const PANEL_OPENED_HERE = { panel: "explore" } as const;
 
@@ -96,7 +96,7 @@ function openedHere(state: unknown): boolean {
  * The address can carry the form's values (`?topic=...&difficulty=...`, from the Learn page's
  * "research it live" link); it only fills the form, so a link can never spend a search.
  *
- * "Analytics for nerds" opens over the page at /explore/stats (`statsOpen`). The page stays
+ * "Mission Control" opens over the page at /explore/stats (`statsOpen`). The page stays
  * mounted under it, so a search keeps streaming while the panel is open.
  */
 export function ExplorePage({
@@ -109,7 +109,7 @@ export function ExplorePage({
   setDifficulty,
   statsOpen,
 }: PageProps & { statsOpen: boolean }) {
-  usePageTitle(statsOpen ? "Analytics for nerds" : "Explore");
+  usePageTitle(statsOpen ? "Mission Control" : "Explore");
   const location = useLocation();
   const [initial] = useState(() => {
     const params = location.searchParams;
@@ -472,7 +472,7 @@ export function ExplorePage({
         onClick={openStats}
         className={`${SECONDARY_BUTTON} mt-6 px-4 py-3 text-[9px]`}
       >
-        Analytics for nerds
+        Mission Control
       </button>
 
       <div ref={viewRef} className="mt-10 w-full scroll-mt-6" aria-live="polite">
@@ -493,7 +493,7 @@ export function ExplorePage({
                   onClick={openStats}
                   className="text-teal underline underline-offset-4 hover:text-ink"
                 >
-                  this search in Analytics for nerds
+                  this search in Mission Control
                 </button>
               </p>
             )}

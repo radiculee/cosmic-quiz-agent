@@ -1,5 +1,5 @@
 /**
- * Analytics for nerds (docs/PLAN.md Session 9): the figures the panel shows, worked out from the
+ * Mission Control (docs/PLAN.md Session 9): the figures the panel shows, worked out from the
  * agent's statistics (/api/stats, api/stats.py) and from a live search's runs (the `stats`
  * events of /api/research). Pure functions over plain data, so they are tested without a browser.
  */

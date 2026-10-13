@@ -14,7 +14,7 @@ const TABS: { id: Tab; label: string }[] = [
 ];
 
 /**
- * Analytics for nerds (docs/PLAN.md Session 9): a full-screen panel over the web page at
+ * Mission Control (docs/PLAN.md Session 9): a full-screen panel over the web page at
  * /explore/stats, with two tabs. "This search" shows what the agent did for the search just made;
  * "The agent" shows everything it has measured, with filters. It is a modal <dialog>, so the page
  * behind is inert and keeps its search going; Esc, Close and Back all close it, and focus goes
@@ -132,7 +132,7 @@ export function StatsPanel({
 
           <div className="pt-6">
             <h2 id={titleId} className="font-heading text-4xl font-bold uppercase tracking-tight">
-              Analytics for nerds
+              Mission Control
             </h2>
             <p className="mt-3 max-w-xl leading-relaxed text-ink/90">
               Everything the agent measures: what it costs, how long it takes, what it reads and

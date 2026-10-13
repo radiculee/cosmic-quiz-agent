@@ -1,4 +1,4 @@
-"""Analytics for nerds: one run's figures, the agent_stats() reader and endpoint, and the eval
+"""Mission Control: one run's figures, the agent_stats() reader and endpoint, and the eval
 history export. Nothing touches the network or a paid API."""
 
 from __future__ import annotations

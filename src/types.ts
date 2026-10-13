@@ -84,7 +84,7 @@ export interface PlannedItem {
 
 export type Tone = "info" | "ok" | "warn";
 
-// --- Analytics for nerds (Session 9) ----------------------------------------------------------
+// --- Mission Control (Session 9) ----------------------------------------------------------
 
 export const OUTCOMES = [
   "passed",
