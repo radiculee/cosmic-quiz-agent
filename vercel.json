@@ -5,6 +5,14 @@
   "buildCommand": "pnpm build",
   "outputDirectory": "dist",
   "regions": ["dub1"],
+  "redirects": [
+    {
+      "source": "/:path*",
+      "has": [{ "type": "host", "value": "cosmic-quiz-agent.vercel.app" }],
+      "destination": "https://cosmic.vedantgaikwad.ie/:path*",
+      "permanent": true
+    }
+  ],
   "rewrites": [{ "source": "/((?!api/).*)", "destination": "/index.html" }],
   "headers": [
     {

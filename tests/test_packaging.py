@@ -278,3 +278,20 @@ def test_the_link_preview_is_a_small_1200_by_630_image_the_page_names() -> None:
     assert (meta["og:image:width"], meta["og:image:height"]) == ("1200", "630")
     assert meta["og:description"] == meta["twitter:description"] == meta["description"]
     assert meta["twitter:card"] == "summary_large_image"
+
+
+def test_the_old_address_sends_every_page_to_the_site_s_own_domain() -> None:
+    # Decided 2026-10-13: cosmic-quiz-agent.vercel.app redirects for good to the domain the link
+    # preview names, keeping the path (Vercel keeps the query). Only that host: preview
+    # deployments keep their own addresses.
+    config = json.loads((ROOT / "vercel.json").read_text(encoding="utf-8"))
+    html = " ".join((ROOT / "index.html").read_text(encoding="utf-8").split())
+    meta = dict(re.findall(r'<meta (?:property|name)="([^"]+)" content="([^"]+)"', html))
+    site = meta["og:url"].rstrip("/")
+
+    [redirect] = config["redirects"]
+    assert site == "https://cosmic.vedantgaikwad.ie"
+    assert redirect["has"] == [{"type": "host", "value": "cosmic-quiz-agent.vercel.app"}]
+    assert redirect["source"] == "/:path*"
+    assert redirect["destination"] == f"{site}/:path*"
+    assert redirect["permanent"] is True
