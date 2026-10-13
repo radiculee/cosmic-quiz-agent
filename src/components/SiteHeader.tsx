@@ -2,10 +2,8 @@ import { PATHS } from "../router";
 import { GitHubIcon } from "./GitHubIcon";
 import { Link } from "./Link";
 
-// The repo is private until Session 10 (docs/PLAN.md), so until then the icon links to the
-// author's profile, where visitors never meet a 404. It switches to the repo when that goes public.
-const GITHUB_URL = "https://github.com/radiculee";
-const GITHUB_LABEL = "Vedant Gaikwad on GitHub (opens in a new tab)";
+const GITHUB_URL = "https://github.com/radiculee/cosmic-quiz-agent";
+const GITHUB_LABEL = "Cosmic Quiz on GitHub (opens in a new tab)";
 
 /** The slim bar on every page (not sticky). Inner pages link home from the name on the left; the
  * home page has the big title instead. */
