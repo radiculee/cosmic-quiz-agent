@@ -1077,8 +1077,11 @@ Claude Code (each finding recorded in `docs/SECURITY_AUDIT.md` with its fix and 
 - [x] Prompt-injection paths: the typed topic (the on-topic check takes it as data), fetched page
       text reaching the agent, tool arguments, and the citation rule enforced in code. S15
       accepted (the defences stay in code); S12 accepted for now.
-- [ ] RLS and grants checked live, read-only. The probe with the publishable key passed (every
-      private table refused, no write allowed); the SQL editor query below is still to run.
+- [x] RLS and grants checked live, read-only. The probe with the publishable key passed (every
+      private table refused, no write allowed). The SQL editor query below ran on 2026-10-13
+      (as one combined query, pasted by Vedant): the anon role's timeout is 3 s (S18), and
+      `rls_auto_enable` is Supabase's RLS event-trigger function, accepted together with two of
+      this project's trigger functions that keep the default execute grant (S19).
       RLS on every table, and every function in `public`
       with its owner, `security definer` and who may execute it, and the browser roles'
       statement timeouts. Vedant runs this in the SQL editor (it lists, and changes nothing):
@@ -1098,7 +1101,7 @@ Claude Code (each finding recorded in `docs/SECURITY_AUDIT.md` with its fix and 
       This answers audit note 2: what created `public.rls_auto_enable`, and whether the browser
       roles can run it.
 - [x] `agent_stats`: record the decision above (audit note 1) and its reasoning (S18). The anon
-      statement timeout is to be confirmed from the query above.
+      statement timeout, confirmed from the query above on 2026-10-13, is 3 s.
 - [x] Secrets: none in the built `dist/` bundle, in a reply, or in a log line; `IP_HASH_SALT`
       long and random; the visitor's IP read only from the last `X-Forwarded-For` entry. All
       hold; the local salt is 256 bits. The production salt cannot be read from here (S14:
@@ -1121,8 +1124,9 @@ Claude Code (each finding recorded in `docs/SECURITY_AUDIT.md` with its fix and 
       Python tests (28 new) and 116 TypeScript tests (2 new).
 
 Vedant, to finish 10a:
-- Run the SQL editor query above and paste the result (S18's timeout, S19). Run on 2026-10-10;
-  the three result tables are still to be pasted.
+- Run the SQL editor query above and paste the result (S18's timeout, S19). Pasted on
+  2026-10-13, as one combined query (the editor shows only the last statement's result); S18
+  and S19 closed.
 - Paste `supabase/migrations/008_purge_visitor_hashes.sql` into the SQL editor before the push;
   until it is in, the scheduled `upkeep` fails. Applied 2026-10-10.
 - Check the production `IP_HASH_SALT` (S14). Vercel does not show the stored value, so it cannot
@@ -1290,7 +1294,7 @@ draft). He adds the `cosmic` CNAME later. Kept from the review: the "How it was 
 - [ ] Vedant confirms, then the repo is made public (Vedant in GitHub's settings, or `gh repo
       edit --visibility public` on his word). Turn on secret scanning with push protection and
       Dependabot alerts (free on public repos). The header's GitHub icon links to the repo.
-- [ ] Domain: add `cosmic.vedantgaikwad.ie` to the Vercel project; Vedant adds the CNAME
+- [x] Domain: add `cosmic.vedantgaikwad.ie` to the Vercel project; Vedant adds the CNAME
       `cosmic` at Web Hosting Ireland with the value Vercel shows; then redirect
       `cosmic-quiz-agent.vercel.app` to it. Check deep links, the API and the live search on the
       new domain.
@@ -1298,6 +1302,69 @@ draft). He adds the `cosmic` CNAME later. Kept from the review: the "How it was 
       session, then going public; the old address redirects in `vercel.json` (a permanent 308
       that matches only the host `cosmic-quiz-agent.vercel.app` and keeps the path and query,
       held by a packaging test), deployed only once the new domain answers over HTTPS.
+      Done on 2026-10-13:
+      - **DNS:** the domain was added to the project at 14:12 UTC (Vercel CLI), and Vedant added
+        `cosmic` CNAME `cname.vercel-dns.com` (TTL 14400). Google's and Cloudflare's resolvers
+        returned it by 14:21 UTC. (That session's check of the four nameservers went through
+        this PC's VPN, which answers every DNS query itself; Google, Cloudflare and Let's
+        Encrypt confirm the record independently.)
+      - **The certificate waited on Vercel's own DNS check,** which still found no CNAME at
+        14:40 (`cnames: []`, `misconfigured: true`). HTTPS failed with no certificate (Chrome:
+        ERR_CONNECTION_CLOSED) while plain HTTP already served the site. Ruled out: a CAA
+        record (none; the CNAME target allows Let's Encrypt) and DNSSEC (off). Most likely
+        Vercel's first lookup, made before the record existed, was cached: the zone lets a "no
+        such name" answer be cached for up to a day. Vedant pressed Refresh on the Domains
+        page, then `vercel certs issue` followed (the CLI answered "Response Error"); Let's
+        Encrypt issued the certificate at about 14:54 UTC (90 days, renewed by Vercel), and
+        the config check then read `misconfigured: false`.
+      - **Checked on the new domain,** read-only: `/`, `/learn/quasars`, `/explore/stats` and
+        `/privacy` answer 200 with the six `vercel.json` headers; `/api/topics` and
+        `/api/quota` 200; `/og-v1.jpg` is the 1200x630 JPEG; S1 holds (a cross-site GET 403,
+        a `text/plain` POST 415). Headless Chrome on eight pages and the home page at phone
+        size: no CSP violation, console error or blocked load; the fonts, the scenes and every
+        API call from the new domain, and no other host.
+      - **The redirect,** committed on Vedant's word (`bfff85e`, with the docs in `b60c97c`)
+        and pushed at 14:57 UTC. Production then redirected every path except the home page:
+        Vercel matches a source strictly, so `/:path*` misses `/` (and any path ending in a
+        slash). The old home page was still served, and its API calls were redirected to the
+        new domain and refused there as cross-site. Traced with the matcher Vercel's build
+        uses (path-to-regexp in strict mode, in the CLI's own folder) and fixed with
+        `/:path(.*)` on Vedant's word (`9366531`, pushed at 15:12 UTC).
+      - **The redirect on production:** `/`, `/?ref=x`, `/learn/`, `/learn/quasars?x=1`,
+        `/api/topics`, `/privacy` and `/og-v1.jpg` on the old address each answer 308 to the
+        same path and query on the new domain; the new domain is not redirected (no loop); a
+        browser lands there in one hop, with no CSP violation or error. Deployment URLs keep
+        Vercel's login wall (a 302 to its SSO), untouched by the rule.
+      - **Vedant on his iPhone** (Safari, the new domain): it works, a live search included
+        ("Wormhole", 15:30 UTC). Its 4 runs, checked read-only: the easy, medium and hard
+        questions first, then the explanation; item 208 published, 209 discarded, 210 in
+        review, 211 (the explanation) published; $0.103 on Anthropic and $0.0008 on TypeSafe,
+        197 s and 10 pages; `spent_usd` equal to each run's cost.
+- [x] The link shared in WhatsApp shows the preview (the image, the title and the tagline).
+      Checked by Vedant on 2026-10-13 (15:54 UTC): the card shows the observatory image with
+      "COSMIC QUIZ" and the tagline, the title "Cosmic Quiz", the tagline as its description,
+      and `cosmic.vedantgaikwad.ie`.
+- [ ] The README session (a session of its own, next). Decided 2026-10-13 (Vedant, each as
+      recommended, asked one at a time):
+      - **Reader:** recruiters first, then engineers. The first screen stands on its own for a
+        30 to 60 second skim; everything below it is for the engineer who opens the code.
+      - **Length:** about the draft's depth, with a sharper first screen: the tagline, the live
+        link, the link-preview image, three highlights with numbers, and the stack.
+      - **The three highlights:** it checks itself (citations only from fetched pages, enforced
+        in code; three checks; 38 of 40 planted faults kept from players); it runs on its own
+        (the model chooses its tools in a hand-rolled loop, and a scheduled job grows the bank
+        every day); it is live at a capped cost (a visitor watches a search, about $0.12, under
+        the $10 a month cap, with every call's cost logged).
+      - **Kept from the draft:** the gate table and the costs, the Mermaid diagram, and security
+        and privacy.
+      - **Moved:** the run-locally steps and the repo map, to a new `docs/DEVELOPMENT.md` that
+        the README links to.
+      - **Visuals:** the link-preview image at the top, and three screenshots beside the
+        sections they show (a quiz answer with its source check, the agent log streaming a live
+        search, Analytics for nerds), made with headless Chrome as small WebP or JPEG files
+        under `docs/images/`. `NOTICE` names them, since they show the scene art.
+      - **Voice:** neutral, with one first-person line near the top on why Vedant built it.
+        "How it was built" stays (decided 2026-10-10).
 
 Gate (Vedant): the repo public and clean (gitleaks clean, or every key it found rotated), the
 site at the new domain with the old address redirecting, the OG preview right where he shares
@@ -1395,8 +1462,8 @@ push on his word, and the same checks on production.
   request with HTTP 403 (`x-vercel-mitigated: challenge`); browsers passed it. By 2026-10-13 it
   was off again (the home page, the link preview's image and `/api/topics` answer 200, also to
   a Facebook crawler's user agent), so it was Vercel's automatic protection, not a setting.
-- [ ] Vedant's iPhone check on production: moved to the domain step, as one check on the new
-  domain.
+- [x] Vedant's iPhone check on production: moved to the domain step, as one check on the new
+  domain. Passed on 2026-10-13, on Vedant's word, with a live search (see 10b's domain item).
 
 ---
 
@@ -1549,3 +1616,17 @@ tier), decided together with the newsletter's subscribers (Vedant, 2026-10-10).
   iPhone over Wi-Fi ("it works"); committed on his word as three commits and pushed the same
   day (deployed at 15:33 UTC; production checked read-only). Next: the domain, then the README
   session, then going public.
+- 2026-10-13 - Session 10b, the domain: `cosmic.vedantgaikwad.ie` had no certificate because
+  Vercel's own DNS check still saw no CNAME (most likely a lookup cached from before the record
+  existed); after Vedant's Refresh and `vercel certs issue`, Let's Encrypt issued it at about
+  14:54 UTC. Every read-only check passed on the new domain (pages, headers, API, link preview,
+  S1, headless Chrome). The redirect from the old address was committed and pushed on Vedant's
+  word (`bfff85e`, docs `b60c97c`); production showed `/:path*` misses the home page in
+  Vercel's strict matching, fixed with `/:path(.*)` (`9366531`) and checked on 9 paths. Vedant
+  checked the site on his iPhone, a live search on "Wormhole" included (4 runs, $0.103, item
+  210 to review). He pasted the SQL editor tables: S18's timeout is 3 s and S19 is accepted
+  (Supabase's RLS event-trigger function; two trigger functions keep the default grant, also
+  harmless). S13's counts after the purges recorded. Planned the README session in seven
+  questions (each as recommended). 341 Python and 148 TypeScript tests. About $0.10 spent (the
+  search). Vedant shared the link in WhatsApp: the preview shows the image, the title and the
+  tagline. Next: the README session, then going public.

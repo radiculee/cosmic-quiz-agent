@@ -1,89 +1,78 @@
 # Next session
 
-Written 2026-10-13, at the end of the session that started the domain step of 10b. It holds where
-things stand, the to-do list and the prompt to paste.
+Written 2026-10-13, at the end of the domain session (10b). It holds where things stand, the
+to-do list for the README session and the prompt to paste.
 
 ## Where things stand
 
-- **Live** at https://cosmic-quiz-agent.vercel.app: everything through the fixes session
-  (`71a5712`, pushed 2026-10-12 and deployed at 15:33 UTC; production checked read-only).
-- **The domain (10b), in progress:**
-  - `cosmic.vedantgaikwad.ie` is added to the Vercel project `cosmic-quiz-agent` (Vercel CLI,
-    signed in as `radiculee`; `vedantgaikwad.ie` was already on the account, so no TXT check).
-  - Vedant added the record at Web Hosting Ireland: `cosmic`, CNAME, `cname.vercel-dns.com`, TTL
-    14400 (the same kind of record as `www`). By 14:21 UTC all four of the domain's DNS servers
-    and Google's and Cloudflare's resolvers returned it (zone serial 2026101300).
-  - At the end of the session Vercel had not verified the domain yet, so there was no HTTPS
-    certificate (`vercel domains inspect` still said "not configured properly"; it retries on
-    its own, and the dashboard's Domains page has a Refresh). Vedant runs the checks on the new
-    domain himself.
-- **Decided 2026-10-13** (Vedant, each as recommended; recorded in `docs/PLAN.md` under 10b):
-  the domain first, then the README session, then going public; the old address redirects in
-  `vercel.json`, deployed only once the new domain answers over HTTPS.
-- **Not committed, in the working copy:**
-  - `docs/PLAN.md`: the fixes session's push, deploy and production check; the Security
-    Checkpoint seen on 2026-10-12 (Vercel's automatic protection, gone by 2026-10-13); today's
-    two decisions.
-  - `vercel.json`: the redirect (a permanent 308; source `/:path*`, only the host
-    `cosmic-quiz-agent.vercel.app`, to `https://cosmic.vedantgaikwad.ie/:path*`).
-  - `tests/test_packaging.py`: its test, which also holds the domain to `index.html`'s `og:url`
-    (16 packaging tests pass).
-  - This file.
-  - **Do not push the redirect before the new domain answers over HTTPS**, or the old address
-    would send every visitor to a domain that does not work yet.
-- **10a:** the retention counts after the purge, read-only on 2026-10-13 at 14:21 UTC
-  (timestamps only; scratchpad `retention_counts.py`): 0 of 19 live runs still hold a visitor
-  hash (7 did before the first purge); 3 request windows, none older than a day; the one report
-  keeps its hash, 10 days old (under the 30 decided). Both scheduled runs since migration 008
-  succeeded (2026-10-11, 2026-10-12). Still open: S18 and S19, waiting for the SQL editor tables.
-- 340 Python and 148 TypeScript tests; every check passed at the last commit.
+- **Live** at https://cosmic.vedantgaikwad.ie, with a Let's Encrypt certificate (issued about
+  14:54 UTC on 2026-10-13, 90 days, renewed by Vercel). Every read-only check passed there:
+  the pages and their six headers, the API, the link preview's image, S1, and headless Chrome
+  on every page with no CSP violation or error.
+- **The old address redirects:** every path on `cosmic-quiz-agent.vercel.app` answers a
+  permanent 308 to the same path and query on the new domain (`vercel.json`, held by a packaging
+  test). The first version (`/:path*`) missed the home page in Vercel's strict matching; the fix
+  (`/:path(.*)`) is live. Deployment URLs keep Vercel's login wall.
+- **Pushed on 2026-10-13:** `bfff85e` the redirect, `b60c97c` the earlier docs, `9366531` the
+  home-page fix.
+- **This session's records:** `docs/PLAN.md` (10b's domain item, the README decisions, the
+  session log) and `docs/SECURITY_AUDIT.md` (S1 and S5 on the new domain, S13's counts after
+  the purges, S18 and S19 closed: every finding is now fixed or accepted with a reason, except
+  S16, the local Python update, which is Vedant's own action outside the repo).
+- **Vedant's iPhone check** passed on the new domain (Safari), with a live search on
+  "Wormhole": 4 runs, the questions first and the explanation last, $0.103 on Anthropic.
+- **The link preview** checked by Vedant in WhatsApp on the new domain: the image, "Cosmic
+  Quiz" and the tagline. Of 10b's gate, the README and the public repo are what is left.
+- **Review queue:** 9 items (186, 187, 188, 193, 198, 202, 203, 206, 210), for
+  `python -m curator review` whenever Vedant wants.
+- **The Curator** runs `upkeep` (free) every day until 31 October; from 1 November it runs
+  `daily` (about $0.17 a day, capped at $0.40) without any change.
+- 341 Python and 148 TypeScript tests; every check passed at the last commit.
 
-## To-do list for the next session
+## To-do list for the README session
 
-1. **Confirm the domain.** Vedant reports his checks. Then read-only: `vercel domains inspect`
-   shows it configured; `https://cosmic.vedantgaikwad.ie` answers `/`, `/learn/quasars`,
-   `/explore/stats` and `/privacy` with 200 and the six `vercel.json` headers; `/api/topics`
-   and `/api/quota` answer 200; `/og-v1.jpg` is the 1200x630 JPEG; S1 holds on the new host (a
-   cross-site GET that reaches a function gets 403, a `text/plain` POST gets 415); headless
-   Chrome shows no CSP violation, console error or blocked load, with the fonts and scenes
-   loading from the new host. If Vercel still has not verified it, find out why before anything
-   else.
-2. **Ship the redirect.** Show the diff; run pytest, ruff, mypy --strict, typecheck and build;
-   commit (the redirect and the docs) and push on Vedant's word. After the deploy:
-   `https://cosmic-quiz-agent.vercel.app/learn/quasars?x=1` answers 308 to
-   `https://cosmic.vedantgaikwad.ie/learn/quasars?x=1`, `/api/topics` on the old host answers
-   308, and the new host is not redirected (no loop).
-3. **Vedant on the new domain:** on his iPhone, one real search on the web page (about $0.12,
-   one of his 2 a day: the questions first, the log never pulling him up, the explanation after
-   the last answer), the home page's scroll and fade, and the Learn bar; the link shared in
-   WhatsApp shows the preview (image, title, tagline).
-4. **Record it:** `docs/PLAN.md` (10b's domain item ticked with what was checked; the session
-   log); `docs/SECURITY_AUDIT.md` (S13: the retention counts above; S18 and S19 if Vedant pastes
-   the tables); this file for the session after.
-5. **Plan the README session** (Vedant redoes the draft in a session of its own): ask him first
-   what he wants from it (who it is for, how long, what to keep from the draft), one question
-   at a time with a recommendation.
-6. **Later, going public** (on Vedant's word): gitleaks again over the commits since the last
-   scan, Vedant's read of `docs/` and `CLAUDE.md`, `gh repo edit --visibility public`, secret
-   scanning with push protection and Dependabot alerts, the repo's description and homepage,
-   and the header's GitHub icon pointed at the repo (`GITHUB_URL` and its label in
-   `src/components/SiteHeader.tsx`).
+The README is redone in this session, as decided on 2026-10-13 (`docs/PLAN.md`, 10b, "The
+README session"): recruiters first, then engineers; the draft's depth with a sharper first
+screen; three highlights (it checks itself, it runs on its own, live at a capped cost); the
+gate table and costs, the Mermaid diagram, and security and privacy kept; setup and the repo
+map moved to `docs/DEVELOPMENT.md`; three screenshots; neutral voice with one "I" line.
+
+1. **Ask first,** one at a time, each with a recommendation:
+   - The "I" line: Vedant's own reason for building it, or a draft for him to edit.
+   - The agent-log screenshot: a real search on production (about $0.12, one of Vedant's 2 a
+     day) or a real search against the local server (the same cost), rather than the free stub,
+     whose log lines are made up. A README should not show invented agent output.
+   - Security and privacy: as long as the draft, or a few lines each with links to
+     `docs/SECURITY_AUDIT.md` and `/privacy`.
+   - Anything that would need a new tool or a cost.
+2. **Build:** the new `README.md`; `docs/DEVELOPMENT.md` (setup, the checks, the repo map from
+   the draft); the three screenshots under `docs/images/`, made with headless Chrome at a
+   size that reads on GitHub; `NOTICE` naming the screenshots (they show the scene art). Every
+   number in the README checked against its source (`docs/EVALS.md`, `docs/PLAN.md`, the
+   live analytics).
+3. **Check:** the README as GitHub renders it (the Mermaid diagram, the images, the links),
+   including on a phone; every relative link resolves; the usual checks pass.
+4. **Vedant reads it** as someone who has never seen the project; then the commit on his word.
+
+## Later: going public (on Vedant's word)
+
+gitleaks again over the commits since the last scan; Vedant's read of `docs/` and `CLAUDE.md`;
+`gh repo edit --visibility public`; secret scanning with push protection and Dependabot alerts;
+the repo's description and homepage (`https://cosmic.vedantgaikwad.ie`); and the header's
+GitHub icon pointed at the repo (`GITHUB_URL` and its label in `src/components/SiteHeader.tsx`).
+That closes the 10b gate.
 
 ## Prompt for the next session
 
-> Read CLAUDE.md, docs/DESIGN.md, docs/PLAN.md, docs/NEXT_SESSION.md and docs/SECURITY_AUDIT.md.
+> Read CLAUDE.md, docs/DESIGN.md, docs/PLAN.md, docs/NEXT_SESSION.md and README.md.
 > The repo stays private for now.
 >
-> Work through the to-do list in docs/NEXT_SESSION.md, in order:
-> 1. Confirm the domain cosmic.vedantgaikwad.ie (I will report my own checks first), with the
->    read-only checks listed there.
-> 2. Ship the redirect from cosmic-quiz-agent.vercel.app that is waiting in the working copy:
->    show me the diff, run every check, and commit and push only when I say so, never before
->    the new domain answers over HTTPS. Then check the redirect on production.
-> 3. I check the new domain on my iPhone and share the link in WhatsApp.
-> 4. Record the results in the docs, and close S18 and S19 if I paste the SQL editor tables.
-> 5. Plan the README session: ask me what I want from it, one question at a time, each with a
->    recommendation.
+> This is the README session (10b). Work through the to-do list in docs/NEXT_SESSION.md:
+> 1. Ask me the open questions first, one at a time, each with a recommendation.
+> 2. Rewrite README.md as decided on 2026-10-13, move setup and the repo map to
+>    docs/DEVELOPMENT.md, and make the three screenshots.
+> 3. Check it as GitHub renders it, and every number against its source.
+> 4. Show me the result; commit and push only when I say so.
 >
 > Rules from CLAUDE.md apply: ask before adding any dependency, service or cost; no emojis;
 > complete files; commit only when I ask.

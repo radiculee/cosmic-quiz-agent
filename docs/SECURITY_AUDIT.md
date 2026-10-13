@@ -11,11 +11,13 @@ a severity, where it is, what happens, the proposed fix and its test.
 - **Accepted for now:** the other Lows (S6 to S12, S14), to revisit after launch. S15 is
   accepted and documented.
 - **Vedant's own action:** S16.
-- **Accepted:** S18, as decided in planning.
-- **Pending:** S19, waiting on the SQL editor query (run on 2026-10-10; its results are still to
-  be pasted).
+- **Accepted:** S18, as decided in planning; its statement timeout was confirmed live on
+  2026-10-13.
+- **Accepted:** S19 (2026-10-13), once the SQL editor query showed what the function is.
 - **After the push (2026-10-10):** migration 008 applied, and the production header scan
   passed (S5).
+- **On the new domain (2026-10-13):** the headers (S5) and the cross-site refusals (S1) hold
+  on `cosmic.vedantgaikwad.ie`. The retention counts after the first purges are in S13.
 
 Each finding's **Resolution** line says what was done.
 
@@ -58,7 +60,7 @@ reason), or pending (waiting for information).
 | S16 | Info | The local Python (3.12.1) is behind on security fixes | Vedant's action |
 | S17 | Info | IPv6 visitors would be counted once per address | fixed |
 | S18 | Info | `/rpc/agent_stats` can be called directly with the publishable key | accepted |
-| S19 | Info | `public.rls_auto_enable`, a function no migration created | pending |
+| S19 | Info | `public.rls_auto_enable`, a function no migration created | accepted |
 
 ## Medium
 
@@ -90,6 +92,11 @@ reason), or pending (waiting for information).
   is never cached). A cross-site GET that the edge cache answers never reaches the function
   and gets the cached reply. That is harmless: it is public bank data, nothing is counted or
   written, and the other site cannot read it without a CORS header.
+- **On the new domain (2026-10-13):** the same two refusals on `cosmic.vedantgaikwad.ie`: a
+  cross-site GET to `/api/quota` answered 403 (`no-store`), and a `text/plain` POST to
+  `/api/report` answered 415. The old address now redirects there, so a page still open on it
+  cannot reach the API either: its calls would cross to the new domain, where they are refused
+  as cross-site.
 
 ### S2. One visitor can report every item, and two can hide the bank
 
@@ -230,6 +237,12 @@ reason), or pending (waiting for information).
     the same day added images under the same policy, with no CSP violation on production.
   - A page that put the site in an iframe got Chrome's error page instead (frame-ancestors and
     X-Frame-Options).
+  - **On the new domain (2026-10-13),** read-only: all six headers on `/`, `/learn/quasars`,
+    `/explore/stats`, `/privacy` and the `/api/topics` and `/api/quota` replies. Headless
+    Chrome on eight pages, and the home page at phone size: no CSP violation, console error or
+    blocked load; the fonts, the scenes and every API call came from the new domain, and no
+    other host was contacted. Vercel's HSTS there is `max-age=63072000`, its default for a
+    custom domain (the `vercel.app` address also carries `includeSubDomains; preload`).
   - Note: Vercel's preview toolbar (preview deployments only) is an outside script, so the CSP
     blocks it there. Production has no toolbar.
 
@@ -390,6 +403,11 @@ reason), or pending (waiting for information).
     one report keeps its hash (7 days old). The day's scheduled run (12:28 UTC) used the code
     from before the push, so the first purge comes with the next one; after it, nothing over
     a day old should hold a live-run hash or a request window.
+  - **After the purges (2026-10-13, 14:21 UTC),** counted the same way: 0 of 19 live runs hold
+    a visitor hash (7 did before the first purge); 3 request windows, none over a day old; the
+    one report keeps its hash, 10 days old (under the 30). Both scheduled runs since 008
+    (2026-10-11 and 2026-10-12) succeeded, and a failed purge would have failed them. The
+    retention the privacy page states now holds whether or not anyone visits.
 
 ### S14. A short `IP_HASH_SALT` would be accepted
 
@@ -470,8 +488,10 @@ reason), or pending (waiting for information).
   - The statistics are public by design and leave the database only as aggregates.
   - Neither the Supabase URL nor any key is in the browser bundle. Re-checked this session: no
     `.env` value and no key prefix appears in `dist/`.
-  - Each call is bounded by the anon role's statement timeout (to be confirmed from the SQL
-    editor query).
+  - Each call is bounded by the anon role's statement timeout: **3 s**, confirmed live on
+    2026-10-13 from the SQL editor query (`authenticated` has 8 s; the app never uses that
+    role). `agent_stats()` runs with its owner's rights (`security definer`) and is the one
+    function the browser roles may call, as migration 007 grants it.
 - **Also recorded:** the publishable key can read every column of published items, the correct
   answer included. That is safe only because, in this app, the publishable key never leaves the
   server. If a later change put it in the browser (for example a Supabase client in the UI),
@@ -482,8 +502,24 @@ reason), or pending (waiting for information).
 - **What:** the secret key's API listing shows an RPC, `rls_auto_enable`, that no migration in
   this repo created. It is most likely Supabase's "enable RLS on new tables" event trigger
   function, added from the dashboard.
-- **Pending:** the SQL editor query in `docs/PLAN.md` (Session 10a) shows its owner, whether it
-  is `security definer`, which roles may run it, and the event trigger that calls it.
+- **What it is** (the SQL editor query in `docs/PLAN.md` Session 10a, run by Vedant on
+  2026-10-13 as one combined query):
+  - The function behind the event trigger `ensure_rls`, which fires after every schema change
+    (`ddl_command_end`): Supabase's "enable RLS on new tables" feature, added from the
+    dashboard.
+  - Owned by `postgres` and `security definer`. `anon` and `authenticated` may execute it,
+    because PostgreSQL grants execute on a new function to everyone unless it is revoked.
+- **Why that is harmless:** an event trigger calls it, so it returns `event_trigger`, and
+  PostgreSQL runs such a function only when its trigger fires; a direct call is refused. The
+  trigger fires on a schema change, which the browser roles cannot make.
+- **Also found:** this project's own `count_report()` and `stamp_item_status()` keep the same
+  default grant (`schema.sql` never revoked it). Both are trigger functions (`returns
+  trigger`, not `security definer`), refused when called directly, and their triggers fire
+  only on writes to `reports` and `items`, which the browser roles cannot make.
+- **The other event triggers** are Supabase's standard ones: access for GraphQL, pg_cron and
+  pg_net, and PostgREST's schema reload.
+- **Resolution (accepted, Vedant 2026-10-13):** documented, with no database change. A
+  migration revoking the three grants was the alternative; it would only tidy the list.
 
 ## Checked, nothing to fix
 
@@ -510,8 +546,9 @@ reason), or pending (waiting for information).
     `on_demand_runs`, `topics.lead_url` and an embed of `runs` from `items` are all refused.
   - Items in review and items with 2 reports come back empty.
   - Inserts, updates and deletes on `items`, `topics`, `sources` and `reports` are refused.
-  - Every migration revokes execute on its functions from `public`, `anon` and `authenticated`,
-    and grants back by name.
+  - Every migration revokes execute on the functions it adds for callers from `public`, `anon`
+    and `authenticated`, and grants back by name. The two trigger functions keep PostgreSQL's
+    default grant, which is harmless (S19).
 - **The typed topic:**
   - `clean_topic` limits it to 80 characters of letters, digits and simple punctuation, with no
     links.
@@ -557,3 +594,8 @@ reason), or pending (waiting for information).
 - **S15:** accepted and documented (option b). The defences stay in code.
 - **S2:** 10 reports a day per visitor.
 - **S17:** included, although the site has no IPv6 address yet.
+
+## Decided on 2026-10-13
+
+- **S19:** accepted and documented, with no database change (the alternative was a migration
+  revoking the default execute grant on `rls_auto_enable()` and the two trigger functions).
