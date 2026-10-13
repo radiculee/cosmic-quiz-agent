@@ -1431,7 +1431,8 @@ draft). He adds the `cosmic` CNAME later. Kept from the review: the "How it was 
         support at 0.8, a wrong option must not be supported and no sentence contradicted,
         while sentences Jev says nothing about are allowed. The draft's "43% publish
         directly" was 22 of the 51 eval items that passed layer 1; the README now gives the
-        live figure, 54%. `CLAUDE.md` and `DESIGN.md` decision 12 still say "about 150 lines".
+        live figure, 54%. `CLAUDE.md` and `DESIGN.md` decision 12 said "about 150 lines" too;
+        fixed on 2026-10-13 (below).
       - The README and `docs/DEVELOPMENT.md` as GitHub renders them ("markdown" mode, as for
         files), at 1280 px and 390 px, light and dark: the diagram drawn (521 x 775 px), every
         image loaded, no sideways scroll on a phone. Every relative link resolves; the badge
@@ -1461,6 +1462,34 @@ draft). He adds the `cosmic` CNAME later. Kept from the review: the "How it was 
       - Still Vedant's: the README on github.com (the diagram, the images and the badge, on a
         computer and his phone). The badge and the workflow link answer 404 to anyone signed
         out until the repo is public.
+
+      After the README (2026-10-13, Vedant's requests):
+      - **README edits:** his job title removed from the "Built by" line, and a Contact section
+        sends any request for more details to the contact form on vedantgaikwad.ie.
+      - **Renamed "Analytics for nerds" to "Mission Control"** (he asked for suggestions and
+        chose it; the others were Under the Hood, Flight Recorder and Observatory Logbook):
+        the button on the web page, the panel's title and heading, the privacy page, the code
+        comments, `CLAUDE.md`, `DESIGN.md` and the README. This record, the migrations and the
+        Session 9 code review keep the old name, as history. Committed as `024f0fe`, and the
+        README's screenshot was retaken on the deployed build (`1339fe1`; the figures were
+        unchanged).
+      - **A prompt for his portfolio's own Claude Code session** to add this project there,
+        written in the why, what, how, when and where form with the stack and the headline
+        numbers; it asks that session to match the site's theme and to ask before publishing a
+        code link that would 404 while the repo is private.
+      - **Docs completed:** the loop's length corrected to "about 120 lines" in `CLAUDE.md`
+        and `DESIGN.md` decision 12; `CLAUDE.md` names the checks workflow and the pnpm pin;
+        the `DESIGN.md` repo layout lists `checks.yml`, `docs/DEVELOPMENT.md` and
+        `docs/images/`, and its `NOTICE` line the screenshots.
+      - **History scan before going public** (gitleaks 8.30.1, the same binary and checksum
+        as on 2026-10-10): no leaks in the 71 commits that carry text (the 72nd changed only a
+        screenshot); no key prefix, `.env` value or salt in any patch; `.env.example` is still
+        the only env file ever committed. A scan of `docs/`, `CLAUDE.md` and the README found
+        no email address, IP address, Windows path, project id or key.
+      - **The header's GitHub icon** now points at the repo (`GITHUB_URL` and its label in
+        `src/components/SiteHeader.tsx`); the other commit is held, not pushed, so visitors
+        are not sent to a 404 while the repo is private. 341 Python and 148 TypeScript tests,
+        and every other check, pass with it.
 
 Gate (Vedant): the repo public and clean (gitleaks clean, or every key it found rotated), the
 site at the new domain with the old address redirecting, the OG preview right where he shares
@@ -1735,4 +1764,8 @@ tier), decided together with the newsletter's subscribers (Vedant, 2026-10-10).
   the Jev rule). The diagram is now top to bottom. 341 Python and 148 TypeScript tests. $0.097
   spent (the live search). Vedant read it; committed on his word (`4883f3c`, `52b98d2`, then
   the records) and pushed. The checks workflow's first run passed on Ubuntu, and Vercel built
-  with pnpm 11.5.0. Next: Vedant looks at the README on github.com, then going public.
+  with pnpm 11.5.0. Then, at his request: the job title out of the README, a Contact note,
+  "Analytics for nerds" renamed Mission Control, a prompt for his portfolio's terminal, the
+  docs completed, gitleaks run again over the history (clean) and the header icon pointed at
+  the repo, held until the repo is public. Next: Vedant looks at the README on github.com and
+  reads `docs/` and `CLAUDE.md`, then going public.

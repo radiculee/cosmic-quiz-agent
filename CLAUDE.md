@@ -40,14 +40,15 @@ Vercel Python function (`api/research.py`), behind guardrails, with steps stream
 
 ## Stack
 
-- **Agent core:** Python, a hand-rolled tool-calling loop (about 150 lines) behind a small provider interface in `agent/llm.py`. The current implementation uses the `anthropic` SDK, with Pydantic for every model output. No agent frameworks (no LangChain, LangGraph or PydanticAI).
+- **Agent core:** Python, a hand-rolled tool-calling loop (`run_agent` in `agent/loop.py`, about 120 lines) behind a small provider interface in `agent/llm.py`. The current implementation uses the `anthropic` SDK, with Pydantic for every model output. No agent frameworks (no LangChain, LangGraph or PydanticAI).
 - **Models:** `claude-haiku-4-5` for every step (research, writing, verifying). The model is config, never hard-coded in logic. An OpenRouter implementation can be added later behind the same interface. (Changed 2026-10-01, see `docs/PLAN.md`.)
 - **Second-opinion verifier:** TypeSafe Jev via `typesafe-sdk`. It answers typed questions with a confidence (supports / contradicts / says nothing) and never writes text. It cannot check numbers reliably, so numbers are checked in code. (Added 2026-10-01, see `docs/SPIKE.md`.)
 - **Python tooling:** Python 3.12 virtualenv, pip with a pinned `requirements.txt`, and `ruff` plus `mypy --strict` as dev-only tools.
 - **Frontend:** Vite + React + TypeScript (strict) + Tailwind CSS, with pnpm.
 - **Serverless:** Vercel Hobby. Python functions for the agent, and TS or Python functions for reading the bank.
 - **Database:** Supabase free-tier Postgres.
-- **Scheduler:** a GitHub Actions cron plus `workflow_dispatch`.
+- **Scheduler:** a GitHub Actions cron plus `workflow_dispatch` (`.github/workflows/curator.yml`).
+- **CI:** `.github/workflows/checks.yml` runs every check on each push and pull request, with no secrets and no paid calls (added 2026-10-13). pnpm is pinned by `packageManager` in `package.json`, which CI and Vercel both read.
 - **No Docker.** Vedant explicitly ruled it out.
 
 ---

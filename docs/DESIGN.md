@@ -65,7 +65,7 @@ runs on a schedule with no human trigger), and code that reads well to recruiter
     - A Python agent core package, shared by `curator` (run with `python -m curator` in Actions) and `api/research.py` (Vercel Python function).
     - Vite + React + TypeScript + Tailwind UI, with pnpm.
 12. **Agent loop:**
-    - Hand-rolled, about 150 lines, using the `anthropic` SDK behind the provider interface (changed 2026-10-01).
+    - Hand-rolled (`run_agent` in `agent/loop.py`, about 120 lines), using the `anthropic` SDK behind the provider interface (changed 2026-10-01).
     - Tools are plain functions with JSON schemas, and there's a hard step budget.
     - Pydantic models validate every output: `QuizItem`, `Explanation`, `Citation`.
 13. **Difficulty (depth plus distractors):**
@@ -141,11 +141,14 @@ supabase/migrations/   numbered changes after schema.sql (006 the web page's sea
                        007 adds agent_stats() and drops the 004 begin_on_demand_run, Session 9;
                        008 clears visitor hashes on a timer, Session 10a)
 .github/workflows/curator.yml   daily cron + manual dispatch
+.github/workflows/checks.yml    every check on each push and pull request (no secrets, no paid calls)
 public/fonts/          the three fonts, self-hosted (WOFF2 subsets, each with its OFL licence)
 public/og-v1.jpg       the link preview: the observatory scene with the title and tagline
 README.md              the case study: what it does, how, what it costs, security and privacy
+docs/DEVELOPMENT.md    setup, every command and its cost, the checks, deploying, the repo map
+docs/images/           the README's three screenshots (not under MIT; see NOTICE)
 LICENSE                MIT, for the code (Session 10b)
-NOTICE                 what MIT does not cover: the scene art, the link preview, the fonts
+NOTICE                 what MIT does not cover: the scene art, the link preview, the screenshots, the fonts
 ```
 
 ## Milestones (one at a time, verified before moving on)
