@@ -1373,6 +1373,95 @@ draft). He adds the `cosmic` CNAME later. Kept from the review: the "How it was 
         repo, and a run is a few minutes of the 2,000 a month on a private one. Until now
         every check ran only on Vedant's PC.
 
+      Decided at the start of the README session (2026-10-13, Vedant, asked one at a time, each
+      as recommended except where marked):
+      - **The "I" line:** in his own words, tightened. His reason is his love of astronomy; the
+        line is drafted from that for him to edit.
+      - **The agent-log screenshot:** a live search on production, on a topic the bank did not
+        have: "James Webb Space Telescope" (EASY).
+      - **Security and privacy:** a few lines each, with links to `docs/SECURITY_AUDIT.md` and
+        `/privacy` (not the recommendation, which kept the security bullets in full).
+      - **pnpm on CI:** `"packageManager": "pnpm@11.5.0"` in `package.json`, read by
+        `pnpm/action-setup` (v6.1.0, pinned to its commit) after `actions/setup-node` (v7.1.0).
+        Corepack was turned down: Node 25 and later no longer bundle it.
+      - **The rendering check:** GitHub's markdown API turns the README into GitHub's own
+        HTML, shown in a scratchpad page with GitHub's stylesheet and mermaid.js from cdnjs
+        (free; neither enters the repo). The final check is on github.com after the push.
+
+      Built in the README session (2026-10-13):
+      - [x] `README.md` rewritten as decided: the badge, tagline, live link and link-preview
+            image; the three highlights and the stack; the "I" line; what you can do; the
+            diagram (now top to bottom: the left-to-right draft drew at 800 x 127 px, too
+            small to read); the agent, the gate table and live numbers, the guardrails, the
+            costs, security and privacy in a few lines each, and links to the docs.
+      - [x] `docs/DEVELOPMENT.md`: what you need, setup with every environment variable, the
+            database, each command and its cost, the checks, deploying, and the repo map.
+      - [x] `docs/images/`: three WebP screenshots of production at device scale 2, made with
+            headless Chrome: `quiz-answer.webp` (The Big Bang, EASY, with Jev's source check),
+            `agent-log.webp` (the live search 19 s in) and `analytics.webp` (Analytics for
+            nerds, The agent tab, cropped to the four key figures). 193, 72 and 64 KB.
+      - [x] `NOTICE` names `docs/images/` (all rights reserved), and the README's licence note
+            says so.
+      - [x] `.github/workflows/checks.yml`: a Python job (pytest, ruff check, ruff format
+            --check, mypy --strict) and a site job (pnpm install --frozen-lockfile, typecheck,
+            Vitest, build); `permissions: contents: read`, `persist-credentials: false`, every
+            action pinned to its release commit, no secrets.
+      - [x] `package.json`: the `packageManager` field.
+
+      The live search, read from its "This search" tab: 4 of 4 items published, $0.097 ($0.00093
+      of it on Jev), 85.6 s of runs and 11 pages from 3 sites; 93 s in the browser. This PC had
+      one of its 2 searches left (Vedant's iPhone "Wormhole" search shared its address). A fresh
+      Chrome profile earned the "Web researcher" trophy with the first result, and its pop-up
+      covered the log from 21 s on, so the screenshot is the snapshot at 18.9 s, before it. The
+      finished log, scrolled to the first question's checks, is kept in the scratchpad as the
+      alternative.
+
+      Checked:
+      - Every number in the README against its source: `docs/EVALS.md` (the gate table, 38 of
+        40), `docs/DESIGN.md` and `agent/limits.py` (the guardrails; the $0.17 reservation is
+        `max_job_cost_usd`, the agent's $0.10 plus the verifier's cap), `agent/gate.py` (the
+        publish rule), the security audit (19 findings: 5 Medium fixed), and the live
+        `/api/stats` at 16:29 UTC (213 runs, 115 published directly, 80 review, 17 discarded;
+        $5.89 in all; median 19.2 s, p95 36.2 s; caching saved $1.63 of $6.42), which the
+        analytics screenshot shows.
+      - Three claims in the draft README were wrong and are corrected: the loop is not "about
+        150 lines" (`run_agent` is 120 lines; `agent/loop.py` about 300 lines of code); Jev
+        checks each claim against the full text of the cited pages, not "its quoted passage";
+        and an item does not need Jev "at 0.8 or above" on everything: the right answer needs
+        support at 0.8, a wrong option must not be supported and no sentence contradicted,
+        while sentences Jev says nothing about are allowed. The draft's "43% publish
+        directly" was 22 of the 51 eval items that passed layer 1; the README now gives the
+        live figure, 54%. `CLAUDE.md` and `DESIGN.md` decision 12 still say "about 150 lines".
+      - The README and `docs/DEVELOPMENT.md` as GitHub renders them ("markdown" mode, as for
+        files), at 1280 px and 390 px, light and dark: the diagram drawn (521 x 775 px), every
+        image loaded, no sideways scroll on a phone. Every relative link resolves; the badge
+        and the workflow link answer 404 until the push (the repo is private).
+      - Every relative import and asset path resolves with its exact case (the runner's file
+        system is case-sensitive; this PC's is not). The tests read no secrets and make no
+        network calls.
+      - 341 Python and 148 TypeScript tests, ruff, ruff format, mypy --strict, typecheck and
+        the build; `pnpm install --frozen-lockfile` leaves the lockfile unchanged with the new
+        field.
+      - Vercel's build log (16:01 UTC) says it used pnpm 10.28.0 "based on project creation
+        date" and that `packageManager` sets the version, so the next build should use 11.5.0.
+
+      Vedant read the README and kept the "I" line as drafted. Committed on his word as three
+      commits (`4883f3c` the checks workflow and the `packageManager` field, `52b98d2` the
+      README, `docs/DEVELOPMENT.md`, the screenshots and `NOTICE`, then these records) and
+      pushed the first two at 17:38 UTC. After the push:
+      - **The first run of the checks workflow passed** (run 38440315065, on `52b98d2`): both
+        jobs green on Ubuntu, in 28 s (the site) and 42 s (Python); 341 Python tests, 13
+        Vitest files, ruff, ruff format, mypy --strict and the build, with pnpm 11.5.0 on Node
+        24.21.0. Two notices only: `ubuntu-latest` moves to Ubuntu 26 from 19 October 2026
+        (both workflows). The site job logs a pnpm warning about a v10 layout in `PNPM_HOME`;
+        it refreshes the shims itself and installs with 11.5.0, so it is harmless.
+      - **Vercel built with pnpm 11.5.0** ("from package.json#packageManager"), and production
+        serves the same asset files as the local build, with the six headers; `/api/topics`,
+        `/api/quota` and `/og-v1.jpg` answer 200, and the old address still answers 308.
+      - Still Vedant's: the README on github.com (the diagram, the images and the badge, on a
+        computer and his phone). The badge and the workflow link answer 404 to anyone signed
+        out until the repo is public.
+
 Gate (Vedant): the repo public and clean (gitleaks clean, or every key it found rotated), the
 site at the new domain with the old address redirecting, the OG preview right where he shares
 it, the privacy page, and the README readable to someone who has never seen the project.
@@ -1637,3 +1726,13 @@ tier), decided together with the newsletter's subscribers (Vedant, 2026-10-10).
   questions (each as recommended), and Vedant added a CI workflow for every check to it. 341 Python and 148 TypeScript tests. About $0.10 spent (the
   search). Vedant shared the link in WhatsApp: the preview shows the image, the title and the
   tagline. Next: the README session, then going public.
+- 2026-10-13 - Session 10b, the README session: Vedant decided the five open questions (his own
+  reason for the "I" line, a live search on production for the log screenshot, security and
+  privacy in a few lines each, `packageManager` with `pnpm/action-setup`, the rendering check
+  in a scratch page). Built the new README, `docs/DEVELOPMENT.md`, three screenshots of
+  production, the NOTICE line, the checks workflow and the `packageManager` field. Checking the
+  numbers corrected three claims carried over from the draft (the loop's length, what Jev reads,
+  the Jev rule). The diagram is now top to bottom. 341 Python and 148 TypeScript tests. $0.097
+  spent (the live search). Vedant read it; committed on his word (`4883f3c`, `52b98d2`, then
+  the records) and pushed. The checks workflow's first run passed on Ubuntu, and Vercel built
+  with pnpm 11.5.0. Next: Vedant looks at the README on github.com, then going public.
