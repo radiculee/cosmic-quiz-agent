@@ -1590,6 +1590,42 @@ push on his word, and the same checks on production.
 - [x] Vedant's iPhone check on production: moved to the domain step, as one check on the new
   domain. Passed on 2026-10-13, on Vedant's word, with a live search (see 10b's domain item).
 
+
+### The difficulty dropdown (2026-10-17)
+
+Vedant, from his iPhone on the Learn page: the difficulty should be a dropdown. Asked which change
+he meant (with mockups), he chose the recommendation: the EASY / MEDIUM / HARD switch becomes one
+dropdown on every page that has it (Learn, each topic, Quiz and Explore). The other options were
+every switch a dropdown (Quiz's 10 / 30 / 60 and Mission Control's filters too) and Learn grouped
+in Easy, Medium and Hard sections.
+
+Built:
+- [x] `src/components/Dropdown.tsx`: a native `select` (no dependency), so a phone shows its own
+      picker and the keyboard and screen readers work as everywhere. It lies invisibly over a face
+      in the site's style (the choice as a teal pixel label and a pixel chevron, a solid card) with
+      16px text, so iOS never zooms; the face takes the teal focus ring for the keyboard. Levels a
+      topic lacks are disabled options.
+- [x] Learn: the bar is one row at every width (the dropdown, the search box and Random); on a
+      phone Random shows only its die and keeps its name for screen readers, and the placeholder
+      is "Search topics". Each topic page, Quiz (beside its "Difficulty" label) and Explore (with
+      a "Difficulty" label) use the same dropdown. Quiz's run length and Mission Control's filters
+      stay as switches.
+- [x] `tests/test_packaging.py`: no input, select or text area may have text under 16px (iOS
+      zooms into it and does not zoom back). It found one: the Report box was 14px; now 16px.
+
+Checked: 342 Python and 148 TypeScript tests, ruff, ruff format, mypy --strict, typecheck and the
+build. A drive of the built site with every `vercel.json` header (the real bank through the local
+API, nothing spent), 36 checks at 1280 x 900 and 390 x 844: the Learn bar one row (74 px tall on a
+phone, against 130 px before), the search box at least 120 px wide, 16px select text, Random's
+name, choosing a level updating the face and the list, the focus ring, a topic's missing levels
+disabled (Antimatter: EASY only), Quiz and Explore taking the choice, no sideways scroll, and no
+CSP violation or console error.
+
+Pushed on Vedant's word ("push this edit"), as the code with its test and then these records.
+The header-link commit, still held until the repo is public, would have gone out with any push
+from `main`, so it was moved to the local branch `held/header-link` (it had never been pushed)
+and `main` reset to `origin/main` before these commits.
+
 ---
 
 ## Later - v2: Newsletter
@@ -1769,3 +1805,9 @@ tier), decided together with the newsletter's subscribers (Vedant, 2026-10-10).
   docs completed, gitleaks run again over the history (clean) and the header icon pointed at
   the repo, held until the repo is public. Next: Vedant looks at the README on github.com and
   reads `docs/` and `CLAUDE.md`, then going public.
+- 2026-10-17 - The difficulty dropdown: Vedant chose a dropdown for the difficulty on every page
+  that has one (asked with mockups). Built `src/components/Dropdown.tsx` on a native select, the
+  one-row Learn bar, and a packaging test against iOS zoom, which also caught the 14px Report box.
+  342 Python and 148 TypeScript tests; a drive of 36 checks at desktop and phone size. Nothing
+  spent. Pushed on his word; the held header commit moved to the local branch
+  `held/header-link` so it did not go out with it.

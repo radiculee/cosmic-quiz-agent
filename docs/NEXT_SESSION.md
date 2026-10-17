@@ -22,7 +22,11 @@ is left of 10b and the prompt to paste.
 - **Ready for going public:** gitleaks over all 72 commits found no leaks (71 carry text; the
   other is a screenshot), no key prefix or `.env` value is in any patch, and the docs scan
   found no email, IP, Windows path or id. The header icon's change (`GITHUB_URL` now the repo)
-  is committed locally and **not pushed**, so it goes out only once the repo is public.
+  is the commit `ffa835d` on the local branch `held/header-link`, **not pushed** and not on
+  `main`, so it goes out only once the repo is public.
+- **The difficulty dropdown** (2026-10-17, pushed): the EASY / MEDIUM / HARD switch is a
+  dropdown on Learn, each topic, Quiz and Explore, and the Learn bar is one row on a phone.
+  Details in `docs/PLAN.md`, "The difficulty dropdown".
 - **The live search for the screenshot** ("James Webb Space Telescope", 13 October): 4 of 4
   items published, $0.097. The bank has 40 topics and 185 published items.
 - **Review queue:** 9 items (186, 187, 188, 193, 198, 202, 203, 206, 210), for
@@ -31,7 +35,7 @@ is left of 10b and the prompt to paste.
   `daily` (about $0.17 a day, capped at $0.40) without any change.
 - **GitHub's notice:** `ubuntu-latest` moves to Ubuntu 26 from 19 October 2026, for both
   workflows. Nothing to change now; look at the first runs after that date.
-- 341 Python and 148 TypeScript tests; every check passes locally and on GitHub.
+- 342 Python and 148 TypeScript tests; every check passes locally and on GitHub.
 
 ## What is left of 10b
 
@@ -42,7 +46,8 @@ is left of 10b and the prompt to paste.
    1. `gh repo edit --visibility public`.
    2. Secret scanning with push protection, and Dependabot alerts (free on public repos).
    3. The repo's description and homepage (`https://cosmic.vedantgaikwad.ie`).
-   4. Push the held header commit (the icon links to the repo) and check production serves it.
+   4. Bring the held header commit onto `main` (`git cherry-pick ffa835d` from
+      `held/header-link`), push it, check production serves it, then delete the branch.
    5. The badge and the README's workflow link work signed out; tick the 10b gate in
       `docs/PLAN.md`.
    That closes the 10b gate and version 1.
@@ -58,7 +63,7 @@ first checks runs after `ubuntu-latest` moves to Ubuntu 26 on 19 October.
 >
 > This finishes 10b: going public. Work through "What is left of 10b" in
 > docs/NEXT_SESSION.md, step by step, and ask before each step that cannot be undone. The
-> header change is already committed locally and waits for the repo to be public.
+> header change waits on the local branch held/header-link for the repo to be public.
 >
 > Rules from CLAUDE.md apply: ask before adding any dependency, service or cost; no emojis;
 > complete files; commit only when I ask.
