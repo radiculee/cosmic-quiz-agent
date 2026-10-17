@@ -297,3 +297,28 @@ def test_the_old_address_sends_every_page_to_the_site_s_own_domain() -> None:
     assert redirect["source"] == "/:path(.*)"
     assert redirect["destination"] == f"{site}/:path"
     assert redirect["permanent"] is True
+
+
+FIELD_ENDS = {"input": "/>", "select": "</select>", "textarea": "</textarea>"}
+
+
+def test_no_text_field_is_small_enough_for_ios_to_zoom_into() -> None:
+    """iOS zooms the page into a focused input, select or text area whose text is under 16px,
+    and does not zoom back out. Every field in the site sets text-base (16px) or larger."""
+    fields = 0
+    for file in sorted((ROOT / "src").rglob("*.tsx")):
+        text = file.read_text(encoding="utf-8")
+        for match in re.finditer("<(input|select|textarea)(?=[^a-zA-Z])", text):
+            tag = match.group(1)
+            end = text.find(FIELD_ENDS[tag], match.end())
+            element = text[match.end() : end]
+            at = element.find('className="')
+            assert at >= 0, f"{file.name}: a <{tag}> without a plain className"
+            classes = element[at + len('className="') :].split('"', 1)[0].split()
+            assert "text-base" in classes or any(
+                c in classes for c in ("text-lg", "text-xl", "text-2xl")
+            ), f"{file.name}: <{tag}> has no text size of 16px or more"
+            small = [c for c in classes if c in ("text-xs", "text-sm") or c.startswith("text-[")]
+            assert not small, f"{file.name}: <{tag}> also sets {small}"
+            fields += 1
+    assert fields >= 4  # the dropdown, the topic box, the Learn search and the report box

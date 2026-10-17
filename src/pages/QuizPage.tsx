@@ -5,6 +5,7 @@ import { ProfileStrip } from "../components/ProfileStrip";
 import { QuizCard } from "../components/QuizCard";
 import { RunHud } from "../components/RunHud";
 import { RunResults } from "../components/RunResults";
+import { Dropdown } from "../components/Dropdown";
 import { SegmentedControl } from "../components/SegmentedControl";
 import {
   type AnswerScore,
@@ -215,7 +216,7 @@ export function QuizPage({
 
         <div className="mt-10 flex flex-col items-center gap-5">
           <Row label="Difficulty">
-            <SegmentedControl
+            <Dropdown
               label="Difficulty"
               options={DIFFICULTIES}
               value={difficulty}

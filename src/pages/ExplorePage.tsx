@@ -2,10 +2,10 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { ApiError, fetchItem, streamResearch } from "../api";
 import { AgentLog, type LogLine, type LogOutcome } from "../components/AgentLog";
+import { Dropdown } from "../components/Dropdown";
 import { LearnCard } from "../components/LearnCard";
 import { Link } from "../components/Link";
 import { QuizCard } from "../components/QuizCard";
-import { SegmentedControl } from "../components/SegmentedControl";
 import { TopicInput } from "../components/TopicInput";
 import { type AnswerScore, scoreAnswer } from "../game";
 import { isPlainObject } from "../guards";
@@ -427,8 +427,11 @@ export function ExplorePage({
         against the pages it read. The explanation opens once you have answered the questions.
       </PageHeading>
 
-      <div className="mt-10 flex flex-col items-center gap-5">
-        <SegmentedControl
+      <div className="mt-10 flex items-center gap-4">
+        <span aria-hidden="true" className="on-scene-muted font-pixel text-[8px] uppercase">
+          Difficulty
+        </span>
+        <Dropdown
           label="Difficulty"
           options={DIFFICULTIES}
           value={difficulty}

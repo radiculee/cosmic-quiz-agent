@@ -53,7 +53,7 @@ export function ReportButton({ itemId }: { itemId: number }) {
         placeholder="What looks wrong? (optional)"
         value={reason}
         onChange={(event) => setReason(event.target.value)}
-        className="min-w-0 flex-1 rounded-md border border-white/10 bg-void px-3 py-2 text-sm text-ink placeholder:text-slate/70 focus:border-teal focus:outline-none"
+        className="min-w-0 flex-1 rounded-md border border-white/10 bg-void px-3 py-2 text-base text-ink placeholder:text-slate/70 focus:border-teal focus:outline-none"
       />
       <div className="flex items-center gap-3">
         <button

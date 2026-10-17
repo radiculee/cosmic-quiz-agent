@@ -2,9 +2,9 @@ import { useEffect, useId, useMemo, useRef, useState } from "react";
 
 import { ApiError, fetchItem } from "../api";
 import { DiceIcon } from "../components/DiceIcon";
+import { Dropdown } from "../components/Dropdown";
 import { LearnCard } from "../components/LearnCard";
 import { Link } from "../components/Link";
-import { SegmentedControl } from "../components/SegmentedControl";
 import { TopicGrid } from "../components/TopicGrid";
 import { afterLearn } from "../profile";
 import {
@@ -37,10 +37,11 @@ export function LearnPage({ slug, ...props }: PageProps & { slug?: string | unde
 // --- The topic grid ---------------------------------------------------------------------------
 
 /**
- * The topics: a difficulty switch, a search box and Random, then the grid. The controls sit in one
- * solid bar that sticks to the top of the screen while the grid scrolls under it (decided
+ * The topics: a difficulty dropdown, a search box and Random, then the grid. The controls sit in
+ * one solid bar that sticks to the top of the screen while the grid scrolls under it (decided
  * 2026-10-10), so they are always at hand with a single scroll; a box that scrolled on its own
- * would trap the page's scroll on a phone.
+ * would trap the page's scroll on a phone. The bar is one row at every width (decided
+ * 2026-10-17): on a phone, Random shows only its die.
  */
 function LearnIndex({ topicsState, retryTopics, profile, difficulty, setDifficulty }: PageProps) {
   usePageTitle("Learn");
@@ -65,38 +66,38 @@ function LearnIndex({ topicsState, retryTopics, profile, difficulty, setDifficul
         Pick a topic for a plain-language explanation and the pages it is based on.
       </PageHeading>
 
-      <div className="pixel-border sticky top-0 z-10 mt-10 flex flex-col items-center gap-3 rounded-sm bg-surface p-3 md:flex-row">
-        <SegmentedControl
+      <div className="pixel-border sticky top-0 z-10 mt-10 flex gap-3 rounded-sm bg-surface p-3">
+        <Dropdown
           label="Difficulty"
           options={DIFFICULTIES}
           value={difficulty}
           onChange={setDifficulty}
+          stretch
         />
-        <div className="flex w-full min-w-0 gap-3 md:flex-1">
-          <label htmlFor={searchId} className="sr-only">
-            Search topics
-          </label>
-          {/* 16px text: iOS zooms the page into any smaller input. */}
-          <input
-            id={searchId}
-            type="search"
-            autoComplete="off"
-            spellCheck={false}
-            placeholder="Search topics, e.g. Black holes"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            className="min-w-0 flex-1 rounded-lg border border-white/10 bg-void px-4 py-3 text-base text-ink placeholder:text-slate/70 focus:border-teal focus:outline-none"
-          />
-          <button
-            type="button"
-            onClick={pickRandom}
-            disabled={available.length === 0}
-            className={`${SECONDARY_BUTTON} shrink-0 px-4 py-3 text-[9px]`}
-          >
-            <DiceIcon />
-            Random
-          </button>
-        </div>
+        <label htmlFor={searchId} className="sr-only">
+          Search topics
+        </label>
+        {/* 16px text: iOS zooms the page into any smaller input. */}
+        <input
+          id={searchId}
+          type="search"
+          autoComplete="off"
+          spellCheck={false}
+          placeholder="Search topics"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          className="min-w-0 flex-1 rounded-lg border border-white/10 bg-void px-4 py-3 text-base text-ink placeholder:text-slate/70 focus:border-teal focus:outline-none"
+        />
+        <button
+          type="button"
+          onClick={pickRandom}
+          disabled={available.length === 0}
+          title="A random topic"
+          className={`${SECONDARY_BUTTON} shrink-0 px-4 py-3 text-[9px]`}
+        >
+          <DiceIcon />
+          <span className="sr-only sm:not-sr-only">Random</span>
+        </button>
       </div>
 
       <div className="mt-6">
@@ -261,7 +262,7 @@ function LearnTopic({
       <h1 className="sr-only">{topic.name}</h1>
       <div className="flex flex-wrap items-center justify-between gap-4">
         {back}
-        <SegmentedControl
+        <Dropdown
           label="Difficulty"
           options={DIFFICULTIES}
           value={level}
