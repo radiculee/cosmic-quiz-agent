@@ -1,69 +1,50 @@
 # Next session
 
-Written 2026-10-13, at the end of the README session (10b). It holds where things stand, what
-is left of 10b and the prompt to paste.
+Written 2026-10-19, when version 1 closed. It holds where things stand, what is left for
+Vedant, and the prompt for planning version 2.
 
 ## Where things stand
 
+- **Version 1 is done.** Session 10b's gate passed on 2026-10-19 (`docs/PLAN.md`, 10b).
 - **Live** at https://cosmic.vedantgaikwad.ie; the old `cosmic-quiz-agent.vercel.app` address
-  redirects every path there (308). Details under 10b's domain item in `docs/PLAN.md`.
-- **The README session is committed and pushed** (`docs/PLAN.md`, 10b, "Built in the README
-  session"): `4883f3c` the checks workflow and `"packageManager": "pnpm@11.5.0"`, `52b98d2` the
-  new `README.md`, `docs/DEVELOPMENT.md`, three screenshots in `docs/images/` and the `NOTICE`
-  line, then the records. Every number in the README is checked against its source; three
-  claims carried over from the draft were wrong and are corrected.
-- **The checks workflow** passed its first run on Ubuntu (both jobs, under a minute). Vercel
-  now builds with pnpm 11.5.0, and production serves the same build as the local one.
-- **Done on 2026-10-13 after the README session:** the README's job title removed and a
-  Contact note added; "Analytics for nerds" renamed Mission Control (`024f0fe`, with a retaken
-  screenshot in `1339fe1`); the docs completed (the loop is "about 120 lines" everywhere, the
-  checks workflow and `docs/DEVELOPMENT.md` in `CLAUDE.md` and the `DESIGN.md` layout); and a
-  prompt written for his portfolio's own Claude Code session.
-- **Ready for going public:** gitleaks over all 72 commits found no leaks (71 carry text; the
-  other is a screenshot), no key prefix or `.env` value is in any patch, and the docs scan
-  found no email, IP, Windows path or id. The header icon's change (`GITHUB_URL` now the repo)
-  is the commit `ffa835d` on the local branch `held/header-link`, **not pushed** and not on
-  `main`, so it goes out only once the repo is public.
-- **The difficulty dropdown** (2026-10-17, pushed): the EASY / MEDIUM / HARD switch is a
-  dropdown on Learn, each topic, Quiz and Explore, and the Learn bar is one row on a phone.
-  Details in `docs/PLAN.md`, "The difficulty dropdown".
-- **The live search for the screenshot** ("James Webb Space Telescope", 13 October): 4 of 4
-  items published, $0.097. The bank has 40 topics and 185 published items.
-- **Review queue:** 9 items (186, 187, 188, 193, 198, 202, 203, 206, 210), for
-  `python -m curator review` whenever Vedant wants.
+  redirects every path there (308).
+- **Public:** https://github.com/radiculee/cosmic-quiz-agent, under MIT (the scene art, the
+  link preview and the screenshots excepted; see `NOTICE`). Secret scanning with push
+  protection and Dependabot alerts are on; Dependabot's automatic fix pull requests are off.
+  The description is the tagline and the homepage the site. The header's GitHub icon links to
+  the repo.
+- **Checks** run on every push and pull request (`.github/workflows/checks.yml`); the badge
+  reads "passing" signed out. 342 Python and 148 TypeScript tests.
 - **The Curator** runs `upkeep` (free) every day until 31 October; from 1 November it runs
-  `daily` (about $0.17 a day, capped at $0.40) without any change.
-- **GitHub's notice:** `ubuntu-latest` moves to Ubuntu 26 from 19 October 2026, for both
-  workflows. Nothing to change now; look at the first runs after that date.
-- 342 Python and 148 TypeScript tests; every check passes locally and on GitHub.
+  `daily` (about $0.17 a day, capped at $0.40) without any change. Every run since the README
+  session has passed, including the first after GitHub began moving `ubuntu-latest` to
+  Ubuntu 26 (2026-10-19).
+- **The bank:** 40 topics and 185 published items; 9 items in review (186, 187, 188, 193,
+  198, 202, 203, 206, 210).
 
-## What is left of 10b
+## Vedant's own items
 
-1. **Vedant looks at the README on github.com** (signed in; the repo is private): the
-   Mermaid diagram, the three screenshots and the green badge, on a computer and on his phone.
-   And he reads `docs/` and `CLAUDE.md` for anything private (the scan found nothing).
-2. **Going public (on Vedant's word), in this order:**
-   1. `gh repo edit --visibility public`.
-   2. Secret scanning with push protection, and Dependabot alerts (free on public repos).
-   3. The repo's description and homepage (`https://cosmic.vedantgaikwad.ie`).
-   4. Bring the held header commit onto `main` (`git cherry-pick ffa835d` from
-      `held/header-link`), push it, check production serves it, then delete the branch.
-   5. The badge and the README's workflow link work signed out; tick the 10b gate in
-      `docs/PLAN.md`.
-   That closes the 10b gate and version 1.
+- The review queue: `python -m curator review`.
+- The local Python update (S16): the latest 3.12, then recreate `.venv`.
+- His portfolio: paste the prompt written on 2026-10-13 into its Claude Code session; the code
+  link can now point at the public repo.
+- Dependabot alerts now arrive by email and in the repo's Security tab; each needs a look.
+- Spend: the Console's October figure under the $10 limit, and the TypeSafe balance.
 
-His own actions: the review queue (9 items, `python -m curator review`), the local Python
-update (S16), adding the project to his portfolio (the prompt is written), and a look at the
-first checks runs after `ubuntu-latest` moves to Ubuntu 26 on 19 October.
+## Next: plan version 2
+
+Version 2 is the newsletter produced by the same agent (email through Resend, then WhatsApp),
+decided together with accounts, so players keep their progress across devices (`docs/PLAN.md`,
+"Later - v2: Newsletter"). Nothing is planned in detail yet; Vedant usually wants a plan-only
+session first.
 
 ## Prompt for the next session
 
 > Read CLAUDE.md, docs/DESIGN.md, docs/PLAN.md and docs/NEXT_SESSION.md.
-> The repo stays private until I say so.
 >
-> This finishes 10b: going public. Work through "What is left of 10b" in
-> docs/NEXT_SESSION.md, step by step, and ask before each step that cannot be undone. The
-> header change waits on the local branch held/header-link for the repo to be public.
+> Version 1 is done and public. This is a plan-only session for version 2 (the newsletter and
+> accounts). Ask me the open questions one at a time, each with a recommendation, and state the
+> free tier or price of every service before suggesting it. Write the plan into docs/PLAN.md;
+> build nothing yet.
 >
-> Rules from CLAUDE.md apply: ask before adding any dependency, service or cost; no emojis;
-> complete files; commit only when I ask.
+> Rules from CLAUDE.md apply: no emojis; complete files; commit only when I ask.

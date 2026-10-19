@@ -1291,9 +1291,24 @@ Paused by Vedant on 2026-10-10: the repo **stays private** until a round of fixe
 draft). He adds the `cosmic` CNAME later. Kept from the review: the "How it was built" line
 (it was built with Claude Code) and the spend figures (cost matters to the story).
 
-- [ ] Vedant confirms, then the repo is made public (Vedant in GitHub's settings, or `gh repo
+- [x] Vedant confirms, then the repo is made public (Vedant in GitHub's settings, or `gh repo
       edit --visibility public` on his word). Turn on secret scanning with push protection and
       Dependabot alerts (free on public repos). The header's GitHub icon links to the repo.
+      Done on 2026-10-19 on Vedant's word ("go public"), in this order:
+      - gitleaks 8.30.1 once more over every commit on every branch: no leaks in the 75 that
+        carry text (the 76th changes only a screenshot); no key prefix in any patch;
+        `.env.example` still the only env file ever committed.
+      - `gh repo edit --visibility public`: the repo is public, and GitHub reads the licence as
+        MIT.
+      - Secret scanning and push protection enabled, and Dependabot alerts (the API answers
+        204). Dependabot's automatic fix pull requests are left off; they were not asked for.
+      - Description (the tagline) and homepage (`https://cosmic.vedantgaikwad.ie`).
+      - The held header commit brought onto `main` (`3389a49`, cherry-picked from
+        `held/header-link`, which is deleted) and pushed: production served the new build about
+        60 s later, with the icon linking to the repo; the checks run on it passed.
+      - Signed out (plain requests, no GitHub login): the repo page, the checks workflow's page,
+        `docs/DEVELOPMENT.md` and a README screenshot answer 200, and the badge reads "Checks -
+        passing".
 - [x] Domain: add `cosmic.vedantgaikwad.ie` to the Vercel project; Vedant adds the CNAME
       `cosmic` at Web Hosting Ireland with the value Vercel shows; then redirect
       `cosmic-quiz-agent.vercel.app` to it. Check deep links, the API and the live search on the
@@ -1344,7 +1359,7 @@ draft). He adds the `cosmic` CNAME later. Kept from the review: the "How it was 
       Checked by Vedant on 2026-10-13 (15:54 UTC): the card shows the observatory image with
       "COSMIC QUIZ" and the tagline, the title "Cosmic Quiz", the tagline as its description,
       and `cosmic.vedantgaikwad.ie`.
-- [ ] The README session (a session of its own, next). Decided 2026-10-13 (Vedant, each as
+- [x] The README session (a session of its own, next). Decided 2026-10-13 (Vedant, each as
       recommended, asked one at a time):
       - **Reader:** recruiters first, then engineers. The first screen stands on its own for a
         30 to 60 second skim; everything below it is for the engineer who opens the code.
@@ -1494,6 +1509,11 @@ draft). He adds the `cosmic` CNAME later. Kept from the review: the "How it was 
 Gate (Vedant): the repo public and clean (gitleaks clean, or every key it found rotated), the
 site at the new domain with the old address redirecting, the OG preview right where he shares
 it, the privacy page, and the README readable to someone who has never seen the project.
+
+Gate passed on 2026-10-19: the repo public with gitleaks clean, the site at
+`cosmic.vedantgaikwad.ie` with the old address redirecting, the preview checked in WhatsApp,
+the privacy page, and the README, which Vedant read before giving the word. That closes
+Session 10b and version 1.
 
 ### Fixes and design questions (2026-10-10, after 10b's pause)
 
@@ -1811,3 +1831,9 @@ tier), decided together with the newsletter's subscribers (Vedant, 2026-10-10).
   342 Python and 148 TypeScript tests; a drive of 36 checks at desktop and phone size. Nothing
   spent. Pushed on his word; the held header commit moved to the local branch
   `held/header-link` so it did not go out with it.
+- 2026-10-19 - Session 10b closed, and version 1 with it: on Vedant's word, gitleaks once more
+  (clean), the repo made public (MIT), secret scanning with push protection and Dependabot
+  alerts on, the description and homepage set, and the header's GitHub icon pointed at the repo
+  (`3389a49`, from the held branch, now deleted). Signed out, the repo, its docs, the
+  screenshots and the badge ("passing") all load. Nothing spent. Next: Vedant's own items, then
+  planning v2.

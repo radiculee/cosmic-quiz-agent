@@ -18,7 +18,7 @@ Developer. An autonomous astronomy and space AI agent, surfaced as a Learn / Qui
 - **v2:** an astronomy newsletter (email via Resend, then WhatsApp) produced by the same agent. (The analytics page moved from v2 into v1 on 2026-10-08.)
 
 It is a standalone project with its own repo, hosted on Vercel and served at `cosmic.vedantgaikwad.ie`, a
-subdomain of Vedant's existing domain. The repo goes public with an MIT licence in Session 10, after a
+subdomain of Vedant's existing domain. The repo went public with an MIT licence on 2026-10-19, after a
 security audit. (Changed 2026-10-08 by Vedant; it was "its own repo and domain".) It is **not** part of the
 portfolio repo (`Modernpersonalportfoliowebsite`, a separate folder), which is used only as a reference for
 patterns and design tokens. Recruiters will read this code, so code quality is part of the deliverable.
