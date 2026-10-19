@@ -1131,7 +1131,8 @@ Vedant, to finish 10a:
   until it is in, the scheduled `upkeep` fails. Applied 2026-10-10.
 - Check the production `IP_HASH_SALT` (S14). Vercel does not show the stored value, so it cannot
   be read back; replacing it with a new 64-character random hex value would settle it.
-- Optional: install the latest Python 3.12 and recreate `.venv` (S16).
+- Optional: install the latest Python 3.12 and recreate `.venv` (S16). Done on 2026-10-19:
+  3.12.10, the last 3.12 with a Windows installer (`docs/SECURITY_AUDIT.md` S16).
 
 Committed on Vedant's word as ten commits, one per finding (`f6811e8` to `9a97174`), each
 passing pytest, ruff and mypy on its own, and pushed on 2026-10-10. Production header scan the
@@ -1837,3 +1838,7 @@ tier), decided together with the newsletter's subscribers (Vedant, 2026-10-10).
   (`3389a49`, from the held branch, now deleted). Signed out, the repo, its docs, the
   screenshots and the badge ("passing") all load. Nothing spent. Next: Vedant's own items, then
   planning v2.
+- 2026-10-19 - After version 1: Vedant added the project to his portfolio himself. S16 fixed at
+  his request: Python 3.12.10 (the last 3.12 with a Windows installer) over 3.12.1 with winget,
+  and `.venv` rebuilt; every pin as pinned, pip-audit clean, 342 tests and every Python check
+  pass. Nothing spent. The review queue waits for him.

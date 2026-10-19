@@ -24,10 +24,9 @@ Vedant, and the prompt for planning version 2.
 
 ## Vedant's own items
 
-- The review queue: `python -m curator review`.
-- The local Python update (S16): the latest 3.12, then recreate `.venv`.
-- His portfolio: paste the prompt written on 2026-10-13 into its Claude Code session; the code
-  link can now point at the public repo.
+- The review queue: `python -m curator review` (he will do it later).
+- Done on 2026-10-19: the project is on his portfolio, and the local Python is 3.12.10 with a
+  rebuilt `.venv` (S16 fixed; `docs/SECURITY_AUDIT.md`).
 - Dependabot alerts now arrive by email and in the repo's Security tab; each needs a look.
 - Spend: the Console's October figure under the $10 limit, and the TypeSafe balance.
 

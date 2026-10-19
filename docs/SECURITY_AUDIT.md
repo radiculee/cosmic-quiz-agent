@@ -10,7 +10,7 @@ a severity, where it is, what happens, the proposed fix and its test.
   carries the earlier decision to clear report hashes after 30 days, and S17.
 - **Accepted for now:** the other Lows (S6 to S12, S14), to revisit after launch. S15 is
   accepted and documented.
-- **Vedant's own action:** S16.
+- **Fixed on 2026-10-19, on Vedant's word:** S16 (the local Python is 3.12.10).
 - **Accepted:** S18, as decided in planning; its statement timeout was confirmed live on
   2026-10-13.
 - **Accepted:** S19 (2026-10-13), once the SQL editor query showed what the function is.
@@ -57,7 +57,7 @@ reason), or pending (waiting for information).
 | S13 | Low | Visitor hashes are removed only when there is traffic, and report hashes never | fixed (008 applied 2026-10-10) |
 | S14 | Low | A short `IP_HASH_SALT` would be accepted | accepted for now |
 | S15 | Low | Fetched pages can carry instructions to the agent | accepted |
-| S16 | Info | The local Python (3.12.1) is behind on security fixes | Vedant's action |
+| S16 | Info | The local Python (3.12.1) is behind on security fixes | fixed (3.12.10, 2026-10-19) |
 | S17 | Info | IPv6 visitors would be counted once per address | fixed |
 | S18 | Info | `/rpc/agent_stats` can be called directly with the publishable key | accepted |
 | S19 | Info | `public.rls_auto_enable`, a function no migration created | accepted |
@@ -465,7 +465,12 @@ reason), or pending (waiting for information).
   among them CVE-2024-4032 in `ipaddress` and a newer expat (it has 2.5.0). It runs the
   Curator's `build` and `review` commands with the keys loaded.
 - **Fix:** Vedant installs the latest Python 3.12 and recreates `.venv`. No code change.
-- **Resolution:** Vedant's action, outside the repo.
+- **Resolution:** fixed on 2026-10-19, at Vedant's request. Python 3.12.10 installed over
+  3.12.1 with winget (the python.org installer, its SHA-256 checked by winget), with expat
+  2.7.1 (was 2.5.0) and the `ipaddress` fix. 3.12.10 is the last 3.12 release with a Windows
+  installer; the later 3.12 security releases are source only, which is why Vercel and Actions
+  run newer 3.12 builds. `.venv` was rebuilt on it: all 9 pins installed as pinned, `pip check`
+  and `pip-audit` clean, 342 tests, ruff and mypy --strict pass, and the local API answers.
 
 ### S17. IPv6 visitors would be counted once per address
 
