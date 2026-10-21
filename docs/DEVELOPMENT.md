@@ -89,6 +89,15 @@ tool in `requirements-dev.txt`) and `pnpm audit`.
 - **GitHub Actions** runs the Curator every day (`.github/workflows/curator.yml`). It needs the
   secrets `ANTHROPIC_API_KEY`, `TYPESAFE_API_KEY`, `SUPABASE_URL` and `SUPABASE_SECRET_KEY`.
 
+## The live-search limits
+
+Every limit and cap is a number in `agent/limits.py` (`LimitSettings`), passed to the database
+on each call, so a change is a reviewed code change and a deploy. A temporary change, like the
+launch week of 3 to 9 November 2026, is a dated set (`LAUNCH_STARTS`, `LAUNCH_ENDS`,
+`LAUNCH_LIMITS`): `limits_at(now)` picks it for each request, so it starts and ends by itself.
+Keep the monthly cap (`usd_per_month`) under what the $10 Anthropic limit leaves after the
+daily Curator.
+
 ## The repository
 
 | Path | What it holds |
@@ -101,6 +110,7 @@ tool in `requirements-dev.txt`) and `pnpm audit`.
 | `agent/verifiers/` | layer 2 (`haiku.py`) and layer 3 (`jev.py`) |
 | `agent/gate.py` | the publish rule: published, review or discarded, from the stored results |
 | `agent/ondemand.py` | a live search: the limits, the runs one at a time, the streamed log |
+| `agent/limits.py` | the live-search limits and caps, and `limits_at`, which picks the dated launch-week numbers |
 | `agent/store.py`, `agent/bank.py` | the database: writes with the secret key, public reads |
 | `agent/web.py` | the HTTP layer the functions in `api/` share |
 | `curator/` | the scheduled Curator: build, daily, review, upkeep, rejev |

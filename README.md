@@ -32,7 +32,8 @@ I wanted to play, and made the agent that writes it prove every answer."
   each answer you see the explanation, the sources, and a source check: what a second model
   found in the cited pages for every option.
 - **Try a new topic:** type any astronomy topic and the agent researches it live, streaming each
-  step, including every claim it checks. Two searches a day per visitor.
+  step, including every claim it checks. Two searches a day per visitor (five in the launch
+  week, 3 to 9 November 2026).
 - **Mission Control:** what the agent costs, how long it takes and how its checks judge it,
   from live data.
 - Ranks, streaks and tiered trophies, kept in your browser.
@@ -114,6 +115,9 @@ quote each source was cited for.
   API requests an hour, 10 reports a day.
 - **For everyone:** 4 searches and $0.50 a day, $4 a month. Each run reserves the most it can
   cost ($0.17) until it ends, so the caps hold even when searches start at the same moment.
+- **Launch week** (the UTC days 3 to 9 November 2026): 5 searches a day per visitor, and 20
+  searches and $2.50 a day for everyone; the $4 month is unchanged. The dates are in code, so
+  the usual limits come back by themselves.
 - Over a limit, the visitor keeps everything the bank already has.
 
 ## Cost
@@ -152,7 +156,8 @@ none of them calls a paid API.
 
 Planned and built by Vedant Gaikwad in sessions with Claude Code. Each session's decisions,
 checks and costs are recorded in [`docs/PLAN.md`](docs/PLAN.md), and the design record is
-[`docs/DESIGN.md`](docs/DESIGN.md).
+[`docs/DESIGN.md`](docs/DESIGN.md). What changed since the public release is in
+[`CHANGELOG.md`](CHANGELOG.md).
 
 ## Contact
 

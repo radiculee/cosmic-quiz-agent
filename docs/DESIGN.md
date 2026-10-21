@@ -145,6 +145,7 @@ supabase/migrations/   numbered changes after schema.sql (006 the web page's sea
 public/fonts/          the three fonts, self-hosted (WOFF2 subsets, each with its OFL licence)
 public/og-v1.jpg       the link preview: the observatory scene with the title and tagline
 README.md              the case study: what it does, how, what it costs, security and privacy
+CHANGELOG.md           what changed on the site and in the repo since the public release
 docs/DEVELOPMENT.md    setup, every command and its cost, the checks, deploying, the repo map
 docs/images/           the README's three screenshots (not under MIT; see NOTICE)
 LICENSE                MIT, for the code (Session 10b)
