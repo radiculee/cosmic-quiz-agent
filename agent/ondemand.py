@@ -50,7 +50,7 @@ from pydantic import BaseModel, ConfigDict
 
 from agent.bank import DIFFICULTY_ORDER, BankTopic, LearnItem, QuizQuestion
 from agent.config import Settings
-from agent.limits import LIMIT_MESSAGES, LimitSettings, OnDemandUsage, RunSlot, search_limit
+from agent.limits import LimitSettings, OnDemandUsage, RunSlot, limit_message, search_limit
 from agent.llm import LLMProvider
 from agent.loop import run_learn, run_quiz
 from agent.publish import verify_and_decide
@@ -236,7 +236,9 @@ class Services:
     llm: LLMProvider
     jev: JevClient | None
     settings: Settings
-    limits: LimitSettings
+    # The limits in force at a moment (agent/limits.limits_at), read when a search starts; every
+    # run of that search keeps them.
+    limits: Callable[[datetime], LimitSettings]
     sign: Callable[[str, str], str]  # (purpose, value) -> token, see agent/web.py
 
 
@@ -253,6 +255,7 @@ class _Search:
     topic: str  # in the bank's spelling when the bank has it
     visitor: str
     live: tuple[PlannedItem, ...]
+    limits: LimitSettings  # in force when the search started
 
 
 class _Clock:
@@ -333,15 +336,17 @@ def research(request: SearchRequest, services: Services) -> Generator[ResearchEv
 
     # The on-topic check is paid, so a search the limits would refuse ends before it
     # (docs/SECURITY_AUDIT.md S3). The database still decides when the first run starts.
+    now = datetime.now(UTC)
+    limits = services.limits(now)
     try:
-        usage = services.store.on_demand_usage(request.visitor, datetime.now(UTC))
+        usage = services.store.on_demand_usage(request.visitor, now)
     except StoreError as error:
         print(f"live search: could not read the limits: {error}", file=sys.stderr)
         yield _unavailable()
         return
-    refused = search_limit(usage, services.limits, services.settings.max_job_cost_usd)
+    refused = search_limit(usage, limits, services.settings.max_job_cost_usd)
     if refused is not None:
-        yield FallbackEvent(reason="limit", message=LIMIT_MESSAGES[refused])
+        yield FallbackEvent(reason="limit", message=limit_message(refused, limits))
         return
 
     try:
@@ -375,20 +380,20 @@ def research(request: SearchRequest, services: Services) -> Generator[ResearchEv
             first.mode,
             first.difficulty,
             services.settings.max_job_cost_usd,
-            services.limits,
+            limits,
         )
     except StoreError as error:
         print(f"live search: could not reserve a slot: {error}", file=sys.stderr)
         yield _unavailable()
         return
     if not slot.ok or slot.id is None:
-        message = LIMIT_MESSAGES[slot.limit] if slot.limit else "Live research is paused."
+        message = limit_message(slot.limit, limits) if slot.limit else "Live research is paused."
         yield FallbackEvent(reason="limit", message=message)
         return
 
     # From here the first run is reserved, so the search's thread starts before anything else is
     # sent: whatever happens to the stream, that thread settles every run it starts.
-    search = _Search(id=slot.id, topic=topic, visitor=request.visitor, live=live)
+    search = _Search(id=slot.id, topic=topic, visitor=request.visitor, live=live, limits=limits)
     events: queue.Queue[ResearchEvent | None] = queue.Queue()
     worker = threading.Thread(
         target=_run_search,
@@ -488,14 +493,16 @@ def _later_slot(
             planned.mode,
             planned.difficulty,
             services.settings.max_job_cost_usd,
-            services.limits,
+            search.limits,
             search_id=search.id,
         )
     except StoreError as error:
         print(f"live search {search.id}: could not reserve a run: {error}", file=sys.stderr)
         return _NotStarted("Live research is not available right now.")
     if not slot.ok or slot.id is None:
-        return _NotStarted(LIMIT_MESSAGES[slot.limit] if slot.limit else "Live research is paused.")
+        return _NotStarted(
+            limit_message(slot.limit, search.limits) if slot.limit else "Live research is paused."
+        )
     return slot.id
 
 

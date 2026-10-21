@@ -20,7 +20,15 @@ import pytest
 import agent.ondemand as ondemand
 from agent.bank import BankTopic, LearnItem, QuizQuestion, ShownStatus, SourceCheck
 from agent.config import Settings
-from agent.limits import LIMIT_MESSAGES, LIMITS, LimitName, LimitSettings, OnDemandUsage, RunSlot
+from agent.limits import (
+    LAUNCH_LIMITS,
+    LIMITS,
+    LimitName,
+    LimitSettings,
+    OnDemandUsage,
+    RunSlot,
+    limit_message,
+)
 from agent.loop import run_learn, run_quiz
 from agent.ondemand import (
     FallbackEvent,
@@ -226,6 +234,7 @@ class FakeStore:
     finished: list[tuple[int, float, OnDemandOutcome, int | None]] = field(default_factory=list)
     payloads: list[ItemPayload] = field(default_factory=list)
     calls: list[str] = field(default_factory=list)
+    limits_seen: list[LimitSettings] = field(default_factory=list)
     # What the limits have counted so far today and this month, read before the paid check.
     usage: OnDemandUsage = field(
         default_factory=lambda: OnDemandUsage(
@@ -250,6 +259,7 @@ class FakeStore:
     ) -> RunSlot:
         number = len(self.began)
         self.began.append((user_hash, topic, mode, difficulty, search_id))
+        self.limits_seen.append(limits)
         self.calls.append("begin")
         assert reserve_usd == Settings().max_job_cost_usd
         if self.down:
@@ -309,6 +319,7 @@ def services(
     status: ShownStatus = "published",
     llm: object = None,
     jev: object = None,
+    limits: LimitSettings = LIMITS,
 ) -> tuple[Services, FakeStore]:
     store = store or FakeStore()
     built = Services(
@@ -319,7 +330,7 @@ def services(
         llm=llm or object(),  # type: ignore[arg-type]
         jev=jev,  # type: ignore[arg-type]
         settings=Settings(),
-        limits=LIMITS,
+        limits=lambda now: limits,
         sign=lambda purpose, value: f"signed:{purpose}:{value}",
     )
     return built, store
@@ -515,8 +526,30 @@ def test_a_search_the_limits_would_refuse_never_pays_for_the_topic_check(
     assert isinstance(events[0], PlanEvent)
     last = events[-1]
     assert isinstance(last, FallbackEvent) and last.reason == "limit"
-    assert last.message == LIMIT_MESSAGES[limit]
+    assert last.message == limit_message(limit, LIMITS)
     assert judge.topics == [] and store.began == []  # nothing paid, nothing reserved
+
+
+def test_in_the_launch_week_a_visitor_gets_more_searches_and_every_run_keeps_them(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Two searches today and four for everyone would refuse a search on the usual limits.
+    script(monkeypatch)
+    busy = OnDemandUsage(
+        visitor_searches_today=2, searches_today=4, usd_today=0.0, usd_this_month=0.0
+    )
+    live, store = services(store=FakeStore(usage=busy), limits=LAUNCH_LIMITS)
+
+    events = list(research(SEARCH, live))
+
+    assert of_type(events, FallbackEvent) == []
+    assert [result.key for result in of_type(events, ResultEvent)] == EVERY_ITEM
+    assert store.limits_seen == [LAUNCH_LIMITS] * 4  # read once, kept by every run
+
+
+def test_the_limit_message_names_the_number_in_force() -> None:
+    assert "2 live searches today" in limit_message("user_day", LIMITS)
+    assert "5 live searches today" in limit_message("user_day", LAUNCH_LIMITS)
 
 
 def test_an_off_topic_search_is_rejected_before_anything_is_reserved() -> None:

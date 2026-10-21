@@ -88,7 +88,8 @@ function openedHere(state: unknown): boolean {
  * sources and source check once answered. The explanation sits behind a button that opens only
  * once every question has been answered, so it can never give an answer away; reading it counts
  * towards Explorer. What the bank already has is shown alongside, free, and a topic the bank has
- * in full uses no search. Each visitor has 2 searches a day.
+ * in full uses no search. Each visitor has 2 searches a day (5 in the launch week; the
+ * quota comes from /api/quota).
  *
  * The window scrolls only when the player asks for it: GO, moving to the next question (only if
  * it starts off screen) and opening the explanation. The agent log scrolls its own box.

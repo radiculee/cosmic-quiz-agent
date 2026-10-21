@@ -13,7 +13,7 @@ import sys
 from datetime import UTC, datetime
 
 from agent.config import Settings
-from agent.limits import LIMITS, quota
+from agent.limits import limits_at, quota
 from agent.rest import StoreError
 from agent.store import SupabaseStore
 from agent.web import ApiRequest, ApiResponse, error_response, json_response, make_app
@@ -38,7 +38,7 @@ def handle(request: ApiRequest) -> ApiResponse:
         print(f"quota not read: {error}", file=sys.stderr)
         return error_response(503, UNAVAILABLE)
     # Per visitor, so never cached at the edge (json_response sends no-store).
-    return json_response(quota(usage, LIMITS, RESERVE_USD, now).model_dump(mode="json"))
+    return json_response(quota(usage, limits_at(now), RESERVE_USD, now).model_dump(mode="json"))
 
 
 app = make_app(handle)

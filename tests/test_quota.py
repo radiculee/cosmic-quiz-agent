@@ -9,7 +9,18 @@ from datetime import UTC, datetime
 import httpx2
 import pytest
 
-from agent.limits import LIMITS, LimitSettings, OnDemandUsage, day_start, month_start, quota
+from agent.limits import (
+    LAUNCH_ENDS,
+    LAUNCH_LIMITS,
+    LAUNCH_STARTS,
+    LIMITS,
+    LimitSettings,
+    OnDemandUsage,
+    day_start,
+    limits_at,
+    month_start,
+    quota,
+)
 from agent.rest import StoreError
 from agent.store import SupabaseStore
 from agent.web import ApiRequest, salted_hash
@@ -60,6 +71,36 @@ def test_global_caps_close_exactly_where_the_database_refuses_a_search() -> None
     assert quota(usage(usd_today=0.33, usd_month=0.33), limits, RESERVE, NOW).global_open
     assert not quota(usage(usd_today=0.34, usd_month=0.34), limits, RESERVE, NOW).global_open
     assert not quota(usage(usd_month=3.90), limits, RESERVE, NOW).global_open
+
+
+def test_the_launch_week_runs_from_3_to_9_november_utc_and_ends_by_itself() -> None:
+    assert datetime(2026, 11, 3, tzinfo=UTC) == LAUNCH_STARTS
+    assert datetime(2026, 11, 10, tzinfo=UTC) == LAUNCH_ENDS
+    assert limits_at(datetime(2026, 11, 2, 23, 59, 59, tzinfo=UTC)) == LIMITS
+    assert limits_at(LAUNCH_STARTS) == LAUNCH_LIMITS
+    assert limits_at(datetime(2026, 11, 9, 23, 59, 59, tzinfo=UTC)) == LAUNCH_LIMITS
+    assert limits_at(LAUNCH_ENDS) == LIMITS
+    assert limits_at(NOW) == LIMITS
+
+
+def test_the_launch_raises_the_daily_numbers_but_never_the_month() -> None:
+    assert (
+        LAUNCH_LIMITS.user_searches_per_day,
+        LAUNCH_LIMITS.searches_per_day,
+        LAUNCH_LIMITS.usd_per_day,
+    ) == (5, 20, 2.50)
+    # The monthly ceiling keeps the daily Curator's share of the $10 Anthropic limit.
+    unchanged = {"user_searches_per_day", "searches_per_day", "usd_per_day"}
+    assert LAUNCH_LIMITS.model_dump(exclude=unchanged) == LIMITS.model_dump(exclude=unchanged)
+    assert LAUNCH_LIMITS.usd_per_month == 4.00
+
+
+def test_in_the_launch_week_the_quota_offers_five_searches() -> None:
+    launch_day = datetime(2026, 11, 3, 9, 30, tzinfo=UTC)
+
+    offered = quota(usage(visitor=2, searches=4), limits_at(launch_day), RESERVE, launch_day)
+
+    assert (offered.remaining, offered.limit, offered.global_open) == (3, 5, True)
 
 
 def test_quota_serialises_its_reset_time_as_iso_utc() -> None:

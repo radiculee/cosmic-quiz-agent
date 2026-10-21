@@ -17,7 +17,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from agent.bank import BankReader, LiveResults
 from agent.config import load_settings
-from agent.limits import LIMITS
+from agent.limits import limits_at
 from agent.llm import AnthropicProvider
 from agent.ondemand import ResearchEvent, SearchRequest, Services, research
 from agent.rest import StoreError
@@ -83,7 +83,7 @@ def services() -> Services:
                 llm=AnthropicProvider(settings.model),
                 jev=make_jev(settings),
                 settings=settings,
-                limits=LIMITS,
+                limits=limits_at,
                 sign=sign,
             )
         return _services

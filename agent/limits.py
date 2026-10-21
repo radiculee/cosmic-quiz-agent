@@ -48,6 +48,22 @@ class LimitSettings(BaseModel):
 
 LIMITS = LimitSettings()
 
+# The LinkedIn launch (decided 2026-10-21 by Vedant): for the week from the post on Tuesday
+# 3 November 2026, more live searches, so more of the people who see it can try one. The
+# monthly ceiling is unchanged, so the launch can never spend more than a usual month and the
+# daily Curator keeps its share of the $10 Anthropic limit. The window ends by itself: outside
+# it the usual limits apply with no deploy.
+LAUNCH_STARTS = datetime(2026, 11, 3, tzinfo=UTC)
+LAUNCH_ENDS = datetime(2026, 11, 10, tzinfo=UTC)
+LAUNCH_LIMITS = LimitSettings(user_searches_per_day=5, searches_per_day=20, usd_per_day=2.50)
+
+
+def limits_at(now: datetime) -> LimitSettings:
+    """The limits in force at `now`: the launch week's (the UTC days 3 to 9 November 2026), or
+    the usual ones. Read for each request, so a long-lived server picks up both ends of the
+    window."""
+    return LAUNCH_LIMITS if LAUNCH_STARTS <= now < LAUNCH_ENDS else LIMITS
+
 
 class RequestCount(BaseModel):
     """One request counted for a visitor in the current clock hour."""
@@ -150,10 +166,9 @@ def quota(usage: OnDemandUsage, limits: LimitSettings, reserve_usd: float, now: 
     )
 
 
-LIMIT_MESSAGES: dict[LimitName, str] = {
+_LIMIT_MESSAGES: dict[LimitName, str] = {
     "user_day": (
-        f"You have made {LIMITS.user_searches_per_day} live searches today, the daily limit. "
-        "It resets at midnight UTC."
+        "You have made {count} live searches today, the daily limit. It resets at midnight UTC."
     ),
     "day_searches": (
         "Live searches have reached today's limit for everyone. It resets at midnight UTC."
@@ -162,6 +177,12 @@ LIMIT_MESSAGES: dict[LimitName, str] = {
     "month_usd": "Live research has used this month's budget and resumes next month.",
     "search": "This search cannot start another run.",
 }
+
+
+def limit_message(limit: LimitName, limits: LimitSettings) -> str:
+    """What the player is told when `limit` refuses a search, with the number in force."""
+    return _LIMIT_MESSAGES[limit].format(count=limits.user_searches_per_day)
+
 
 REPORTS_MESSAGE = (
     f"You have sent {LIMITS.reports_per_day} reports today, the daily limit. "
