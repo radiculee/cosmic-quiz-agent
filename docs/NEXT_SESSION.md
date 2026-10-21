@@ -19,12 +19,16 @@ Vedant, and the prompt for planning version 2.
   `daily` (about $0.17 a day, capped at $0.40) without any change. Every run since the README
   session has passed, including the first after GitHub began moving `ubuntu-latest` to
   Ubuntu 26 (2026-10-19).
-- **The bank:** 40 topics and 185 published items; 9 items in review (186, 187, 188, 193,
-  198, 202, 203, 206, 210).
+- **The bank:** 40 topics and 190 published items; the review queue is empty (reviewed on
+  2026-10-21: 5 published, 4 discarded).
+- **The LinkedIn launch week:** Vedant posts on Tuesday 3 November at 9:30. For the UTC days 3
+  to 9 November, 5 live searches a visitor and 20 and $2.50 a day for everyone; the $4 monthly
+  cap is unchanged (about 33 searches in November in all). It ends by itself
+  (`agent/limits.py`).
 
 ## Vedant's own items
 
-- The review queue: `python -m curator review` (he will do it later).
+- The review queue: empty since 2026-10-21; `python -m curator review` when it fills again.
 - Done on 2026-10-19: the project is on his portfolio, and the local Python is 3.12.10 with a
   rebuilt `.venv` (S16 fixed; `docs/SECURITY_AUDIT.md`).
 - Dependabot alerts now arrive by email and in the repo's Security tab; each needs a look.

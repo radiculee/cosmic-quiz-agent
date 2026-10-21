@@ -1647,6 +1647,38 @@ The header-link commit, still held until the repo is public, would have gone out
 from `main`, so it was moved to the local branch `held/header-link` (it had never been pushed)
 and `main` reset to `origin/main` before these commits.
 
+### The LinkedIn launch week and the review queue (2026-10-21)
+
+Vedant asked for 15 live searches a visitor for his LinkedIn launch, and to run the review
+queue. Asked with the costs (the global caps of 4 searches and $0.50 a day would have kept 15
+out of reach; October's Console budget is nearly spent, about $8 of $10 by an estimate from
+the logs; the daily Curator needs about $5 of November's), he chose each recommendation:
+
+- **The review queue:** his calls, from Claude Code's reading of each item against its
+  sources: published 186 (Olympus Mons), 187 (tidal locking), 198 (antimatter), 202
+  (redshift) and 210 (wormhole); discarded 188 (Titan also has a subsurface ocean, so two
+  options were right), 193 (a failed quote, and an explanation saying planets like Earth lack
+  niobium), 203 (unconfirmed z = 17 candidates presented as confirmed) and 206 (a "wrong"
+  option is a real trigger of star formation). Free; the queue is empty and the bank has 190
+  published items.
+- **The launch week:** he posts on Tuesday 3 November at 9:30. For the UTC days 3 to 9
+  November, 5 searches a visitor (was 2), and 20 searches and $2.50 a day for everyone (was 4
+  and $0.50). The $4 monthly cap is unchanged, so the launch can never spend more than a usual
+  month and the Curator keeps its share; at about $0.12 a search that is about 33 searches in
+  November in all, after which live research pauses until December and the bank stays open.
+
+Built (not committed yet):
+- [x] `agent/limits.py`: `LAUNCH_STARTS`, `LAUNCH_ENDS`, `LAUNCH_LIMITS` and `limits_at(now)`,
+      and `limit_message`, which names the number in force. `api/research.py` and
+      `api/quota.py` read the limits per request, so a warm server picks up both ends of the
+      window, and a search keeps the limits it started with for all its runs.
+- [x] Tests (5 new): the window's edges, the month cap unchanged, the quota offering 5, a
+      search that the usual limits would refuse running in the launch week with every run on
+      the same limits, and the message's number.
+
+Checked: 347 Python and 148 TypeScript tests, ruff, ruff format, mypy --strict, typecheck and
+the build.
+
 ---
 
 ## Later - v2: Newsletter
@@ -1842,3 +1874,7 @@ tier), decided together with the newsletter's subscribers (Vedant, 2026-10-10).
   his request: Python 3.12.10 (the last 3.12 with a Windows installer) over 3.12.1 with winget,
   and `.venv` rebuilt; every pin as pinned, pip-audit clean, 342 tests and every Python check
   pass. Nothing spent. The review queue waits for him.
+- 2026-10-21 - The review queue and the launch week: Vedant ran the review on Claude Code's
+  calls (5 published, 4 discarded; free) and chose the launch limits for 3 to 9 November (5
+  searches a visitor, 20 and $2.50 a day for everyone, the $4 month unchanged), dated in code so
+  they end by themselves. 347 Python and 148 TypeScript tests. Nothing spent. Not committed yet.
