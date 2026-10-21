@@ -1667,7 +1667,7 @@ the logs; the daily Curator needs about $5 of November's), he chose each recomme
   month and the Curator keeps its share; at about $0.12 a search that is about 33 searches in
   November in all, after which live research pauses until December and the bank stays open.
 
-Built (not committed yet):
+Built:
 - [x] `agent/limits.py`: `LAUNCH_STARTS`, `LAUNCH_ENDS`, `LAUNCH_LIMITS` and `limits_at(now)`,
       and `limit_message`, which names the number in force. `api/research.py` and
       `api/quota.py` read the limits per request, so a warm server picks up both ends of the
@@ -1677,7 +1677,9 @@ Built (not committed yet):
       the same limits, and the message's number.
 
 Checked: 347 Python and 148 TypeScript tests, ruff, ruff format, mypy --strict, typecheck and
-the build.
+the build. Committed and pushed on his word (`3765728` the code, `0cbcf4f` the records); the
+checks run passed and Vercel deployed it, and production's `/api/quota` still offers 2 a
+visitor until the window opens.
 
 ---
 
@@ -1877,4 +1879,5 @@ tier), decided together with the newsletter's subscribers (Vedant, 2026-10-10).
 - 2026-10-21 - The review queue and the launch week: Vedant ran the review on Claude Code's
   calls (5 published, 4 discarded; free) and chose the launch limits for 3 to 9 November (5
   searches a visitor, 20 and $2.50 a day for everyone, the $4 month unchanged), dated in code so
-  they end by themselves. 347 Python and 148 TypeScript tests. Nothing spent. Not committed yet.
+  they end by themselves. 347 Python and 148 TypeScript tests. Nothing spent. Committed and
+  pushed (`3765728`, `0cbcf4f`); deployed, with the usual limits in force until 3 November.
