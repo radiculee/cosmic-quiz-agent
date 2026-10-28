@@ -14,7 +14,7 @@ A new session: `dev/new-session.sh <name>` (Git Bash) or `dev/new-session.ps1 <n
 
 | Session | Branch | Worktree path | Owns (files/dirs) | Status | Last update |
 | --- | --- | --- | --- | --- | --- |
-| latency | `session/latency` (not made yet; works on `main`) | `../cqa-latency` (planned; now in the main folder, `cosmic-quiz-agent`) | The live-search backend, the bank schema and the shared docs: see "latency owns" | Active | 2026-10-28 |
+| latency | `session/latency` (made 2026-10-28 from `main`) | the main folder, `cosmic-quiz-agent` (`../cqa-latency` planned) | The live-search backend, the bank schema and the shared docs: see "latency owns" | Active | 2026-10-28 |
 | explore | `session/explore` (landed on `main`) | `../cqa-explore` | The Explore page's frontend: see "explore owns" | Done: universal topics and Surprise me are on `main`; follow-ups in `docs/handoff/explore.md` | 2026-10-28 |
 
 Both sessions were still running in the main folder on `main` when this file was written, so
@@ -81,7 +81,8 @@ split hunk by hunk:
 
 - **Runs per search.** The cost-guard decision below reserves 4 runs at $0.17 each ($0.68 a
   search). The uncommitted `agent/limits.py` sets `runs_per_search = 6` with "about $0.17 for all
-  six". These cannot both hold; the cost guard needs one number.
+  six". These cannot both hold; the cost guard needs one number. Answered 2026-10-28: six (see
+  Decisions).
 - **Migration 009** cites `docs/PLAN.md` "Universal topics", and PLAN.md has no such section yet.
 - **Dev servers.** `vite.config.ts` sends `/api` to port 8787 for every worktree, so two
   worktrees cannot run the site against their own API at once. Until that changes, one session
@@ -113,6 +114,24 @@ entry; record a reversal as a new one.
   - SURPRISE ME is a Haiku pick that counts as a search and skips Jev.
   - Seven visitor-typed names were tidied, and "Bang" merged into "The Big Bang".
   - The full list is in `docs/handoff/explore.md`.
+- 2026-10-28, latency: Runs per search: six, on universal topics, which lands on `main` first;
+  latency builds on it. This replaces the numbers in the cost-guard entry above: reserve 6 runs at
+  $0.17 ($1.02 a search); the daily cap is about $1.55 usually, and in the launch week about $4.25
+  at 20 searches or $2.90 at 12, whichever November's budget settles. The monthly cap is
+  unchanged. Plan order is the questions, easiest first, then the explanations, easiest first.
+- 2026-10-28, latency: Play order: the questions are played easiest first, as universal topics
+  has them, even when a harder one finishes first. (The grill chose "the chosen level first"
+  for the four-run search, which has a difficulty a search no longer has.)
+- 2026-10-28, latency: Agent log: one stream in the order things happen, each line tagged with
+  its item (EASY Q, HARD EXPL and so on) in place of the item headings.
+- 2026-10-28, latency: Rate limits: no new limit. Vedant checks the account's tier in the
+  Anthropic Console before the go/no-go; each live run logs how many 429s it met.
+- 2026-10-28, latency: Verification: tests with the scripted model and fake Jev, a headless
+  drive against the stub API, then 2 real searches locally and 1 on the live site, about $0.50.
+- 2026-10-28, latency: Scope: no Mission Control change. Before and after search times come from
+  one query on `on_demand_runs`, recorded in `docs/PLAN.md` and the changelog.
+- 2026-10-28, latency: A shared research pass (research once, write every item from it) waits
+  until after the launch; it needs its own eval.
 
 ---
 

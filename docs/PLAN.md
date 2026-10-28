@@ -1681,6 +1681,119 @@ the build. Committed and pushed on his word (`3765728` the code, `0cbcf4f` the r
 checks run passed and Vercel deployed it, and production's `/api/quota` still offers 2 a
 visitor until the window opens.
 
+### Faster live searches: every run at once (2026-10-28, planned)
+
+Vedant asked why a live search takes more than a minute, and for the architecture to be
+questioned. Measured from the Session 3 eval (111 quiz runs in `evals/results/`): one item takes
+about 17 s, of which the agent loop is a median 13.3 s (p90 23.0 s, about 4 model calls; the
+call that writes the answer alone is 6.1 s) and the Haiku verifier 3.3 s (Jev runs beside it in
+0.3 s). Model calls are about 90% of a run; tools and the bank are not the bottleneck. A search
+makes its items one at a time (decision 5 under "The web page makes whole topics"): about 70 s
+for the four of today's search, as that decision expected ("about 80 s in all"). Universal
+topics (on `session/explore`, 2026-10-28) makes six, so about 100 s, and the 3-minute cutoff
+would often leave out the HARD explanation.
+
+The order is one at a time only for the cost guard: each run reserves the most it can cost
+($0.17), so a search never reserves more than $0.17 at once and fits the $0.50 day. A real item
+costs a median $0.027 and at most $0.049 (agent plus verifier, the same 111 runs), so six come
+to about $0.17. The pre-call bound in `agent/loop.py`, not the reservation's size, is what keeps
+each run within its limit.
+
+Decided with Vedant in a grill-me session (2026-10-28), each the recommendation:
+
+1. **Timing:** built before the launch week, with a go/no-go on Sunday 1 November. If it is not
+   deployed and verified on the live site by then, the launch runs on the current version.
+2. **Runs per search:** six, on universal topics, which lands on `main` first; this work builds
+   on it. (Asked after the grill, as the open question in `docs/SESSIONS.md`.)
+3. **Cost guard:** every run of a search is reserved together when the search starts, each at
+   its evaluated $0.17, so a whole search reserves $1.02. The day's last search makes all its
+   items only when `usd_per_day` is at least (`searches_per_day` - 1) x $0.17 + $1.02, so the
+   daily caps go up: $1.55 for the usual 4 searches (was $0.50), and for the launch week $4.25
+   at 20 searches or $2.90 at 12, whichever November's budget settles (the section above). The
+   monthly caps do not change, and they hold whatever the reservation. Real spend per search
+   does not change; the daily caps only pace it.
+4. **When the caps cannot fit every run:** one database call reserves the runs in plan order
+   (the questions, easiest first, then the explanations, easiest first) until a cap refuses
+   one, and the rest are reported as not started, as now. The harder explanations are still
+   what a search cut short leaves out (the daily Curator makes them), and the month's budget is
+   still used to its last $0.17.
+5. **Play order:** the questions are played easiest first, as universal topics has them, even
+   when a harder one finishes first. (The grill first chose "the chosen level first" for the
+   four-run search; universal topics has no chosen level, so that no longer applies.)
+6. **Agent log:** one stream in the order things happen, each line tagged with its item (EASY Q,
+   HARD EXPL and so on) in place of a heading whenever the item changes, which interleaved
+   lines would repeat on almost every line. The log still follows its end.
+7. **Rate limits:** no new limit. A search is 6 runs at once, twice the Curator's 3 workers,
+   which built the bank without a recorded 429; with 20 searches a day overlaps are rare, and
+   the SDK retries a 429 three times. Vedant checks the account's tier in the Anthropic Console
+   before the go/no-go, and each live run logs how many 429s it met, so the launch shows it.
+8. **Verification:** every test with the scripted model and fake Jev, a headless Chrome drive
+   against the stub API (free), then 2 real searches locally and 1 on the live site after the
+   deploy, about $0.50 (the live one is one of Vedant's searches that day), each timed against
+   the one-at-a-time baseline.
+9. **Scope:** no Mission Control change. The before and after search times come from one query
+   on `on_demand_runs` (a search's last `finished_at` less its first `started_at`), recorded here
+   and in the changelog; a search-time tile can follow after 10 November.
+
+Decided from the code (Claude Code):
+- An additive migration, as 006 was: `begin_on_demand_search` reserves a search's runs in one
+  call under the same advisory lock, and `begin_on_demand_run` stays until the deploy, so a
+  rollback is only a Vercel revert. A later migration drops the old function. The number is the
+  next free one after universal topics' `009_universal_topics.sql`.
+- The rows keep their shape: the first run reserved has a null `search_id` and is the one the
+  search limits count, and the others point at it, so the quota and the stats queries do not
+  change.
+- With every run starting at about 1 s, `run_budget` always gives the full 120 s, so
+  `RUN_START_SECONDS`, `run_budget`, `_later_slot` and the "Time" log line are removed.
+  `SEARCH_SECONDS` stays, as the wait for the search's thread when the player leaves.
+- The search's thread runs one thread per reserved item, each emitting into the existing queue
+  and settling its own slot. The Anthropic and Jev clients are already shared across threads.
+
+Expected: a typical search ends in about 25 to 35 s (its slowest run) instead of about 100 s,
+the first question still comes at about 15 to 20 s, and the spend per search is unchanged. The
+explanations are not in the eval data, so their times are measured in the real searches.
+
+Deferred to after the launch: a shared research pass (research once, then the six items written
+in parallel from the cached sources). About as fast, about half the cost, and more consistent
+items, but a new agent path that needs its own eval (about $1 to $2, as in Session 3). It was
+turned down on 2026-10-08 for that reason, which still holds before the launch.
+
+Order of work: universal topics lands on `main` first, then November's budget is decided,
+because the launch week's daily cap here depends on it; both before 1 November. November's
+options above assume about $0.12 a search; with six items a search is about $0.17, so the same
+budget buys about 30% fewer searches, and its numbers need redoing when it is decided.
+
+Claude Code (next session, after universal topics and November's budget):
+- [ ] The migration and `supabase/schema.sql`: `begin_on_demand_search`, returning the ids
+      reserved and the limit that refused the rest.
+- [ ] `agent/store.py` and `agent/limits.py`: the new call, and the daily caps in decision 3.
+- [ ] `agent/ondemand.py`: every run reserved at the start, a thread per item, and the timing
+      logic above removed.
+- [ ] `agent/llm.py`: each run's 429 count, logged with its cost line.
+- [ ] `src/components/AgentLog.tsx`: tagged lines in place of the item headings.
+- [ ] Tests: the reservation in plan order and its partial fit, runs finishing out of order,
+      a run failing while the others finish, every slot settled when the player leaves, and the
+      log's tags. Then every check, the drive, and the 3 real searches.
+- [ ] Docs: `docs/DESIGN.md` (decision 9 and the `ondemand.py` line), `docs/DEVELOPMENT.md`,
+      decision 5 above marked "Changed 2026-10-28 by Vedant", the `CHANGELOG`, and the before and
+      after times.
+
+Vedant:
+- [ ] Check the account's rate-limit tier in the Anthropic Console.
+- [ ] Paste the migration into the Supabase SQL editor when it is ready.
+- [ ] The go/no-go on Sunday 1 November.
+
+Prompt for that session:
+
+> Read CLAUDE.md, docs/SESSIONS.md, docs/handoff/latency.md, docs/DESIGN.md and docs/PLAN.md.
+>
+> Build "Faster live searches: every run at once" in docs/PLAN.md, as decided there on
+> 2026-10-28, on top of universal topics. November's budget is already decided; use its
+> launch-week numbers for the daily cap. Explain the migration before writing it, run every
+> check, then ask me before each paid search. The go/no-go is on Sunday 1 November.
+>
+> Rules from CLAUDE.md apply: no emojis; complete files; commit only when I ask.
+
 ---
 
 ## Later - v2: Newsletter
@@ -1881,3 +1994,9 @@ tier), decided together with the newsletter's subscribers (Vedant, 2026-10-10).
   searches a visitor, 20 and $2.50 a day for everyone, the $4 month unchanged), dated in code so
   they end by themselves. 347 Python and 148 TypeScript tests. Nothing spent. Committed and
   pushed (`3765728`, `0cbcf4f`); deployed, with the usual limits in force until 3 November.
+- 2026-10-28 - Why a live search takes over a minute: its items run one at a time, about 17 s
+  each (measured from the Session 3 eval), only so a search never reserves more than $0.17.
+  Planned with Vedant in a grill-me session, for the six-item search of universal topics:
+  every run reserved at the start and run at once (about 25 to 35 s a search, from about
+  100 s), daily caps raised to fit, a tagged agent log, go/no-go on 1 November. Recorded
+  under "Faster live searches". Docs only. Nothing spent.
