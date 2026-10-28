@@ -14,7 +14,7 @@ A new session: `dev/new-session.sh <name>` (Git Bash) or `dev/new-session.ps1 <n
 
 | Session | Branch | Worktree path | Owns (files/dirs) | Status | Last update |
 | --- | --- | --- | --- | --- | --- |
-| latency | `session/latency` (made 2026-10-28 from `main`) | the main folder, `cosmic-quiz-agent` (`../cqa-latency` planned) | The live-search backend, the bank schema and the shared docs: see "latency owns" | Active | 2026-10-28 |
+| latency | `session/latency` | `../cqa-latency` | The live-search backend, the bank schema and the shared docs: see "latency owns" | Active | 2026-10-28 |
 | explore | `session/explore` (landed on `main`) | `../cqa-explore` | The Explore page's frontend: see "explore owns" | Done: universal topics and Surprise me are on `main`; follow-ups in `docs/handoff/explore.md` | 2026-10-28 |
 
 Both sessions were still running in the main folder on `main` when this file was written, so
@@ -76,6 +76,9 @@ split hunk by hunk:
    `agent/bank.py`, and hunks in `agent/ondemand.py` and `api/research.py`.
 3. **Docs from 2026-10-22** (the launch week's code review and November's budget):
    `docs/PLAN.md`, `docs/NEXT_SESSION.md`.
+
+Resolved 2026-10-28: universal topics and Surprise me are committed on `session/explore`, and
+the 2026-10-22 docs on `session/latency` (`289a0cd`). The main folder has no uncommitted work.
 
 ### Open questions for Vedant
 
