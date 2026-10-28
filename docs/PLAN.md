@@ -1740,6 +1740,57 @@ must be raised before 3 November. Once chosen, the build:
       cost line and decision 9) and the README (its spend cap and limits), and the `CHANGELOG`.
 - [ ] Vedant: the Console limit raised before 3 November, and back to $10 on 1 December.
 
+### Universal topics (2026-10-28)
+
+Vedant asked for three changes, decided in a grill-me session on 2026-10-28:
+
+1. **Every topic at every level.** Learn and Quiz showed different topics at each level. On
+   2026-10-28, LEARN had 38 / 31 / 31 topics at easy / medium / hard and QUIZ 39 / 31 / 27, so
+   27 of 44 topics missed a slot. A slot is a mode at a difficulty. There were two causes:
+   - a search on the web page made its explanation at one level only;
+   - the Curator never retried a job it had run once (`attempted_jobs`).
+2. **No difficulty on the web page.** Every search makes all three questions and all three
+   explanations.
+3. **Surprise me.** The agent picks a topic the bank does not have yet.
+
+Decisions (Vedant, on the recommended options):
+
+| Question | Decision |
+|---|---|
+| Visitor-typed rough names | Rename them, then fill. "Bang" duplicates "The Big Bang", so its runs and items move there and the empty topic is deleted |
+| Slots that cannot be filled | Learn and Quiz list a topic only when all 6 slots are published (`api/topics.py`). A slot gets 3 tries in all, from the Curator and live searches; runs that ended in `llm_error` do not count. The rest is reported |
+| Items in review | A slot with an item in review waits for the review queue and is not retried |
+| How the web page makes 6 items | One run at a time as before: the 3 questions, then the explanations, easiest first, until the 180-second start limit. The daily Curator makes the rest |
+| Limits | `runs_per_search` goes from 4 to 6, about $0.17 a search. Searches a day and the dollar caps are unchanged |
+| The daily Curator | Fills up to 6 missing slots first, oldest topic first, then its news topic while the $0.40 cap allows |
+| The one-off fill | `python -m curator complete`, capped at $3 |
+| Surprise me's topic | One Haiku call proposes up to 3 topics in a theme drawn at random in code (`agent/topic_pick.py`). Code takes the first valid name not in the bank |
+| Surprise me's guardrails | It counts as a search. The limits are read before the paid pick, and a failed pick counts nothing. It skips the on-topic check: visitors' custom topic names are kept out of its prompt, as in `curator/discover.py` |
+| The page | SURPRISE ME beside GO. After the questions, EASY / MEDIUM / HARD explanation tabs open on EASY. A level not made says the agent tries again overnight |
+
+Renames (migration 009): Meteroid to Meteoroids, Red light shift index to Redshift, Space Travel
+to Human spaceflight, Cosmic clouds to Interstellar clouds, Dark side of the moon to The far side
+of the Moon, Wormhole to Wormholes, Drake Equation to The Drake equation. Old Learn addresses for
+these topics change.
+
+This replaces "The web page makes whole topics" (Session 8): a search no longer has a chosen
+level.
+
+Built:
+
+- Migration 009:
+  - `missing_slots()`: every slot a listed topic lacks, with its tries and whether it waits in
+    review;
+  - `curator_runs.trigger` accepts `complete`;
+  - the renames and the merge.
+- `python -m curator complete`, and the daily finish step (`curator/__main__.py`,
+  `curator/pipeline.py`).
+- `BankTopic.complete`, with `/api/topics` listing complete topics only.
+- `plan_search` without a difficulty; `agent/topic_pick.py`; `/api/research` takes `{"topic"}` or
+  `{"surprise": true}`.
+- The web page's SURPRISE ME button and explanation tabs.
+- `f1934b0`, `1036a3f`, `27fa151`. 361 Python and 149 TypeScript tests.
+
 ### Faster live searches: every run at once (2026-10-28, planned)
 
 Vedant asked why a live search takes more than a minute, and for the architecture to be
@@ -2060,6 +2111,12 @@ tier), decided together with the newsletter's subscribers (Vedant, 2026-10-10).
   exception to hard rule 1). Recorded with both options ($20 with the Console at $27,
   recommended, or $12 with $19) under "The launch week's code review and November's budget";
   Vedant chooses at the start of the next session. Docs only. Nothing spent.
+- 2026-10-28 - Universal topics and Surprise me. A topic is listed on Learn and Quiz only once
+  both modes are published at every level. Live searches make all six items. A new
+  `python -m curator complete` fills the gaps (66 slots to retry, cap $3), and the daily run
+  fills up to six a day. SURPRISE ME lets the agent pick a topic the bank lacks. Migration 009
+  adds `missing_slots()`, tidies seven visitor-typed names and merges "Bang" into "The Big Bang".
+  361 Python and 149 TypeScript tests. Nothing spent before the fill.
 - 2026-10-28 - Why a live search takes over a minute: its items run one at a time, about 17 s
   each (measured from the Session 3 eval), only so a search never reserves more than $0.17.
   Planned with Vedant in a grill-me session, for the six-item search of universal topics:

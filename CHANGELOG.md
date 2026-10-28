@@ -4,6 +4,20 @@ What changed on the live site and in the repo since the README was rewritten for
 release. Everything before that, session by session with its decisions, checks and costs, is in
 [`docs/PLAN.md`](docs/PLAN.md).
 
+## 2026-10-28
+
+- **Every topic at every level.** Learn and Quiz now list a topic only once it has an
+  explanation and a question at easy, medium and hard, so each level offers the same topics.
+  The new `python -m curator complete` fills the gaps, and the daily run fills up to six a day.
+  Seven visitor-typed topic names were tidied, and "Bang" merged into "The Big Bang".
+  (`f1934b0`, `1036a3f`)
+- **Explore researches every level.** The difficulty control is gone: a search makes a question
+  and an explanation at each level, and after the questions the explanations open in EASY,
+  MEDIUM and HARD tabs. Whatever a search's time limit leaves out, the agent writes overnight.
+  (`27fa151`)
+- **Surprise me.** A button on Explore asks the agent to pick a topic the bank does not have yet,
+  then researches it. It uses one search, and a pick that fails counts nothing. (`27fa151`)
+
 ## 2026-10-21
 
 - **Launch week for the LinkedIn post.** For the UTC days 3 to 9 November 2026, each visitor
