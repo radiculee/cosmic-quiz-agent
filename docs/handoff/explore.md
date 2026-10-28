@@ -3,7 +3,7 @@
 Notes for the explore session (`docs/SESSIONS.md`). They replace `docs/NEXT_SESSION.md` for
 this session. Update them before finishing, and commit them on `session/explore`.
 
-Last update: 2026-10-28 (after the universal-topics and Surprise me commits)
+Last update: 2026-10-28 (after the browser check and one real Surprise me search)
 
 ## Current goal
 
@@ -60,42 +60,52 @@ Checks run in `../cqa-explore` with its own `.venv` on 2026-10-28, matching
 - `pnpm test`: 149 passed.
 - `pnpm build`: built.
 
-The browser check was cut short when the shared main folder changed branch mid-drive. Before it
-stopped, these passed:
+**Browser check, 2026-10-28 (later).** Headless Chrome drove `/explore` from `../cqa-explore`
+against a no-cost stub API: real bank reads, everything paid faked, and the sixth run cut off
+by a 5.9-second start limit. All 12 checks passed, with no console errors:
 
 - no difficulty control on `/explore`;
+- the empty-box hint names every level;
 - an old `?difficulty=` link fills only the topic;
-- SURPRISE ME puts the pick in the box and the log;
-- a pick skips the on-topic check.
+- SURPRISE ME puts the pick in the box and the log, with no on-topic check;
+- after the three questions, the explanations open on the EASY tab;
+- the MEDIUM tab shows its explanation;
+- the HARD tab says it was left out, why, and that the agent tries again overnight;
+- the agent log header names no level;
+- no sideways scroll at 390 px.
 
-One check failed and is unconfirmed: the empty-box hint should contain "explanations, easiest
-first". It may only have been read while the topics were still loading. These were not reached:
-answering the questions, the tabs, and the phone width.
+The earlier failed hint check was a timing artefact: it ran before the topics had loaded.
 
-Nothing has been spent: no paid run, no migration applied.
+**One real Surprise me search, 2026-10-28, run locally with Vedant's approval:**
+
+- **The pick:** "Solar eclipses", ready 5.5 s in.
+- **The order:** all six items made, one at a time: questions easy, medium, hard, then
+  explanations easy, medium, hard.
+- **Timing:** 175 s in all. The HARD explanation started at 116.7 s, inside the 180-second start
+  limit, but its agent alone took 55 s.
+- **Cost:** $0.150 on Anthropic, nothing on TypeSafe.
+- **The outcome: all six items went to review**, because Jev answered 401 on every run. The
+  `TYPESAFE_API_KEY` in the local `.env`, which this worktree copied, is refused. The live site's
+  key works: the 4 Red Dwarfs items from earlier that day passed Jev.
+- **Haiku's verdicts:** passed five of the six. The HARD explanation was borderline over a
+  totality-duration figure.
+
+The six items wait in review under the topic "Solar eclipses".
 
 ## Next
 
-1. **After Vedant lands the branch and applies migration 009**, run
-   `python -m curator complete` from this worktree's `.venv`. It asks before spending, and its
+1. **After Vedant lands the branch, applies migration 009 and fixes the TypeSafe key (step 2)**,
+   run `python -m curator complete` from this worktree's `.venv`. It asks before spending, and its
    cap is $3. Its closing report gives what is still missing; cross-check it with
    `select mode, difficulty, attempts, in_review from public.missing_slots();` and record the
    result here.
-2. **Browser check.** Re-run it in `../cqa-explore` once Vedant says the ports are free; only one
-   session at a time runs the dev servers. Use the no-cost stub API, described in Claude's memory
-   "drive-app-headless-chrome". Fake `run_learn`, `run_quiz`, `verify_and_decide`, the judge,
-   the picker (`Services.picker`), the limits store and `LiveResults`. Set
-   `ondemand.RUN_START_SECONDS` to about 4.5 so the sixth run is cut off. Check:
-   - no difficulty control, and the hint text;
-   - SURPRISE ME, then the three questions easiest first;
-   - "Read the explanations" opens on the EASY tab;
-   - the MEDIUM tab shows its explanation;
-   - the HARD tab says why it was left out and "The agent tries again overnight";
-   - no sideways scroll at 390 px.
-3. **One real Surprise me search locally** (about $0.17, after checking `/api/quota`), to confirm
-   the pick, the six-run order and the cutoff.
-4. **Update this session's row in `docs/SESSIONS.md`** once universal topics is on `main`.
-5. **Vedant's own files, if he agrees:**
+2. **Fix the local TypeSafe key first.** Vedant puts a working `TYPESAFE_API_KEY` in the main
+   folder's `.env` and copies it to `../cqa-explore/.env`. Then `python -m curator rejev`
+   re-runs Jev on the six Solar eclipses items (under a cent on TypeSafe, nothing on
+   Anthropic), and they publish or stay in review on their own merits. Run `complete` only
+   after this, or every item it makes goes to review.
+3. **Update this session's row in `docs/SESSIONS.md`** once universal topics is on `main`.
+4. **Vedant's own files, if he agrees:**
    - **`CLAUDE.md`, v1 bullets:** the web page becomes "a typed topic, or one the agent picks,
      researched live at every level". Add a bullet: "Every topic on Learn and Quiz exists at all
      three levels (changed 2026-10-28 by Vedant)."
@@ -109,6 +119,11 @@ Nothing has been spent: no paid run, no migration applied.
 
 - **Migration 009 is not applied.** Without it, `daily` and `complete` stop with a bank error,
   because `missing_slots()` does not exist. See "Before this is pushed".
+  - **Deadline:** the scheduled workflow runs the paid `daily` from 1 November (`DAILY_FROM` in
+    `.github/workflows/curator.yml`). Before then it runs the free `upkeep`. So 009 must be
+    applied by 1 November, or the first paid daily run fails.
+- **The local TypeSafe key is refused (401).** A local `complete` or live search sends every
+  item to review until it is replaced. See Next, step 2.
 - **Ownership.** Most of these files are latency's under `docs/SESSIONS.md`. The work was
   written before that file existed, and it was committed as one unit. Latency builds parallel
   search on top of it once it is on `main`. Explore makes no further edits to latency's files
@@ -238,7 +253,9 @@ Pushing `main` deploys the site, and the scheduled Curator runs from `main`. In 
      discards it; Red Dwarfs stays hidden until then.
    - The newest topics may change these counts by the time the migration runs.
 3. **Run `python -m curator complete`** after the migration, before the push if possible, so
-   the site does not lose 27 topics in the meantime.
+   the site does not lose 27 topics in the meantime. Run it only once the local
+   `TYPESAFE_API_KEY` works: on 2026-10-28 TypeSafe refused it (401), and with no Jev check every
+   item goes to review.
    - **What it costs:** 66 jobs, about $1.85 on Anthropic typical (32 x $0.027 + 34 x $0.029).
    - **The cap:** a hard cap of $3 (`COMPLETE_CAP_USD`), plus under $0.02 on TypeSafe. Each
      job reserves its $0.17 ceiling, so a run of bad luck stops at the cap, and the daily run
