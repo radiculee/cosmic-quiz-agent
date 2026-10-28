@@ -1851,6 +1851,27 @@ chose to raise October's limit by about $2, an exception to hard rule 1 for the 
 so live research and the Curator work again and the parallel-search real searches can run before
 the go/no-go on 1 November.
 
+With the limit raised, a second fill (`python -m curator complete --cap 1.20`, on Vedant's word)
+ran the 21 open slots for $0.578 on Anthropic and $0.0046 on TypeSafe: 8 published, 10 to review
+and 3 discarded. Vedant decided the 10 on Claude Code's reading: published 303 (FAST), 309
+(antimatter), 311 (JWST), 313 (meteoroids) and 315 (red dwarfs); discarded 297 (Mercury's slow
+rotation is also a real cause, so two answers hold), 299 (says Uranus's tilt causes its
+retrograde spin), 300 (shows "109 to 1011 T" for 10^9 to 10^11 tesla), 305 (dates the first
+Sagittarius A* image to 2023; it was May 2022) and 312 (calls an exotic scalar field
+non-exotic). The review queue is empty. `missing_slots()` now gives 8 slots on 7 topics, so 37
+of the 44 topics are on every level: 2 slots open to a retry (Black holes quiz hard, Wormholes
+learn hard), which the daily run takes, and 6 out of tries (The Sun and solar flares quiz hard,
+Mercury's extreme temperatures quiz medium, Uranus's tilted rotation quiz easy and hard,
+Magnetars learn hard, Open and globular star clusters quiz hard), which stay off Learn and Quiz
+until Vedant decides what to do with them.
+
+Found on the way: page text loses superscripts when fetched (`agent/tools/fetch.py` keeps the
+text of `<sup>` with no marker), so 10^9 reads as "109". It caused the discard of 300 and appears
+in other pages ("104 M☉"). Keeping `<sup>` as `^` is a small fix for a later session.
+
+All on the day of the push, 2026-10-28: about $2.30 on Anthropic (the two fills) and under $0.02
+on TypeSafe.
+
 ### Faster live searches: every run at once (2026-10-28, planned)
 
 Vedant asked why a live search takes more than a minute, and for the architecture to be
@@ -2200,3 +2221,9 @@ tier), decided together with the newsletter's subscribers (Vedant, 2026-10-10).
   discarded on Vedant's decisions (free). 21 slots on 16 topics remain, all open to a retry; 28
   of 44 topics are on every level. The Anthropic workspace reached its monthly limit during the
   fill; Vedant raises October's by about $2 (an exception to hard rule 1). Not pushed.
+- 2026-10-28 - A second fill for the 21 open slots ($0.578, capped at $1.20) and its 10 review
+  items decided (5 published, 5 discarded): 37 of 44 topics on every level, 2 slots to retry
+  and 6 out of tries. The fetched-page superscript problem found and recorded. `session/latency`
+  rebased onto the explore session's close (both sessions' rows and Decisions kept); 361 Python
+  and 149 TypeScript tests and every check pass; `main` fast-forwarded to it and pushed on
+  Vedant's word, deploying universal topics and Surprise me. Parallel search and November's budget are not built yet (steps 3 to 5).

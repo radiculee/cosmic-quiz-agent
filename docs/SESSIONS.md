@@ -14,7 +14,7 @@ A new session: `dev/new-session.sh <name>` (Git Bash) or `dev/new-session.ps1 <n
 
 | Session | Branch | Worktree path | Owns (files/dirs) | Status | Last update |
 | --- | --- | --- | --- | --- | --- |
-| latency | `session/latency` | `../cqa-latency` | The live-search backend, the bank schema and the shared docs: see "latency owns" | Active | 2026-10-28 |
+| latency | `session/latency` | `../cqa-latency` | The live-search backend, the bank schema and the shared docs: see "latency owns" | Paused: on `main` and pushed; parallel search and November's budget next (`docs/handoff/latency.md`) | 2026-10-28 |
 | explore | `session/explore` (landed on `main`) | `../cqa-explore` | The Explore page's frontend: see "explore owns" | Done: universal topics and Surprise me are on `main`; follow-ups in `docs/handoff/explore.md` | 2026-10-28 |
 
 Both sessions were still running in the main folder on `main` when this file was written, so
@@ -154,6 +154,10 @@ entry; record a reversal as a new one.
   back on 1 November 00:00 UTC). Vedant raises October's limit by about $2, a dated exception to
   hard rule 1, so live research, the Curator and the parallel-search real searches work before
   the go/no-go. The review queue is decided: 17 published, 9 discarded.
+- 2026-10-28, latency: The second fill's 10 review items decided (5 published, 5 discarded); the
+  queue is empty and 37 of 44 topics are on every level. Vedant asked to end the session clean
+  and push: `session/latency` rebased onto the explore close, `main` fast-forwarded and pushed.
+  Parallel search and November's budget (steps 3 to 5) continue in the next latency session.
 
 ---
 

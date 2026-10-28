@@ -17,6 +17,10 @@ release. Everything before that, session by session with its decisions, checks a
   (`27fa151`)
 - **Surprise me.** A button on Explore asks the agent to pick a topic the bank does not have yet,
   then researches it. It uses one search, and a pick that fails counts nothing. (`27fa151`)
+- **The bank filled for every level.** Two Curator runs and a re-check of the items the Jev
+  outage had held, each item in doubt read against its sources: 37 of the 44 topics now have an
+  explanation and a question at every level; 7 stay off Learn and Quiz until their last slot is
+  filled.
 
 ## 2026-10-21
 
