@@ -135,6 +135,16 @@ entry; record a reversal as a new one.
   one query on `on_demand_runs`, recorded in `docs/PLAN.md` and the changelog.
 - 2026-10-28, latency: A shared research pass (research once, write every item from it) waits
   until after the launch; it needs its own eval.
+- 2026-10-28, latency: November's budget, redone at about $0.17 a search (six items): option A.
+  The launch days (3 to 9 November) allow 14 searches a day for everyone (was 20), still 5 a
+  visitor, with a daily cap of $3.25 under the parallel cost guard. Live research has $20 for the
+  calendar month of November, ending by itself on 1 December. Vedant raises the Console limit to
+  $27 before 3 November and lowers it to $10 on 1 December. At full use the launch week costs
+  $18.02 with 1 and 2 November.
+- 2026-10-28, latency: Universal topics lands on `main` by Vedant (`git merge --ff-only
+  session/explore` in the main folder) once the explore session is done; latency then runs
+  `git rebase main`. The explore handoff's text for `docs/PLAN.md` and `CHANGELOG.md` is folded
+  in once that session has written it.
 
 ---
 
