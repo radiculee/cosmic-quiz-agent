@@ -117,3 +117,19 @@ Pixel accents are subtle texture: pixel-dashed borders (4px on / 4px off), 4x4px
 ## Reference code (portfolio repo, copy patterns only)
 
 - `Modernpersonalportfoliowebsite/api/contact.ts`: Vercel function style (web-standard Request/Response), env-secret handling, the Resend REST call and the branded dark HTML email template. Reuse it for v2.
+
+---
+
+## Parallel sessions
+
+Added 2026-10-28. Several Claude Code sessions can run at once, each in its own git worktree on a
+`session/<name>` branch (`dev/new-session.sh <name>` or `dev/new-session.ps1 <name>`). Ownership,
+decisions and the sync commands live in `docs/SESSIONS.md`.
+
+- **Before starting:** read `docs/SESSIONS.md` and your `docs/handoff/<session>.md`. Claim or update your row.
+- **Only edit files your session owns.** If you need a file another session owns, stop and ask Vedant.
+- **After any decision:** append it to Decisions in `docs/SESSIONS.md`.
+- **Commit small and often on your own branch.** Before finishing: `git fetch && git rebase origin/main`.
+- **Session notes** go in `docs/handoff/<session>.md`, not `docs/NEXT_SESSION.md`.
+- **Never run `git add -A`, `git stash` or `git reset --hard`:** other sessions may share files, and every worktree shares one stash list.
+- **Never stop a dev server you did not start.** Every worktree's site sends `/api` to port 8787, so one session at a time runs the dev servers.

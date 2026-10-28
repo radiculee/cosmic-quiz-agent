@@ -1,0 +1,2 @@
+# core.autocrlf is on for Windows checkouts; a shell script checked out with CRLF fails in bash.
+*.sh text eol=lf
