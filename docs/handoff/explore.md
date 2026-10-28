@@ -3,7 +3,7 @@
 Notes for the explore session (`docs/SESSIONS.md`). They replace `docs/NEXT_SESSION.md` for
 this session. Update them before finishing, and commit them on `session/explore`.
 
-Last update: 2026-10-28 (after the browser check and one real Surprise me search)
+Last update: 2026-10-28, session ended (landed on `main`, migration 009 applied)
 
 ## Current goal
 
@@ -94,18 +94,25 @@ The six items wait in review under the topic "Solar eclipses".
 
 ## Next
 
-1. **After Vedant lands the branch, applies migration 009 and fixes the TypeSafe key (step 2)**,
-   run `python -m curator complete` from this worktree's `.venv`. It asks before spending, and its
-   cap is $3. Its closing report gives what is still missing; cross-check it with
-   `select mode, difficulty, attempts, in_review from public.missing_slots();` and record the
-   result here.
-2. **Fix the local TypeSafe key first.** Vedant puts a working `TYPESAFE_API_KEY` in the main
-   folder's `.env` and copies it to `../cqa-explore/.env`. Then `python -m curator rejev`
-   re-runs Jev on the six Solar eclipses items (under a cent on TypeSafe, nothing on
-   Anthropic), and they publish or stay in review on their own merits. Run `complete` only
-   after this, or every item it makes goes to review.
-3. **Update this session's row in `docs/SESSIONS.md`** once universal topics is on `main`.
-4. **Vedant's own files, if he agrees:**
+State when the session ended (2026-10-28, about 01:10 UTC):
+
+- **Branch:** universal topics and Surprise me are on `main`, and the branch is not pushed.
+- **Migration 009:** applied and checked. `missing_slots()` gave 67 slots on 27 topics, and the
+  eight old names are gone.
+- **A `complete` run** was in progress, started at 01:05 UTC under the $3 cap. It was not
+  started by this session. Its first 12 items were 9 in review (Jev error, the 401 below) and
+  3 discarded.
+- **The TypeSafe key:** another session was replacing the local `TYPESAFE_API_KEY`.
+
+1. **When the key works**, run `python -m curator rejev`. It re-runs Jev on every item held only
+   because of the Jev error, from the pages stored with each run: the six Solar eclipses items,
+   and the `complete` run's review items. It costs under a cent on TypeSafe and nothing on
+   Anthropic, and the gate rule then publishes or keeps each item on its own merits.
+2. **Then check what is still missing:**
+   `select topic, mode, difficulty, attempts, in_review from public.missing_slots();`. Run
+   `python -m curator complete` again for the slots still under 3 tries, and use
+   `python -m curator review` for those in review.
+3. **Vedant's own files, if he agrees:**
    - **`CLAUDE.md`, v1 bullets:** the web page becomes "a typed topic, or one the agent picks,
      researched live at every level". Add a bullet: "Every topic on Learn and Quiz exists at all
      three levels (changed 2026-10-28 by Vedant)."
@@ -117,13 +124,10 @@ The six items wait in review under the topic "Solar eclipses".
 
 ## Blockers
 
-- **Migration 009 is not applied.** Without it, `daily` and `complete` stop with a bank error,
-  because `missing_slots()` does not exist. See "Before this is pushed".
-  - **Deadline:** the scheduled workflow runs the paid `daily` from 1 November (`DAILY_FROM` in
-    `.github/workflows/curator.yml`). Before then it runs the free `upkeep`. So 009 must be
-    applied by 1 November, or the first paid daily run fails.
 - **The local TypeSafe key is refused (401).** A local `complete` or live search sends every
-  item to review until it is replaced. See Next, step 2.
+  item to review until it is replaced. See Next, step 1.
+- **`docs/PLAN.md` and `CHANGELOG.md` are not updated yet.** Latency owns them and has been asked
+  to fold in the text below.
 - **Ownership.** Most of these files are latency's under `docs/SESSIONS.md`. The work was
   written before that file existed, and it was committed as one unit. Latency builds parallel
   search on top of it once it is on `main`. Explore makes no further edits to latency's files
@@ -236,7 +240,7 @@ And a line for "## Session log":
 
 Pushing `main` deploys the site, and the scheduled Curator runs from `main`. In order:
 
-1. **Run migration 009 in the Supabase SQL editor.** Paste
+1. **Run migration 009 in the Supabase SQL editor.** Done, and checked on 2026-10-28. Paste
    `supabase/migrations/009_universal_topics.sql` and run it once; it is safe to run again.
    - **Before it:** `python -m curator daily` and `complete` stop with a bank error, so the
      scheduled run would fail every day and add no news topic.

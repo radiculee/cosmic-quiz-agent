@@ -15,7 +15,7 @@ A new session: `dev/new-session.sh <name>` (Git Bash) or `dev/new-session.ps1 <n
 | Session | Branch | Worktree path | Owns (files/dirs) | Status | Last update |
 | --- | --- | --- | --- | --- | --- |
 | latency | `session/latency` (not made yet; works on `main`) | `../cqa-latency` (planned; now in the main folder, `cosmic-quiz-agent`) | The live-search backend, the bank schema and the shared docs: see "latency owns" | Active | 2026-10-28 |
-| explore | `session/explore` (not made yet; works on `main`) | `../cqa-explore` (planned; now in the main folder, `cosmic-quiz-agent`) | The Explore page's frontend: see "explore owns" | Active | 2026-10-28 |
+| explore | `session/explore` (landed on `main`) | `../cqa-explore` | The Explore page's frontend: see "explore owns" | Done: universal topics and Surprise me are on `main`; follow-ups in `docs/handoff/explore.md` | 2026-10-28 |
 
 Both sessions were still running in the main folder on `main` when this file was written, so
 until they move, their uncommitted changes share one working tree ("Uncommitted work" below).
@@ -103,6 +103,16 @@ entry; record a reversal as a new one.
 - 2026-10-28, latency: When the day's budget cannot fit all of a search's runs, reserve what fits
   in plan order (the chosen-level question, the other questions, the explanation); the rest are
   reported as "not started".
+- 2026-10-28, explore: Universal topics and Surprise me (Vedant, grill-me session), on `main`:
+  - Learn and Quiz list a topic only when it has every level in both modes.
+  - A slot gets 3 tries; a slot with an item in review waits for the review queue.
+  - Explore has no difficulty and makes all six items.
+  - `runs_per_search` is 6, with the dollar caps unchanged.
+  - `python -m curator complete` fills the gaps under a $3 cap; `daily` fills 6 slots a day
+    before its news topic.
+  - SURPRISE ME is a Haiku pick that counts as a search and skips Jev.
+  - Seven visitor-typed names were tidied, and "Bang" merged into "The Big Bang".
+  - The full list is in `docs/handoff/explore.md`.
 
 ---
 
