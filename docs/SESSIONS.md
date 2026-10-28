@@ -87,6 +87,7 @@ the 2026-10-22 docs on `session/latency` (`289a0cd`). The main folder has no unc
   six". These cannot both hold; the cost guard needs one number. Answered 2026-10-28: six (see
   Decisions).
 - **Migration 009** cites `docs/PLAN.md` "Universal topics", and PLAN.md has no such section yet.
+  Answered 2026-10-28: the section is in `docs/PLAN.md` on `session/latency` (`30fafd2`).
 - **Dev servers.** `vite.config.ts` sends `/api` to port 8787 for every worktree, so two
   worktrees cannot run the site against their own API at once. Until that changes, one session
   at a time runs the dev servers, and no session stops a server it did not start.
@@ -145,6 +146,10 @@ entry; record a reversal as a new one.
   session/explore` in the main folder) once the explore session is done; latency then runs
   `git rebase main`. The explore handoff's text for `docs/PLAN.md` and `CHANGELOG.md` is folded
   in once that session has written it.
+- 2026-10-28, latency: Done. Universal topics landed on `main` by fast-forward to `19e2640`
+  (run by Claude Code on Vedant's word; not pushed), and Vedant applied migration 009; the live
+  bank shows 67 missing slots in 27 topics, as counted. `session/latency` rebased onto it, and
+  the explore text is folded into `docs/PLAN.md` and `CHANGELOG.md` (`30fafd2`).
 
 ---
 

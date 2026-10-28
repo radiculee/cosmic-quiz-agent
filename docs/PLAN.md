@@ -1740,6 +1740,23 @@ must be raised before 3 November. Once chosen, the build:
       cost line and decision 9) and the README (its spend cap and limits), and the `CHANGELOG`.
 - [ ] Vedant: the Console limit raised before 3 November, and back to $10 on 1 December.
 
+Decided by Vedant on 2026-10-28: option A, with the numbers redone for the six-item search of
+universal topics (about $0.17 a search, not $0.12). At $0.17 the old $20 option would run out
+around 8 November if every launch search were used, so the launch day count comes down:
+
+- The launch days (3 to 9 November): 14 searches a day for everyone (was 20), still 5 a
+  visitor, and a daily cap of $3.25 (it fits the parallel cost guard of "Faster live searches"
+  below; it does not limit the one-at-a-time search either).
+- $20 for live research for the calendar month of November, ending by itself on 1 December.
+- The Console limit at $27 for November ($20 + about $5 for the Curator + $2 spare), raised by
+  Vedant before 3 November and back to $10 on 1 December.
+- At full use, 1 and 2 November ($1.36) and the launch week ($16.66) come to $18.02, so the
+  launch never pauses; live research could pause later in November if the launch used it all.
+  Live research spent $0.07 in all of October, so these are ceilings.
+
+The build list above stands, with these numbers in place of the launch week's 20 and $2.50.
+Not built yet.
+
 ### Universal topics (2026-10-28)
 
 Vedant asked for three changes, decided in a grill-me session on 2026-10-28:
@@ -1790,6 +1807,13 @@ Built:
   `{"surprise": true}`.
 - The web page's SURPRISE ME button and explanation tabs.
 - `f1934b0`, `1036a3f`, `27fa151`. 361 Python and 149 TypeScript tests.
+
+Landed on `main` on 2026-10-28 by fast-forward to `19e2640` (with the explore session's
+handoff), run by Claude Code on Vedant's word; not pushed. Vedant applied migration 009 in the
+Supabase SQL editor the same day. Checked read-only from the live bank afterwards:
+`missing_slots()` gives 67 slots (32 explanations, 35 questions) in 27 topics, 66 of them open
+to a retry and 1 waiting in review, and "Bang" and "Meteroid" are gone ("The Big Bang" and
+"Meteoroids" remain), exactly as counted before the migration.
 
 ### Faster live searches: every run at once (2026-10-28, planned)
 
@@ -2123,3 +2147,12 @@ tier), decided together with the newsletter's subscribers (Vedant, 2026-10-10).
   every run reserved at the start and run at once (about 25 to 35 s a search, from about
   100 s), daily caps raised to fit, a tagged agent log, go/no-go on 1 November. Recorded
   under "Faster live searches". Docs only. Nothing spent.
+- 2026-10-28 - Parallel sessions, and universal topics landed. The latency session moved to
+  its own worktree (`../cqa-latency`, `session/latency`) and committed the 2026-10-22 docs
+  there. November's budget redone at about $0.17 a search and decided by Vedant: option A (14
+  launch searches a day, $3.25 a day, $20 for November, the Console at $27). Universal topics
+  landed on `main` by fast-forward (`19e2640`) on Vedant's word, and Vedant applied migration
+  009: the live bank shows the 67 missing slots in 27 topics as counted. `session/latency`
+  rebased onto it with no conflicts; 361 Python and 149 TypeScript tests and every check pass.
+  The explore session's text folded into this plan and the changelog. Docs only. Nothing spent;
+  nothing pushed.
