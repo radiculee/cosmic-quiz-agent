@@ -11,7 +11,7 @@ from wsgiref.util import setup_testing_defaults
 import httpx2
 import pytest
 
-from agent.bank import BankReader, _ItemIndexRow, summarize
+from agent.bank import BankReader, BankTopic, _ItemIndexRow, summarize
 from agent.limits import LIMITS, REPORTS_MESSAGE, RequestCount
 from agent.rest import PAGE_SIZE, RestClient, StoreError
 from agent.store import SupabaseStore
@@ -74,6 +74,25 @@ def test_reads_page_through_more_than_one_reply() -> None:
     assert [t.name for t in found] == ["Quasars"]
 
 
+def test_topic_names_reads_every_visible_topic_whatever_its_levels() -> None:
+    seen: list[httpx2.Request] = []
+
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        seen.append(request)
+        return httpx2.Response(
+            200, json=[{"name": "Wormholes", "kind": "custom"}, {"name": "Auroras", "kind": "news"}]
+        )
+
+    client = httpx2.Client(transport=httpx2.MockTransport(handler))
+    rest = RestClient(BASE, "sb_publishable_test", client=client, retry_backoff_seconds=0.0)
+
+    names = BankReader(rest).topic_names()
+
+    assert names == [("Wormholes", "custom"), ("Auroras", "news")]
+    assert seen[0].url.path == "/rest/v1/topics"
+    assert seen[0].url.params["select"] == "name,kind"
+
+
 def test_reader_needs_the_publishable_key(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("SUPABASE_URL", BASE)
     monkeypatch.delenv("SUPABASE_PUBLISHABLE_KEY", raising=False)
@@ -91,20 +110,33 @@ class FakeReader:
     def __exit__(self, *_: object) -> None:
         return None
 
-    def topics(self) -> list[object]:
+    def topics(self) -> list[BankTopic]:
         if self.fail:
             raise StoreError("down")
-        return [summarize([row("Quasars", "quiz", "easy")])[0]]
+        return summarize([*EVERY_LEVEL, row("Quasars", "quiz", "easy")])
 
 
-def test_topics_endpoint_answers_with_a_cacheable_list(monkeypatch: pytest.MonkeyPatch) -> None:
+LEVELS = ("easy", "medium", "hard")
+EVERY_LEVEL = [row("Auroras", mode, level) for mode in ("learn", "quiz") for level in LEVELS]
+
+
+def test_a_topic_is_complete_only_with_both_modes_at_every_level() -> None:
+    assert summarize(EVERY_LEVEL)[0].complete
+    for missing in range(len(EVERY_LEVEL)):
+        rows = EVERY_LEVEL[:missing] + EVERY_LEVEL[missing + 1 :]
+        assert not summarize(rows)[0].complete
+
+
+def test_topics_endpoint_lists_complete_topics_only(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(BankReader, "from_env", classmethod(lambda cls: FakeReader()))
 
     response = topics.handle(ApiRequest(method="GET", path="/api/topics"))
 
     assert response.status == 200
     assert response.body == {
-        "topics": [{"name": "Quasars", "kind": "evergreen", "learn": [], "quiz": ["easy"]}]
+        "topics": [
+            {"name": "Auroras", "kind": "evergreen", "learn": list(LEVELS), "quiz": list(LEVELS)}
+        ]
     }
     assert response.headers["Cache-Control"] == "public, s-maxage=300"
 

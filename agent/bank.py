@@ -34,6 +34,12 @@ class BankTopic(BaseModel):
     learn: list[Difficulty]
     quiz: list[Difficulty]
 
+    @property
+    def complete(self) -> bool:
+        """Whether both modes are at every difficulty: only such a topic is listed on Learn and
+        Quiz (decided 2026-10-28), so every level has the same topics."""
+        return all(set(DIFFICULTY_ORDER) <= set(found) for found in (self.learn, self.quiz))
+
 
 class _TopicColumns(BaseModel):
     name: str
@@ -54,6 +60,7 @@ class _NameRow(BaseModel):
 
 
 _NAME_ROWS = TypeAdapter(list[_NameRow])
+_TOPIC_ROWS = TypeAdapter(list[_TopicColumns])
 _ID_ROWS = TypeAdapter(list[object])
 
 
@@ -358,6 +365,14 @@ class BankReader:
             if row.name.casefold() == wanted:
                 return row.name
         return None
+
+    def topic_names(self) -> list[tuple[str, TopicKind]]:
+        """Every topic with a published item, newest first, whatever levels it has: what a
+        Surprise me pick must not repeat (agent/topic_pick.py)."""
+        rows = self._rest.read_all(
+            "/topics", {"select": "name,kind", "order": "created_at.desc,id.desc"}
+        )
+        return [(row.name, row.kind) for row in parse(_TOPIC_ROWS, rows, "reading topic names")]
 
     def coverage(self, topic: str) -> BankTopic | None:
         """Where the bank can already serve this topic (its exact name): the difficulties with
