@@ -27,8 +27,13 @@ Decisions in `docs/SESSIONS.md`.
   from `session/explore` on 2026-10-28. Not pushed: `origin/main` is still `81c05d1`, so the live
   site does not have it yet.
 - **Migration 009 is applied** on the live bank (Vedant, 2026-10-28). Read-only check:
-  `missing_slots()` gives 67 slots in 27 topics (66 open to a retry, 1 in review); "Bang" and
+  `missing_slots()` gave 67 slots in 27 topics (66 open to a retry, 1 in review); "Bang" and
   "Meteroid" are gone.
+- **The fill ran** (`curator complete`, $1.717 on Anthropic) while TypeSafe rejected the old
+  Jev key (HTTP 401), so it published nothing. Vedant issued a new key, now `TYPESAFE_API_KEY`
+  in all three local `.env` files (the main folder, `../cqa-latency`, `../cqa-explore`), and
+  `curator rejev` ($0.0137) published 35 items. Now: 38 slots missing on 22 topics, 26 in
+  review and 12 open to a retry. Details in `docs/PLAN.md` under "Universal topics".
 - **`session/latency`** is `main` plus docs only: the plan (`665c11c`), the 2026-10-22 review and
   November's budget (`e42e710`), the worktree move (`fee2180`), the first handoff (`a41f51b`),
   November's decision (`9981aa2`), the explore text folded into `docs/PLAN.md` and `CHANGELOG.md`
@@ -69,9 +74,12 @@ The plan's steps, with 1 (rebase) and 2 (the explore text) done:
 ## Blockers and things to watch
 
 - **Before `main` is pushed** (Vedant's call; pushing deploys and the scheduled Curator runs
-  from `main`): `python -m curator complete` (about $1.85, capped at $3; the explore session's
-  step) so Learn and Quiz do not hide 27 topics, and the explore session's unfinished browser
-  check (`docs/handoff/explore.md`, Next 2).
+  from `main`), so Learn and Quiz hide as few topics as possible:
+  - the review queue, `python -m curator review` (26 items; free; Vedant decides each, Claude
+    Code reads each against its sources and recommends, as on 2026-10-21);
+  - the 12 open slots: another `curator complete` (about $0.35) or the daily run, 6 a day;
+  - the new `TYPESAFE_API_KEY` in Vercel (production) and the GitHub Actions secrets (Vedant);
+  - the explore session's unfinished browser check (`docs/handoff/explore.md`, Next 2).
 - **The explore browser check** sets `ondemand.RUN_START_SECONDS`, which step 4 removes. It
   should run before step 4 lands on `main`, or be planned without it.
 - Vedant: check the account's rate-limit tier in the Anthropic Console before 1 November; raise

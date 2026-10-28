@@ -1815,6 +1815,19 @@ Supabase SQL editor the same day. Checked read-only from the live bank afterward
 to a retry and 1 waiting in review, and "Bang" and "Meteroid" are gone ("The Big Bang" and
 "Meteoroids" remain), exactly as counted before the migration.
 
+The fill, on Vedant's word the same day (`python -m curator complete`, run from
+`../cqa-latency`): 66 jobs for $1.717 on Anthropic (cap $3), but 0 published, 56 to review, 6
+discarded and 4 without an item, because TypeSafe rejected the API key (HTTP 401) on every Jev
+check. Jev last worked at 00:37 UTC and failed from 00:59; a Jev error sends an item to review
+under `all_must_pass`. Vedant issued a new key; it was tested with one on-topic check
+($0.000022) and put in place of the old one in the three local `.env` files. Then
+`python -m curator rejev` re-checked the 62 items waiting on a failed Jev check, for $0.0137 on
+TypeSafe and nothing on Anthropic: 35 published, 25 still in review (21 that Jev passed but the
+Haiku verifier doubted, 4 Jev borderline) and 2 discarded. Afterwards `missing_slots()` gives 38
+slots on 22 topics: 26 waiting in review and 12 open to a retry. Still to do: the review queue
+(`python -m curator review`, free), the 12 retries, and the new key in Vercel and the GitHub
+Actions secrets (Vedant), before the push.
+
 ### Faster live searches: every run at once (2026-10-28, planned)
 
 Vedant asked why a live search takes more than a minute, and for the architecture to be
@@ -2156,3 +2169,7 @@ tier), decided together with the newsletter's subscribers (Vedant, 2026-10-10).
   rebased onto it with no conflicts; 361 Python and 149 TypeScript tests and every check pass.
   The explore session's text folded into this plan and the changelog. Docs only. Nothing spent;
   nothing pushed.
+- 2026-10-28 - The universal-topics fill: `curator complete` spent $1.717 on Anthropic and
+  published nothing, because TypeSafe rejected the Jev key (HTTP 401) from 00:59 UTC. With
+  Vedant's new key, `curator rejev` ($0.0137 on TypeSafe) published 35 of the 62 items waiting
+  on Jev. 38 slots on 22 topics are still missing: 26 in review, 12 to retry. Not pushed.
