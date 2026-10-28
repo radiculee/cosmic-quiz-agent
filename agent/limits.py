@@ -3,9 +3,10 @@
 The counting happens in the database (migrations 004 and 006) so it holds across serverless
 instances; the numbers are passed in from here, so they live in reviewed code.
 
-Since 2026-10-08 a live search on the web page makes up to four items, one agent run at a time.
-The daily limits count searches; the dollar caps count every run, each reserving the most it
-can cost until it ends.
+Since 2026-10-08 a live search on the web page makes a whole topic, one agent run at a time: up
+to six items since 2026-10-28 (a question and an explanation at each level). The daily limits
+count searches; the dollar caps count every run, each reserving the most it can cost until it
+ends.
 """
 
 from __future__ import annotations
@@ -32,8 +33,11 @@ class LimitSettings(BaseModel):
     user_searches_per_day: int = Field(default=2, gt=0)
     # All visitors together. Changed 2026-10-08 from 10 live runs: a search costs about $0.12.
     searches_per_day: int = Field(default=4, gt=0)
-    # The items a search can make: the explanation and a question at each of the three levels.
-    runs_per_search: int = Field(default=4, gt=0)
+    # The items a search can make: a question and an explanation at each of the three levels
+    # (changed 2026-10-28 from 4, the explanation at one level). About $0.17 for all six; the
+    # dollar caps are unchanged, so a day's budget covers fewer whole searches, and the daily
+    # Curator makes what a cap or the clock leaves out.
+    runs_per_search: int = Field(default=6, gt=0)
     # Every run reserves the most it can cost until it ends, so the dollar caps hold even while
     # runs are in flight. The monthly ceiling leaves room for the daily Curator (about $5 a
     # month) under the $10 Anthropic limit. A run starts only if today's spend plus its

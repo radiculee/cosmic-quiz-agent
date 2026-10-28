@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { ApiError, fetchItem, streamResearch } from "../api";
+import { ApiError, fetchItem, type ResearchRequest, streamResearch } from "../api";
 import { AgentLog, type LogLine, type LogOutcome } from "../components/AgentLog";
-import { Dropdown } from "../components/Dropdown";
 import { LearnCard } from "../components/LearnCard";
 import { Link } from "../components/Link";
 import { QuizCard } from "../components/QuizCard";
+import { SegmentedControl } from "../components/SegmentedControl";
 import { TopicInput } from "../components/TopicInput";
 import { type AnswerScore, scoreAnswer } from "../game";
 import { isPlainObject } from "../guards";
@@ -17,7 +17,8 @@ import {
   ended,
   type ExplanationLock,
   explanationLock,
-  explanationSlot,
+  explanationSlots,
+  firstReady,
   fromPlan,
   itemLabel,
   madeAnything,
@@ -60,14 +61,15 @@ interface LiveLog {
   /** A new log per search, so the panel and its timer start afresh. */
   id: number;
   topic: string;
-  difficulty: Difficulty;
   lines: LogLine[];
   outcome: LogOutcome | null;
 }
 
-function isDifficulty(value: string | null): value is Difficulty {
-  return (DIFFICULTIES as readonly (string | null)[]).includes(value);
-}
+/** The log's title until the agent has picked a topic. */
+const SURPRISE_TOPIC = "Surprise me";
+/** Under an explanation the search did not make: what happens next (decided 2026-10-28). */
+const MADE_OVERNIGHT =
+  "The agent tries again overnight, and the topic joins Learn and Quiz once every level is ready.";
 
 const ENDED_EARLY = "The search ended before this was made.";
 const UNAVAILABLE = "Live research is not available right now.";
@@ -82,20 +84,23 @@ function openedHere(state: unknown): boolean {
 
 /**
  * The web page: a search researches a topic live and makes the whole of it, one agent run at a
- * time: a question at each level, the chosen level first, then the explanation at the chosen
- * level (docs/PLAN.md Session 8, "The web page makes whole topics"; the order changed on
- * 2026-10-10). Steps stream as an agent log; each question is shown as it is ready, with its
- * sources and source check once answered. The explanation sits behind a button that opens only
- * once every question has been answered, so it can never give an answer away; reading it counts
- * towards Explorer. What the bank already has is shown alongside, free, and a topic the bank has
- * in full uses no search. Each visitor has 2 searches a day (5 in the launch week; the
- * quota comes from /api/quota).
+ * time: a question at each level, then an explanation at each level, easiest first (docs/PLAN.md
+ * "Universal topics", 2026-10-28; there is no level to choose). SURPRISE ME asks the agent to
+ * pick a topic the bank does not have yet, then runs the same search. Steps stream as an agent
+ * log; each question is shown as it is ready, with its sources and source check once answered.
+ * The explanations sit behind a button that opens only once every question has been answered,
+ * so they can never give an answer away; then a tab per level shows each one, and reading one
+ * counts towards Explorer. What a search did not make, the daily Curator makes overnight. What
+ * the bank already has is shown alongside, free, and a topic the bank has in full uses no
+ * search. Each visitor has 2 searches a day (5 in the launch week; the quota comes from
+ * /api/quota).
  *
  * The window scrolls only when the player asks for it: GO, moving to the next question (only if
- * it starts off screen) and opening the explanation. The agent log scrolls its own box.
+ * it starts off screen) and opening the explanations. The agent log scrolls its own box.
  *
- * The address can carry the form's values (`?topic=...&difficulty=...`, from the Learn page's
- * "research it live" link); it only fills the form, so a link can never spend a search.
+ * The address can carry a topic (`?topic=...`, from the Learn page's "research it live" link);
+ * it only fills the form, so a link can never spend a search. An old link's `difficulty` is
+ * ignored.
  *
  * "Mission Control" opens over the page at /explore/stats (`statsOpen`). The page stays
  * mounted under it, so a search keeps streaming while the panel is open.
@@ -106,28 +111,21 @@ export function ExplorePage({
   profile,
   updateProfile,
   celebrate,
-  difficulty,
-  setDifficulty,
   statsOpen,
 }: PageProps & { statsOpen: boolean }) {
   usePageTitle(statsOpen ? "Mission Control" : "Explore");
   const location = useLocation();
-  const [initial] = useState(() => {
-    const params = location.searchParams;
-    const level = params.get("difficulty");
-    return {
-      // As long as the server accepts (api/research.py); the hint asks for less than that.
-      topic: (params.get("topic") ?? "").slice(0, 200),
-      difficulty: isDifficulty(level) ? level : null,
-    };
-  });
-  const [query, setQuery] = useState(initial.topic);
+  // As long as the server accepts (api/research.py); the hint asks for less than that.
+  const [query, setQuery] = useState(() =>
+    (location.searchParams.get("topic") ?? "").slice(0, 200),
+  );
   const [search, setSearch] = useState<Search | null>(null);
   const [log, setLog] = useState<LiveLog | null>(null);
   const [streaming, setStreaming] = useState(false);
   const [questionAt, setQuestionAt] = useState(0);
   const [answered, setAnswered] = useState<ReadonlySet<number>>(new Set());
   const [explanationOpen, setExplanationOpen] = useState(false);
+  const [explanationLevel, setExplanationLevel] = useState<Difficulty>("easy");
   const [quotaState, refreshQuota] = useQuota();
   const request = useRef<AbortController | null>(null);
   const viewRef = useRef<HTMLDivElement>(null);
@@ -155,12 +153,6 @@ export function ExplorePage({
     }
   }
 
-  useEffect(() => {
-    if (initial.difficulty) {
-      setDifficulty(initial.difficulty);
-    }
-  }, [initial.difficulty, setDifficulty]);
-
   // Leaving the page closes the stream (the server still finishes and stores the search) and
   // shows anything still held back.
   useEffect(
@@ -175,7 +167,7 @@ export function ExplorePage({
   );
 
   const topics = loadedTopics(topicsState);
-  const status = searchStatus(topics, query, difficulty);
+  const status = searchStatus(topics, query);
   const suggestions = useMemo(() => suggestAny(topics, query), [topics, query]);
   const quota = quotaState.kind === "loaded" ? quotaState.quota : null;
   const typed = query.trim().length;
@@ -190,6 +182,7 @@ export function ExplorePage({
     (status.kind === "complete" ||
       status.kind === "partial" ||
       (status.kind === "new" && liveAllowed));
+  const canSurprise = !streaming && liveAllowed;
 
   const questions = search ? questionSlots(search) : [];
   const current = nextOpen(questions, questionAt);
@@ -203,7 +196,8 @@ export function ExplorePage({
   useEffect(() => {
     awaitingAnswer.current = awaiting;
   }, [awaiting]);
-  const explanation = search ? explanationSlot(search) : undefined;
+  const explanations = search ? explanationSlots(search) : [];
+  const shownExplanation = explanations.find((slot) => slot.difficulty === explanationLevel);
   const lock = search ? explanationLock(search, answered) : undefined;
 
   // The next question, once the player moves on, if it starts off screen (after a long answer it
@@ -256,8 +250,9 @@ export function ExplorePage({
     }
   }
 
-  function research(topic: string) {
-    const level = difficulty;
+  /** A search for `topic`, or for one the agent picks when it is null (SURPRISE ME). */
+  function research(topic: string | null) {
+    const asked: ResearchRequest = topic === null ? { surprise: true } : { topic };
     const signal = newRequest();
     const searchId = Date.now();
     const patch = (change: (s: Search) => Search) =>
@@ -275,7 +270,8 @@ export function ExplorePage({
     setQuestionAt(0);
     setAnswered(new Set());
     setExplanationOpen(false);
-    setLog({ id: searchId, topic, difficulty: level, lines: [], outcome: null });
+    setExplanationLevel("easy");
+    setLog({ id: searchId, topic: topic ?? SURPRISE_TOPIC, lines: [], outcome: null });
     setStreaming(true);
     viewRef.current?.scrollIntoView({ behavior: scrollBehavior(), block: "start" });
 
@@ -293,6 +289,9 @@ export function ExplorePage({
         case "plan": {
           const planned = fromPlan(searchId, event.topic, event.items);
           setSearch(planned);
+          if (topic === null) {
+            setQuery(event.topic); // the agent's pick, so the box says what is being researched
+          }
           if (event.items.some((item) => item.source === "live")) {
             setLog((l) => (l ? { ...l, topic: event.topic } : l));
           } else {
@@ -342,7 +341,7 @@ export function ExplorePage({
       }
     };
 
-    streamResearch(topic, level, onEvent, signal)
+    streamResearch(asked, onEvent, signal)
       .catch((error: unknown) => {
         if (signal.aborted) {
           return;
@@ -368,6 +367,12 @@ export function ExplorePage({
     }
   }
 
+  function surprise() {
+    if (canSurprise) {
+      research(null);
+    }
+  }
+
   /** One question on its own: scored like a quiz answer, with no streak and no run. */
   function onAnswered(question: QuizQuestion, correct: boolean, seconds: number): AnswerScore {
     const streak = correct ? 1 : 0;
@@ -382,19 +387,33 @@ export function ExplorePage({
     return score;
   }
 
-  /** The explanation, once its lock is open. Reading it counts towards Explorer. */
+  /** Reading an explanation counts towards Explorer (once per item, see afterLearn). */
+  function read(slot: Slot | undefined) {
+    if (slot?.state.kind === "ready") {
+      const item = slot.state.item;
+      award(updateProfile((p) => afterLearn(p, item.id, item.topic)));
+    }
+  }
+
+  /** The explanations, once their lock is open, starting on the easiest one that is ready. */
   function openExplanation() {
-    if (lock?.kind !== "open" || explanation?.state.kind !== "ready") {
+    const first = firstReady(explanations);
+    if (lock?.kind !== "open" || !first) {
       return;
     }
     if (explanationOpen) {
       explanationRef.current?.scrollIntoView({ behavior: scrollBehavior(), block: "start" });
       return;
     }
-    const item = explanation.state.item;
     reveal.current = "explanation";
     setExplanationOpen(true);
-    award(updateProfile((p) => afterLearn(p, item.id, item.topic)));
+    setExplanationLevel(first.difficulty);
+    read(first);
+  }
+
+  function showLevel(level: Difficulty) {
+    setExplanationLevel(level);
+    read(explanations.find((slot) => slot.difficulty === level));
   }
 
   function nextQuestion(index: number) {
@@ -423,22 +442,11 @@ export function ExplorePage({
   return (
     <div className="flex flex-col items-center">
       <PageHeading title="Explore">
-        Research a topic that is not in the bank yet. The agent reads NASA, ESA, arXiv and
-        Wikipedia live, writes a question at each level and an explanation, and checks each
-        against the pages it read. The explanation opens once you have answered the questions.
+        Research a topic that is not in the bank yet, or let the agent pick one. It reads NASA,
+        ESA, arXiv and Wikipedia live, writes a question and an explanation at each level, and
+        checks each against the pages it read. The explanations open once you have answered the
+        questions.
       </PageHeading>
-
-      <div className="mt-10 flex items-center gap-4">
-        <span aria-hidden="true" className="on-scene-muted font-pixel text-[8px] uppercase">
-          Difficulty
-        </span>
-        <Dropdown
-          label="Difficulty"
-          options={DIFFICULTIES}
-          value={difficulty}
-          onChange={setDifficulty}
-        />
-      </div>
 
       <div className="mt-10 w-full max-w-xl">
         <TopicInput
@@ -452,20 +460,30 @@ export function ExplorePage({
         <Hint
           state={topicsState}
           status={status}
-          difficulty={difficulty}
           tooLong={typed > MAX_TOPIC_CHARS}
           onRetry={retryTopics}
         />
       </div>
 
-      <button
-        type="button"
-        onClick={go}
-        disabled={!canGo}
-        className={`${PRIMARY_BUTTON} mt-6 px-12 py-4 text-[11px]`}
-      >
-        Go
-      </button>
+      <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
+        <button
+          type="button"
+          onClick={go}
+          disabled={!canGo}
+          className={`${PRIMARY_BUTTON} px-12 py-4 text-[11px]`}
+        >
+          Go
+        </button>
+        <button
+          type="button"
+          onClick={surprise}
+          disabled={!canSurprise}
+          title="The agent picks a topic the bank does not have yet. Uses one search."
+          className={`${SECONDARY_BUTTON} px-5 py-4 text-[10px]`}
+        >
+          Surprise me
+        </button>
+      </div>
       {quota && (
         <p role="status" className="scene-note mt-4 max-w-md text-center text-sm">
           {quota.global_open ? quotaLine(quota) : GLOBAL_CAP_NOTICE}
@@ -485,7 +503,6 @@ export function ExplorePage({
             <AgentLog
               key={log.id}
               topic={log.topic}
-              difficulty={log.difficulty}
               lines={log.lines}
               outcome={logOutcome}
             />
@@ -523,7 +540,6 @@ export function ExplorePage({
                         questions,
                         current,
                         () => nextQuestion(current + 1),
-                        explanation,
                         lock,
                         openExplanation,
                         startOver,
@@ -546,23 +562,39 @@ export function ExplorePage({
               )}
             </section>
 
-            {explanation && lock && (
-              <section ref={explanationRef} aria-label="Explanation" className="scroll-mt-6">
-                <h2 className="on-scene font-heading text-xl font-bold">Explanation</h2>
+            {lock && (
+              <section ref={explanationRef} aria-label="Explanations" className="scroll-mt-6">
+                <h2 className="on-scene font-heading text-xl font-bold">Explanations</h2>
                 <div className="mt-4">
-                  {explanationOpen &&
-                  explanation.state.kind === "ready" &&
-                  explanation.state.item.mode === "learn" ? (
+                  {explanationOpen && lock.kind === "open" ? (
                     <>
-                      <SlotTag slot={explanation} />
-                      <LearnCard
-                        item={explanation.state.item}
-                        nextLabel="Another new topic"
-                        onNext={startOver}
+                      <SegmentedControl
+                        label="Explanation level"
+                        options={DIFFICULTIES}
+                        value={explanationLevel}
+                        onChange={showLevel}
                       />
+                      <div className="mt-4">
+                        {shownExplanation?.state.kind === "ready" &&
+                        shownExplanation.state.item.mode === "learn" ? (
+                          <>
+                            <SlotTag slot={shownExplanation} />
+                            <LearnCard
+                              key={shownExplanation.key}
+                              item={shownExplanation.state.item}
+                              nextLabel="Another new topic"
+                              onNext={startOver}
+                            />
+                          </>
+                        ) : (
+                          shownExplanation && (
+                            <SlotNote slot={shownExplanation} afterMissed={MADE_OVERNIGHT} />
+                          )
+                        )}
+                      </div>
                     </>
                   ) : (
-                    <ExplanationGate slot={explanation} lock={lock} onOpen={openExplanation} />
+                    <ExplanationGate lock={lock} onOpen={openExplanation} />
                   )}
                 </div>
               </section>
@@ -574,13 +606,7 @@ export function ExplorePage({
         {!search && logOutcome?.kind === "fallback" && <BankLinks />}
       </div>
 
-      <StatsPanel
-        open={statsOpen}
-        onClose={closeStats}
-        search={search}
-        level={log?.difficulty ?? null}
-        running={streaming}
-      />
+      <StatsPanel open={statsOpen} onClose={closeStats} search={search} running={streaming} />
     </div>
   );
 }
@@ -597,12 +623,11 @@ function coming(slot: Slot): string {
 }
 
 /** The question card's next button: the next question once it is ready; after the last one,
- * the explanation once it opens; else a new topic. */
+ * the explanations once they open; else a new topic. */
 function nextButton(
   questions: readonly Slot[],
   current: number,
   onNextQuestion: () => void,
-  explanation: Slot | undefined,
   lock: ExplanationLock | undefined,
   onOpenExplanation: () => void,
   onNewTopic: () => void,
@@ -616,15 +641,11 @@ function nextButton(
     }
     return { nextLabel: `${label}: ${coming(slot)}`, onNext: onNextQuestion, nextDisabled: true };
   }
-  if (explanation && lock && lock.kind !== "missed") {
+  if (lock && lock.kind !== "missed") {
     if (lock.kind === "open") {
-      return { nextLabel: "Read the explanation", onNext: onOpenExplanation, nextDisabled: false };
+      return { nextLabel: "Read the explanations", onNext: onOpenExplanation, nextDisabled: false };
     }
-    return {
-      nextLabel: `${itemLabel(explanation.key)}: ${coming(explanation)}`,
-      onNext: onOpenExplanation,
-      nextDisabled: true,
-    };
+    return { nextLabel: "Explanations: researching", onNext: onOpenExplanation, nextDisabled: true };
   }
   return { nextLabel: "Another new topic", onNext: onNewTopic, nextDisabled: false };
 }
@@ -641,15 +662,21 @@ function SlotTag({ slot }: { slot: Slot }) {
   );
 }
 
-/** An item that is not shown (yet): on its way, or left out and why. */
-function SlotNote({ slot }: { slot: Slot }) {
+/** An item that is not shown (yet): on its way, or left out and why, then `afterMissed`. */
+function SlotNote({ slot, afterMissed = "" }: { slot: Slot; afterMissed?: string }) {
   const label = itemLabel(slot.key);
   const text = {
     waiting: `The ${label} is next in line. It appears here when it is ready.`,
     researching: `The agent is researching the ${label}. It appears here when it is ready.`,
     loading: `Loading the ${label} from the bank...`,
     ready: "",
-    missed: `The ${label} was left out. ${slot.state.kind === "missed" ? slot.state.message : ""}`,
+    missed: [
+      `The ${label} was left out.`,
+      slot.state.kind === "missed" ? slot.state.message : "",
+      afterMissed,
+    ]
+      .filter(Boolean)
+      .join(" "),
   }[slot.state.kind];
   return (
     <p
@@ -662,35 +689,24 @@ function SlotNote({ slot }: { slot: Slot }) {
   );
 }
 
-/** The explanation before it is opened: why it is not open yet, or the button that opens it. */
-function ExplanationGate({
-  slot,
-  lock,
-  onOpen,
-}: {
-  slot: Slot;
-  lock: ExplanationLock;
-  onOpen: () => void;
-}) {
-  const label = itemLabel(slot.key);
+/** The explanations before they are opened: why they are not open yet, or the button that
+ * opens them. */
+function ExplanationGate({ lock, onOpen }: { lock: ExplanationLock; onOpen: () => void }) {
   let text: string;
   switch (lock.kind) {
     case "locked":
-      text = `It opens once you have answered ${
+      text = `They open once you have answered ${
         lock.left === 1 ? "the last question" : `the ${lock.left} questions left`
-      }, so it cannot give an answer away.`;
+      }, so they cannot give an answer away.`;
       break;
     case "coming":
-      text =
-        slot.state.kind === "loading"
-          ? `Loading the ${label} from the bank...`
-          : `The agent is writing the ${label}. It opens here when it is ready.`;
+      text = "The agent is writing the EASY explanation. They open here when it is ready.";
       break;
     case "open":
-      text = `The ${label} is ready, with the pages it is based on.`;
+      text = "Ready, one for each level, with the pages they are based on.";
       break;
     case "missed":
-      text = `The ${label} was left out. ${lock.message}`;
+      text = `The explanations were left out. ${lock.message} ${MADE_OVERNIGHT}`;
       break;
   }
   return (
@@ -703,7 +719,7 @@ function ExplanationGate({
           disabled={lock.kind !== "open"}
           className={`${PRIMARY_BUTTON} shrink-0 px-5 py-3.5 text-[10px]`}
         >
-          Read the explanation
+          Read the explanations
         </button>
       )}
     </div>
@@ -774,13 +790,12 @@ function BankLinks() {
 interface HintProps {
   state: TopicsState;
   status: SearchStatus;
-  difficulty: Difficulty;
   tooLong: boolean;
   onRetry: () => void;
 }
 
 /** One line under the topic box: what GO will do, or why it is not available. */
-function Hint({ state, status, difficulty, tooLong, onRetry }: HintProps) {
+function Hint({ state, status, tooLong, onRetry }: HintProps) {
   const base = "scene-note mt-3 min-h-5 text-sm";
   if (state.kind === "loading") {
     return <p className={base}>Loading topics...</p>;
@@ -803,20 +818,19 @@ function Hint({ state, status, difficulty, tooLong, onRetry }: HintProps) {
       </p>
     );
   }
-  const level = difficulty.toUpperCase();
   switch (status.kind) {
     case "empty":
       return (
         <p className={base}>
-          Any astronomy or space topic. The agent writes a question at each level, the {level} one
-          first in about 20 seconds, then the explanation at {level}.
+          Any astronomy or space topic. The agent writes a question at each level first, the EASY
+          one in about 20 seconds, then the explanations, easiest first.
         </p>
       );
     case "new":
       return (
         <p className={base}>
-          Not in the bank yet. GO uses one search: a question at each level, {level} first, then
-          the explanation at {level}, about 80 seconds in all.
+          Not in the bank yet. GO uses one search: a question at each level, then the
+          explanations, easiest first, about two to three minutes in all.
         </p>
       );
     case "partial":

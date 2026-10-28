@@ -2,7 +2,7 @@ import { Fragment, useEffect, useRef, useState } from "react";
 
 import { stillFollowing } from "../scroll";
 import { itemLabel } from "../search";
-import type { Difficulty, ItemKey, Tone, Verdict } from "../types";
+import type { ItemKey, Tone, Verdict } from "../types";
 
 export interface LogLine {
   /** The item of the search the line is about; null for the search as a whole. */
@@ -55,12 +55,10 @@ function useElapsed(running: boolean): number {
  * so a player answering a question further down stays where they are. */
 export function AgentLog({
   topic,
-  difficulty,
   lines,
   outcome,
 }: {
   topic: string;
-  difficulty: Difficulty;
   lines: LogLine[];
   outcome: LogOutcome;
 }) {
@@ -93,7 +91,7 @@ export function AgentLog({
     >
       <header className="flex items-baseline justify-between gap-4 border-b border-white/5 pb-3">
         <p className="font-pixel text-[9px] uppercase text-teal">
-          Agent <span className="text-slate">/ {topic} / {difficulty}</span>
+          Agent <span className="text-slate">/ {topic}</span>
         </p>
         <p className="font-mono text-xs tabular-nums text-slate" aria-hidden="true">
           {(elapsed / 1000).toFixed(1)}s

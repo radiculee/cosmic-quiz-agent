@@ -315,22 +315,24 @@ export function takeLines(buffer: string): [string[], string] {
   return [parts.filter((line) => line.trim() !== ""), rest];
 }
 
+/** What a live search researches: a typed topic, or one the agent picks (Surprise me). */
+export type ResearchRequest = { topic: string } | { surprise: true };
+
 /**
- * A live search: the explanation at `difficulty` and a question at each level, leaving out what
- * the bank already has. Each event the server streams is checked and passed to `onEvent` as it
- * arrives; the promise settles when the stream ends. Events of an unknown type are skipped, so
- * an older page keeps working against a newer server.
+ * A live search: a question and an explanation at each level, leaving out what the bank already
+ * has. Each event the server streams is checked and passed to `onEvent` as it arrives; the
+ * promise settles when the stream ends. Events of an unknown type are skipped, so an older page
+ * keeps working against a newer server.
  */
 export async function streamResearch(
-  topic: string,
-  difficulty: Difficulty,
+  request: ResearchRequest,
   onEvent: (event: ResearchEvent) => void,
   signal?: AbortSignal,
 ): Promise<void> {
   const response = await fetch("/api/research", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ topic, difficulty }),
+    body: JSON.stringify(request),
     ...signalOnly(signal),
   });
   if (!response.ok || !response.body) {

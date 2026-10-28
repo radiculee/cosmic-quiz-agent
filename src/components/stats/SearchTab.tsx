@@ -16,7 +16,7 @@ import {
   searchTotals,
   VERDICT_WORDS,
 } from "../../stats";
-import { type Difficulty, type GateStatus, type StepTiming, VERDICTS } from "../../types";
+import { type GateStatus, type StepTiming, VERDICTS } from "../../types";
 import { Group, Groups } from "./Section";
 
 const STATUS_WORDS: Record<GateStatus, string> = {
@@ -126,11 +126,9 @@ function RunDetails({ run }: { run: SearchRun }) {
  */
 export function SearchTab({
   search,
-  level,
   running,
 }: {
   search: Search | null;
-  level: Difficulty | null;
   running: boolean;
 }) {
   const live = search ? search.slots.filter((slot) => slot.source === "live").length : 0;
@@ -169,7 +167,6 @@ export function SearchTab({
       <div>
         <h3 className="font-heading text-2xl font-bold">{search.topic}</h3>
         <p className="mt-2 font-pixel text-[8px] uppercase text-slate">
-          {level ? `${level}, ` : ""}
           {running ? "still running" : `${runs.length} of ${live} runs reported`}
         </p>
       </div>

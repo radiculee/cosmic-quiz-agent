@@ -1,9 +1,9 @@
 /**
  * A live search as the web page holds it (agent/ondemand.py streams it): one slot per planned
- * item, the questions first and the explanation last, each made live or loaded from the bank.
- * The explanation opens only once every question has been answered (decided 2026-10-10), so it
- * can never give an answer away. Pure functions over plain data, so the page's rules are tested
- * without a browser.
+ * item, the questions first and the explanations last, each level easiest first, each made live
+ * or loaded from the bank (every level since 2026-10-28). The explanations open only once every
+ * question has been answered (decided 2026-10-10), so they can never give an answer away. Pure
+ * functions over plain data, so the page's rules are tested without a browser.
  */
 import type { Item, ItemKey, PlannedItem, RunStats } from "./types";
 
@@ -102,42 +102,49 @@ export function ended(search: Search, message: string): Search {
   };
 }
 
-export function explanationSlot(search: Search): Slot | undefined {
-  return search.slots.find((slot) => slot.mode === "learn");
+/** The explanations, easiest first. */
+export function explanationSlots(search: Search): Slot[] {
+  return search.slots.filter((slot) => slot.mode === "learn");
 }
 
-/** The questions in the order they are played: the chosen level first. */
+/** The questions in the order they are played, easiest first. */
 export function questionSlots(search: Search): Slot[] {
   return search.slots.filter((slot) => slot.mode === "quiz");
 }
 
-/** Where the explanation stands for the player. */
+/** The first explanation that is ready, easiest first: the one the reader starts on. */
+export function firstReady(slots: readonly Slot[]): Slot | undefined {
+  return slots.find((slot) => slot.state.kind === "ready");
+}
+
+/** Where the explanations stand for the player. */
 export type ExplanationLock =
-  /** Questions still to answer, ready or still coming, before it opens. */
+  /** Questions still to answer, ready or still coming, before they open. */
   | { kind: "locked"; left: number }
-  /** Every question is done; the explanation itself is still being made or loaded. */
+  /** Every question is done; no explanation is ready yet, but one is being made or loaded. */
   | { kind: "coming" }
-  /** Ready, and every question is answered or left out. */
+  /** At least one explanation is ready, and every question is answered or left out. */
   | { kind: "open" }
-  /** Left out: discarded, failed or not started. */
+  /** Every explanation was left out: discarded, failed or not started. */
   | { kind: "missed"; message: string };
 
 /**
- * The explanation opens once every question the search shows has been answered or left out, and
- * the explanation is ready. A search that made no question opens it as soon as it is ready.
- * `answered` holds the ids of the questions answered on the page. Undefined when the search has
- * no explanation in its plan.
+ * The explanations open once every question the search shows has been answered or left out,
+ * and at least one of them is ready; the others open as they arrive. A search that made no
+ * question opens them as soon as one is ready. `answered` holds the ids of the questions
+ * answered on the page. Undefined when the search has no explanation in its plan.
  */
 export function explanationLock(
   search: Search,
   answered: ReadonlySet<number>,
 ): ExplanationLock | undefined {
-  const slot = explanationSlot(search);
-  if (!slot) {
+  const slots = explanationSlots(search);
+  const [first] = slots;
+  if (!first) {
     return undefined;
   }
-  if (slot.state.kind === "missed") {
-    return { kind: "missed", message: slot.state.message };
+  if (slots.every((slot) => slot.state.kind === "missed")) {
+    return { kind: "missed", message: first.state.kind === "missed" ? first.state.message : "" };
   }
   const left = questionSlots(search).filter(
     (question) =>
@@ -147,7 +154,7 @@ export function explanationLock(
   if (left > 0) {
     return { kind: "locked", left };
   }
-  return slot.state.kind === "ready" ? { kind: "open" } : { kind: "coming" };
+  return firstReady(slots) ? { kind: "open" } : { kind: "coming" };
 }
 
 /** The first question at or after `from` that is not left out, or null if there is none. */

@@ -3,7 +3,6 @@ import { type KeyboardEvent, useEffect, useId, useRef, useState } from "react";
 import { AgentTab } from "../components/stats/AgentTab";
 import { SearchTab } from "../components/stats/SearchTab";
 import type { Search } from "../search";
-import type { Difficulty } from "../types";
 import { SECONDARY_BUTTON } from "./common";
 
 type Tab = "search" | "agent";
@@ -24,14 +23,12 @@ export function StatsPanel({
   open,
   onClose,
   search,
-  level,
   running,
 }: {
   open: boolean;
   /** Leave /explore/stats; the panel closes when the address does. */
   onClose: () => void;
   search: Search | null;
-  level: Difficulty | null;
   running: boolean;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
@@ -179,7 +176,7 @@ export function StatsPanel({
             hidden={tab !== "search"}
             className="mt-10"
           >
-            <SearchTab search={search} level={level} running={running} />
+            <SearchTab search={search} running={running} />
           </div>
           <div
             role="tabpanel"

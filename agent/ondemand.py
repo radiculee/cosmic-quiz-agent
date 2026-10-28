@@ -1,16 +1,23 @@
 """Live searches on the web page: the guardrails, the runs, and the events streamed to the player.
 
-A search makes a whole topic (docs/PLAN.md Session 8, decided 2026-10-08): a QUIZ question at
-each level and the LEARN explanation at the chosen level, leaving out any the bank already has.
-The questions come first and the explanation last (changed 2026-10-10 by Vedant), so the first
-question is ready sooner and the explanation, which can give answers away, is read after them.
-`research` yields events while it works:
+A search makes a whole topic at every level (changed 2026-10-28 by Vedant; it was the
+explanation at one chosen level): a QUIZ question at each level, then the LEARN explanation at
+each level, easiest first, leaving out any the bank already has. The questions come first and
+the explanations last (changed 2026-10-10 by Vedant), so the first question is ready sooner and
+the explanations, which can give answers away, are read after them. What a search's time limit
+leaves out, the daily Curator fills (`python -m curator daily`), and Learn and Quiz list the
+topic once it has every level. `research` yields events while it works:
 
+0. Surprise me (no topic sent): the visitor's limits and the global caps are read first, so a
+   search they would refuse ends before the paid pick; then the agent picks a topic the bank
+   does not have (`agent/topic_pick.py`) and the search goes on with it. A failed pick counts
+   nothing.
 1. The plan: which items the search makes live and which the bank already has (free). When the
    bank has them all, that is the whole search: free, and not counted.
 2. The on-topic check (`agent/topic_check.py`) rejects anything that is not a plain astronomy
    or space topic. It runs once per search, and only after the visitor's limits and the global
-   caps are read: it is paid, so a search they would refuse ends before it.
+   caps are read: it is paid, so a search they would refuse ends before it. A topic the agent
+   picked skips it.
 3. The first run is reserved, which opens the search and counts it against the visitor's daily
    limit and everyone's (`agent/limits.py`, migration 006). Over a limit, the player keeps what
    the bank has.
@@ -40,7 +47,7 @@ import sys
 import threading
 import time
 import traceback
-from collections.abc import Callable, Generator
+from collections.abc import Callable, Generator, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Literal, Protocol
@@ -57,8 +64,16 @@ from agent.publish import verify_and_decide
 from agent.rest import StoreError
 from agent.run_stats import RunStats, run_stats
 from agent.schemas import Difficulty, ItemRecord, JevVerdict, Mode, Step
-from agent.store import ItemPayload, OnDemandOutcome, RecordedIds, TopicRef, build_payload
+from agent.store import (
+    ItemPayload,
+    OnDemandOutcome,
+    RecordedIds,
+    TopicKind,
+    TopicRef,
+    build_payload,
+)
 from agent.topic_check import TopicCheckError, TopicJudge
+from agent.topic_pick import TopicPick
 from agent.verifiers import JevClient
 
 REVEAL_PURPOSE = "reveal"
@@ -219,6 +234,12 @@ class PublicBank(Protocol):
 
     def coverage(self, topic: str) -> BankTopic | None: ...
 
+    def topic_names(self) -> list[tuple[str, TopicKind]]: ...
+
+
+class TopicPicker(Protocol):
+    def pick(self, existing: Sequence[tuple[str, TopicKind]]) -> TopicPick: ...
+
 
 class StoredItems(Protocol):
     def item(self, item_id: int) -> QuizQuestion | LearnItem | None: ...
@@ -230,6 +251,7 @@ class Services:
     shared by every request a process serves (api/research.py), so nothing here closes them."""
 
     judge: TopicJudge
+    picker: TopicPicker  # Surprise me (agent/topic_pick.py)
     bank: PublicBank  # the public bank (publishable key)
     results: StoredItems  # reads back a stored live item, review included (secret key)
     store: LiveStore
@@ -244,8 +266,7 @@ class Services:
 
 @dataclass(frozen=True)
 class SearchRequest:
-    topic: str  # cleaned (agent/topic_check.clean_topic)
-    difficulty: Difficulty  # the explanation's level, and the question shown first
+    topic: str | None  # cleaned (agent/topic_check.clean_topic); None: the agent picks one
     visitor: str  # salted hash of the IP address
 
 
@@ -285,14 +306,14 @@ class _Clock:
         )
 
 
-def plan_search(difficulty: Difficulty, have: BankTopic | None) -> list[PlannedItem]:
-    """What a search makes, in order: a question at the chosen level, then at the other two,
-    easiest first, then the explanation at the chosen level. Live items run in this order, so
-    when a cap or the time limit cuts a search short, the explanation is what is left out. An
-    item the bank already has is served from it, free."""
-    wanted: list[tuple[Mode, Difficulty]] = [("quiz", difficulty)]
-    wanted += [("quiz", level) for level in DIFFICULTY_ORDER if level != difficulty]
-    wanted.append(("learn", difficulty))
+def plan_search(have: BankTopic | None) -> list[PlannedItem]:
+    """What a search makes, in order: a question at each level, then an explanation at each
+    level, easiest first. Live items run in this order, so when a cap or the time limit cuts a
+    search short, the harder explanations are what is left out (the daily Curator makes them).
+    An item the bank already has is served from it, free."""
+    wanted: list[tuple[Mode, Difficulty]] = [
+        (mode, level) for mode in ("quiz", "learn") for level in DIFFICULTY_ORDER
+    ]
 
     def in_bank(mode: Mode, level: Difficulty) -> bool:
         if have is None:
@@ -320,15 +341,24 @@ def research(request: SearchRequest, services: Services) -> Generator[ResearchEv
     """Run one live search, yielding events as it goes (see the module docstring)."""
     clock = _Clock()
 
+    picked = request.topic is None
+    if request.topic is None:
+        chosen = yield from _surprise(request.visitor, services, clock)
+        if chosen is None:
+            return
+        requested = chosen
+    else:
+        requested = request.topic
+
     try:
-        known = services.bank.topic_named(request.topic)
+        known = services.bank.topic_named(requested)
         have = services.bank.coverage(known) if known is not None else None
     except StoreError as error:
         print(f"live search: bank lookup failed: {error}", file=sys.stderr)
         yield _unavailable()
         return
-    topic = known or request.topic
-    plan = plan_search(request.difficulty, have)
+    topic = known or requested
+    plan = plan_search(have)
     yield PlanEvent(topic=topic, items=plan)
     live = tuple(item for item in plan if item.source == "live")
     if not live:
@@ -349,28 +379,29 @@ def research(request: SearchRequest, services: Services) -> Generator[ResearchEv
         yield FallbackEvent(reason="limit", message=limit_message(refused, limits))
         return
 
-    try:
-        verdict = services.judge.judge(topic)
-    except TopicCheckError as error:
-        print(f"live search: topic check failed: {error}", file=sys.stderr)
-        yield _unavailable()
-        return
-    # Every paid call is logged with its tokens and cost (CLAUDE.md rule 1); a rejected topic
-    # leaves no other record.
-    print(
-        f"topic check: accepted={verdict.accepted} on_topic={verdict.on_topic:.2f} "
-        f"plain={verdict.plain:.2f} judge={verdict.judge} tokens={verdict.input_tokens} "
-        f"cost=${verdict.cost_usd:.6f}",
-        file=sys.stderr,
-    )
-    yield clock.log(
-        "On-topic check (Jev)",
-        f"astronomy {verdict.on_topic:.2f}, plain topic {verdict.plain:.2f}",
-        "ok" if verdict.accepted else "warn",
-    )
-    if not verdict.accepted:
-        yield RejectedEvent(message=verdict.reason)
-        return
+    if not picked:  # the agent's own pick is an astronomy topic by construction
+        try:
+            verdict = services.judge.judge(topic)
+        except TopicCheckError as error:
+            print(f"live search: topic check failed: {error}", file=sys.stderr)
+            yield _unavailable()
+            return
+        # Every paid call is logged with its tokens and cost (CLAUDE.md rule 1); a rejected
+        # topic leaves no other record.
+        print(
+            f"topic check: accepted={verdict.accepted} on_topic={verdict.on_topic:.2f} "
+            f"plain={verdict.plain:.2f} judge={verdict.judge} tokens={verdict.input_tokens} "
+            f"cost=${verdict.cost_usd:.6f}",
+            file=sys.stderr,
+        )
+        yield clock.log(
+            "On-topic check (Jev)",
+            f"astronomy {verdict.on_topic:.2f}, plain topic {verdict.plain:.2f}",
+            "ok" if verdict.accepted else "warn",
+        )
+        if not verdict.accepted:
+            yield RejectedEvent(message=verdict.reason)
+            return
 
     first = live[0]
     try:
@@ -415,6 +446,46 @@ def research(request: SearchRequest, services: Services) -> Generator[ResearchEv
         # If the player left, the server is closing this stream early. Waiting here keeps the
         # request, and so a serverless instance, alive until the paid runs are stored and settled.
         worker.join(timeout=max(1.0, SEARCH_SECONDS - clock.elapsed()))
+
+
+def _surprise(
+    visitor: str, services: Services, clock: _Clock
+) -> Generator[ResearchEvent, None, str | None]:
+    """Surprise me: the topic the agent picks, or None once the reason has been sent. The limits
+    are read first, so a search they would refuse ends before the paid pick; a failed pick
+    reserves nothing, so it is not counted."""
+    now = datetime.now(UTC)
+    limits = services.limits(now)
+    try:
+        usage = services.store.on_demand_usage(visitor, now)
+        existing = services.bank.topic_names()
+    except StoreError as error:
+        print(f"live search: could not prepare a topic pick: {error}", file=sys.stderr)
+        yield _unavailable()
+        return None
+    refused = search_limit(usage, limits, services.settings.max_job_cost_usd)
+    if refused is not None:
+        yield FallbackEvent(reason="limit", message=limit_message(refused, limits))
+        return None
+
+    pick = services.picker.pick(existing)
+    # Every paid call is logged with its tokens and cost (CLAUDE.md rule 1).
+    print(
+        f"topic pick: topic={pick.topic!r} tokens={pick.usage.total_input_tokens}+"
+        f"{pick.usage.output_tokens} cost=${pick.cost_usd:.6f} notes={pick.notes}",
+        file=sys.stderr,
+    )
+    if pick.topic is None:
+        yield FallbackEvent(
+            reason="unavailable",
+            message=(
+                "The agent could not pick a topic just now, and nothing was counted. Try again, "
+                "or type a topic."
+            ),
+        )
+        return None
+    yield clock.log("Agent picked a topic", pick.topic, "ok")
+    return pick.topic
 
 
 def _unavailable() -> FallbackEvent:

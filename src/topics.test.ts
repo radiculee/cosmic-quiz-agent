@@ -104,27 +104,31 @@ describe("suggestAny", () => {
 });
 
 describe("searchStatus", () => {
-  it("counts what a search would make: the explanation at the level and a question at each", () => {
-    expect(searchStatus(TOPICS, " ", "easy")).toEqual({ kind: "empty" });
-    expect(searchStatus(TOPICS, "Pulsars", "easy")).toEqual({ kind: "new" });
+  it("counts what a search would make: a question and an explanation at each level", () => {
+    expect(searchStatus(TOPICS, " ")).toEqual({ kind: "empty" });
+    expect(searchStatus(TOPICS, "Pulsars")).toEqual({ kind: "new" });
     // Quasars: explanations at every level, but a question only at HARD.
-    expect(searchStatus(TOPICS, "quasars", "medium")).toEqual({
+    expect(searchStatus(TOPICS, "quasars")).toEqual({
       kind: "partial",
       topic: TOPICS[0],
       missing: 2,
     });
-    // Sagittarius A*: no EASY explanation, and questions missing at MEDIUM and HARD.
-    expect(searchStatus(TOPICS, "Sagittarius A*", "easy")).toMatchObject({ missing: 3 });
+    // Sagittarius A*: an explanation only at MEDIUM and a question only at EASY.
+    expect(searchStatus(TOPICS, "Sagittarius A*")).toMatchObject({ missing: 4 });
   });
 
-  it("is complete, and so free, when the bank has every item", () => {
+  it("is complete, and so free, only when the bank has every item", () => {
     const full: BankTopic = {
       name: "Pulsars",
       kind: "custom",
-      learn: ["hard"],
+      learn: ["easy", "medium", "hard"],
       quiz: ["easy", "medium", "hard"],
     };
-    expect(searchStatus([full], "pulsars", "hard")).toEqual({ kind: "complete", topic: full });
-    expect(searchStatus([full], "pulsars", "easy")).toMatchObject({ kind: "partial", missing: 1 });
+    expect(searchStatus([full], "pulsars")).toEqual({ kind: "complete", topic: full });
+    const noHardExplanation: BankTopic = { ...full, learn: ["easy", "medium"] };
+    expect(searchStatus([noHardExplanation], "pulsars")).toMatchObject({
+      kind: "partial",
+      missing: 1,
+    });
   });
 });

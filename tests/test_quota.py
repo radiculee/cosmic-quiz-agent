@@ -197,7 +197,7 @@ def test_a_reservation_sends_the_search_limits_and_the_search_it_joins() -> None
         "p_reserve_usd": 0.17,
         "p_user_day_searches": 2,
         "p_day_searches": 4,
-        "p_search_runs": 4,
+        "p_search_runs": 6,
         "p_day_usd": 0.50,
         "p_month_usd": 4.00,
     }

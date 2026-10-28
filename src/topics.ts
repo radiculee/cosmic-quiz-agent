@@ -112,15 +112,12 @@ export type SearchStatus =
   | { kind: "complete"; topic: BankTopic };
 
 /**
- * What a live search for the typed topic would do (agent/ondemand.py `plan_search`): it makes
- * the explanation at `difficulty` and a question at each level, leaving out what the bank has.
- * "complete" is free and does not use a search.
+ * What a live search for the typed topic would do (agent/ondemand.py `plan_search`): it makes a
+ * question and an explanation at each level, leaving out what the bank has. "complete" is free
+ * and does not use a search. The bank lists only complete topics (api/topics.py), so "partial"
+ * is for a topic loaded before one of its items was hidden.
  */
-export function searchStatus(
-  topics: readonly BankTopic[],
-  query: string,
-  difficulty: Difficulty,
-): SearchStatus {
+export function searchStatus(topics: readonly BankTopic[], query: string): SearchStatus {
   if (!normalize(query)) {
     return { kind: "empty" };
   }
@@ -128,8 +125,9 @@ export function searchStatus(
   if (!topic) {
     return { kind: "new" };
   }
-  const missing =
-    (isPlayable(topic, "learn", difficulty) ? 0 : 1) +
-    DIFFICULTIES.filter((level) => !isPlayable(topic, "quiz", level)).length;
+  const missing = (["learn", "quiz"] as const).reduce(
+    (count, mode) => count + DIFFICULTIES.filter((level) => !isPlayable(topic, mode, level)).length,
+    0,
+  );
   return missing === 0 ? { kind: "complete", topic } : { kind: "partial", topic, missing };
 }
