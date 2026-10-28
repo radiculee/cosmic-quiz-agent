@@ -34,6 +34,7 @@ from agent.store import (
     CuratorTrigger,
     ItemPayload,
     JobKey,
+    MissingSlot,
     Store,
     StoreError,
     TopicRef,
@@ -48,6 +49,10 @@ DIFFICULTIES: tuple[Difficulty, ...] = ("easy", "medium", "hard")
 # Typical Anthropic cost per job (agent run plus the Haiku verifier), measured over the 180 runs
 # of the bank build on 2026-10-02. Used for the estimate shown before a run.
 JOB_COST_TYPICAL: dict[Mode, float] = {"learn": 0.027, "quiz": 0.029}
+# Runs a slot gets, from the Curator and live searches together, before it is left for a person
+# to look at (decided 2026-10-28): a topic missing such a slot stays off Learn and Quiz. A run
+# that ended in a temporary API error is not counted (migration 009).
+MAX_SLOT_ATTEMPTS = 3
 # How often the job loop wakes while jobs run. A wait without a timeout cannot be interrupted by
 # Ctrl+C on Windows, so the loop polls instead.
 _POLL_SECONDS = 1.0
@@ -94,6 +99,23 @@ def plan_jobs(topics: Sequence[TopicRef], attempted: set[JobKey]) -> tuple[list[
                 else:
                     jobs.append(job)
     return jobs, skipped
+
+
+def can_retry(slot: MissingSlot) -> bool:
+    """Whether a missing slot is worth another run: not waiting on a person in review, and tried
+    fewer than MAX_SLOT_ATTEMPTS times."""
+    return not slot.in_review and slot.attempts < MAX_SLOT_ATTEMPTS
+
+
+def open_jobs(slots: Sequence[MissingSlot], limit: int | None = None) -> list[Job]:
+    """A job for each slot that can be retried, in the bank's order (oldest topic first, each
+    topic's slots together), so if a cap stops the run the finished topics are complete."""
+    jobs = [
+        Job(topic=slot.topic, mode=slot.mode, difficulty=slot.difficulty)
+        for slot in slots
+        if can_retry(slot)
+    ]
+    return jobs if limit is None else jobs[:limit]
 
 
 def estimate(jobs: Sequence[Job], settings: Settings) -> tuple[float, float]:

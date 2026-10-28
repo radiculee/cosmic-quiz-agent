@@ -29,10 +29,10 @@ alter table public.topics drop constraint if exists topics_kind_check;
 alter table public.topics
     add constraint topics_kind_check check (kind in ('evergreen', 'news', 'custom'));
 
--- One Curator invocation (python -m curator build | daily), with its totals and log.
+-- One Curator invocation (python -m curator build | daily | complete), with its totals and log.
 create table if not exists public.curator_runs (
     id bigint generated always as identity primary key,
-    trigger text not null check (trigger in ('build', 'daily')),
+    trigger text not null,
     started_at timestamptz not null default now(),
     finished_at timestamptz,
     topics text[] not null default '{}',
@@ -50,6 +50,9 @@ create table if not exists public.curator_runs (
     stopped_reason text,
     log jsonb not null default '[]'
 );
+alter table public.curator_runs drop constraint if exists curator_runs_trigger_check;
+alter table public.curator_runs
+    add constraint curator_runs_trigger_check check (trigger in ('build', 'daily', 'complete'));
 
 -- One agent run (research plus writing, then verification), whatever its outcome. Holds every
 -- metric the analytics page needs (Session 9), with Anthropic and TypeSafe usage kept separate.
@@ -387,6 +390,67 @@ as $$
     where r.source = 'curator'
       and r.outcome <> 'llm_error'
       and lower(t.name) in (select lower(n) from unnest(topic_names) as n);
+$$;
+
+-- Every slot (mode and difficulty) a listed topic still lacks, with how many runs have tried it
+-- and whether an item for it waits in review (migration 009). Learn and Quiz list a topic only
+-- when it has none; `python -m curator complete` and `daily` fill them.
+create or replace function public.missing_slots()
+returns table (
+    topic text,
+    kind text,
+    lead_url text,
+    retire_after timestamptz,
+    mode text,
+    difficulty text,
+    attempts integer,
+    in_review boolean
+)
+language sql
+stable
+set search_path = ''
+as $$
+    -- A topic is listed once it has a visible item (published, fewer than 2 reports), and a slot
+    -- is filled by a visible item. Runs that ended in a temporary API error are not tries.
+    with listed as (
+        select t.id, t.name, t.kind, t.lead_url, t.retire_after, t.created_at
+        from public.topics t
+        where (t.retire_after is null or t.retire_after > now())
+          and exists (
+              select 1 from public.items i
+              where i.topic_id = t.id and i.status = 'published' and i.report_count < 2
+          )
+    ),
+    slots as (
+        select l.*, m.mode, m.mode_rank, d.difficulty, d.level_rank
+        from listed l
+        cross join (values ('learn', 1), ('quiz', 2)) as m (mode, mode_rank)
+        cross join (values ('easy', 1), ('medium', 2), ('hard', 3)) as d (difficulty, level_rank)
+    )
+    select
+        s.name,
+        s.kind,
+        s.lead_url,
+        s.retire_after,
+        s.mode,
+        s.difficulty,
+        (
+            select count(*)::integer from public.runs r
+            where r.topic_id = s.id and r.mode = s.mode and r.difficulty = s.difficulty
+              and r.outcome <> 'llm_error'
+        ),
+        exists (
+            select 1 from public.items i
+            where i.topic_id = s.id and i.mode = s.mode and i.difficulty = s.difficulty
+              and i.status = 'review'
+        )
+    from slots s
+    where not exists (
+        select 1 from public.items i
+        where i.topic_id = s.id and i.mode = s.mode and i.difficulty = s.difficulty
+          and i.status = 'published' and i.report_count < 2
+    )
+    order by s.created_at, s.id, s.mode_rank, s.level_rank;
 $$;
 
 -- Retire published and review items whose topic is past its retire_after date.
@@ -1155,6 +1219,8 @@ revoke execute on function public.retire_stale() from public, anon, authenticate
 grant execute on function public.record_item(jsonb) to service_role;
 grant execute on function public.attempted_jobs(text[]) to service_role;
 grant execute on function public.retire_stale() to service_role;
+revoke execute on function public.missing_slots() from public, anon, authenticated;
+grant execute on function public.missing_slots() to service_role;
 revoke execute on function public.begin_on_demand_run(
     text, text, text, text, bigint, numeric, integer, integer, integer, numeric, numeric
 ) from public, anon, authenticated;

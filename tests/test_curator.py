@@ -13,12 +13,13 @@ import pytest
 from agent.config import Settings
 from agent.console import slugify
 from agent.llm import LLMError, Usage
-from agent.schemas import ItemRecord, Status
+from agent.schemas import Difficulty, ItemRecord, Mode, Status
 from agent.store import (
     CuratorSummary,
     CuratorTrigger,
     ItemPayload,
     JobKey,
+    MissingSlot,
     PurgeCounts,
     RecordedIds,
     StoreError,
@@ -32,17 +33,20 @@ from curator import pipeline
 from curator.__main__ import (
     _positive_float,
     _positive_int,
-    _unfinished_news_topic,
+    _topics_of,
     command_daily,
     command_upkeep,
+    report_missing,
 )
 from curator.discover import NewsPick, build_prompt, choose, discover, read_news
 from curator.pipeline import (
+    MAX_SLOT_ATTEMPTS,
     Budget,
     Curator,
     Job,
     estimate,
     job_cost_limit,
+    open_jobs,
     plan_jobs,
     run_jobs,
 )
@@ -63,6 +67,7 @@ class MemoryStore:
         self.payloads: list[ItemPayload] = []
         self.curator_runs: dict[int, CuratorSummary | None] = {}
         self.existing: list[TopicRef] = []
+        self.missing: list[MissingSlot] = []
         self.fail_writes = False
         self.fail_retire = False
         self.retired = 0
@@ -91,6 +96,9 @@ class MemoryStore:
 
     def attempted_jobs(self, topics: Sequence[str]) -> set[JobKey]:
         return self.attempted
+
+    def missing_slots(self) -> list[MissingSlot]:
+        return self.missing
 
     def topics(self) -> list[TopicRef]:
         return self.existing
@@ -403,17 +411,59 @@ def test_a_broken_console_never_stops_a_run(tmp_path: Path, settings: Settings) 
     curator.say("still running")
 
 
-def test_daily_finishes_an_unfinished_news_topic_first(tmp_path: Path, settings: Settings) -> None:
+def slot(
+    topic: TopicRef,
+    mode: Mode,
+    difficulty: Difficulty,
+    attempts: int = 1,
+    in_review: bool = False,
+) -> MissingSlot:
+    return MissingSlot(
+        topic=topic, mode=mode, difficulty=difficulty, attempts=attempts, in_review=in_review
+    )
+
+
+def test_open_jobs_retry_missing_slots_until_review_or_the_try_limit() -> None:
     news = TopicRef(name="The Cat's Paw Nebula", kind="news", lead_url=LINK)
-    old = TopicRef(name="An old story", kind="news", retire_after=NOW - timedelta(days=1))
-    store = MemoryStore(attempted={job_key(news.name, "learn", "easy")})
-    curator = make_curator(store, tmp_path, settings)
+    slots = [
+        slot(QUASARS, "learn", "hard", attempts=0),  # cut off by a search's clock: never tried
+        slot(QUASARS, "quiz", "easy", in_review=True),  # waits for a person
+        slot(QUASARS, "quiz", "hard", attempts=MAX_SLOT_ATTEMPTS),  # out of tries
+        slot(news, "learn", "easy", attempts=MAX_SLOT_ATTEMPTS - 1),
+        slot(news, "quiz", "medium"),
+    ]
 
-    found = _unfinished_news_topic(curator, [old, news, QUASARS], NOW)
+    jobs = open_jobs(slots)
 
-    assert found is not None
-    topic, jobs, done = found
-    assert topic == news and len(jobs) == 5 and done == 1
+    assert [(job.topic.name, job.mode, job.difficulty) for job in jobs] == [
+        ("Quasars", "learn", "hard"),
+        ("The Cat's Paw Nebula", "learn", "easy"),
+        ("The Cat's Paw Nebula", "quiz", "medium"),
+    ]
+    assert jobs[1].topic.lead_url == LINK  # a news topic keeps its article
+    assert len(open_jobs(slots, limit=2)) == 2
+    assert _topics_of(jobs) == [QUASARS, news]
+
+
+def test_report_missing_names_completed_topics_and_what_is_left() -> None:
+    lines: list[str] = []
+    before = [slot(QUASARS, "learn", "hard"), slot(MAGNETARS, "quiz", "easy")]
+    after = [
+        slot(MAGNETARS, "quiz", "easy", attempts=MAX_SLOT_ATTEMPTS),
+        slot(MAGNETARS, "quiz", "hard", in_review=True),
+    ]
+
+    report_missing(before, after, lines.append)
+
+    text = "\n".join(lines)
+    assert "Now on every level: 1 more topic(s).\n  Quasars" in text
+    assert "2 slot(s) on 1 topic(s)" in text
+    assert "0 to retry, 1 in review" in text and "1 out of tries" in text
+    assert "Magnetars: quiz easy (out of tries, 3), quiz hard (in review)" in text
+
+    lines.clear()
+    report_missing(before, [], lines.append)
+    assert lines[-1] == "No slot is missing: every listed topic is on every level."
 
 
 def test_cli_numbers_must_be_positive() -> None:

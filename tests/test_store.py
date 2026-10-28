@@ -27,6 +27,7 @@ from agent.schemas import (
 from agent.store import (
     CuratorSummary,
     ItemPayload,
+    MissingSlot,
     StoreError,
     SupabaseStore,
     TopicRef,
@@ -259,6 +260,63 @@ def test_reads_retry_server_errors_but_creating_a_run_row_does_not() -> None:
         store_with(busy).start_curator_run("build", ["Quasars"], 6.0)
     assert calls == ["write"]  # creating a run row is sent once
     assert not raised.value.permanent
+
+
+def test_missing_slots_are_read_with_their_topic_tries_and_review_state() -> None:
+    seen: list[httpx2.Request] = []
+
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        seen.append(request)
+        return httpx2.Response(
+            200,
+            json=[
+                {
+                    "topic": "Comet news",
+                    "kind": "news",
+                    "lead_url": "https://www.nasa.gov/comet",
+                    "retire_after": "2026-11-20T00:00:00+00:00",
+                    "mode": "learn",
+                    "difficulty": "hard",
+                    "attempts": 2,
+                    "in_review": False,
+                },
+                {
+                    "topic": "Wormholes",
+                    "kind": "custom",
+                    "lead_url": None,
+                    "retire_after": None,
+                    "mode": "quiz",
+                    "difficulty": "medium",
+                    "attempts": 1,
+                    "in_review": True,
+                },
+            ],
+        )
+
+    slots = store_with(handler).missing_slots()
+
+    assert str(seen[0].url) == f"{BASE}/rest/v1/rpc/missing_slots"
+    assert slots == [
+        MissingSlot(
+            topic=TopicRef(
+                name="Comet news",
+                kind="news",
+                lead_url="https://www.nasa.gov/comet",
+                retire_after=datetime(2026, 11, 20, tzinfo=UTC),
+            ),
+            mode="learn",
+            difficulty="hard",
+            attempts=2,
+            in_review=False,
+        ),
+        MissingSlot(
+            topic=TopicRef(name="Wormholes", kind="custom"),
+            mode="quiz",
+            difficulty="medium",
+            attempts=1,
+            in_review=True,
+        ),
+    ]
 
 
 def test_unexpected_replies_and_client_errors_raise_store_errors() -> None:

@@ -50,7 +50,7 @@ from agent.schemas import (
 TopicKind = Literal["evergreen", "news", "custom"]
 RunSource = Literal["curator", "on_demand"]
 OnDemandOutcome = Literal["published", "review", "discarded", "failed"]
-CuratorTrigger = Literal["build", "daily"]
+CuratorTrigger = Literal["build", "daily", "complete"]
 CheckLayer = Literal["code", "haiku", "jev"]
 CheckKind = Literal["citation", "number", "correct_answer", "distractor", "sentence", "explanation"]
 
@@ -401,6 +401,19 @@ def job_key(topic: str, mode: Mode, difficulty: Difficulty) -> JobKey:
     return (topic.strip().casefold(), mode, difficulty)
 
 
+class MissingSlot(BaseModel):
+    """A mode and difficulty that a listed topic still lacks (migration 009): how many runs have
+    tried it, and whether an item for it waits in review."""
+
+    model_config = ConfigDict(frozen=True)
+
+    topic: TopicRef
+    mode: Mode
+    difficulty: Difficulty
+    attempts: int = Field(ge=0)
+    in_review: bool
+
+
 class Store(Protocol):
     def start_curator_run(
         self, trigger: CuratorTrigger, topics: Sequence[str], dollar_cap: float
@@ -411,6 +424,8 @@ class Store(Protocol):
     def record_item(self, payload: ItemPayload) -> RecordedIds: ...
 
     def attempted_jobs(self, topics: Sequence[str]) -> set[JobKey]: ...
+
+    def missing_slots(self) -> list[MissingSlot]: ...
 
     def topics(self) -> list[TopicRef]: ...
 
@@ -548,6 +563,17 @@ class _AttemptedJob(BaseModel):
     difficulty: Difficulty
 
 
+class _MissingSlotRow(BaseModel):
+    topic: str
+    kind: TopicKind
+    lead_url: str | None
+    retire_after: datetime | None
+    mode: Mode
+    difficulty: Difficulty
+    attempts: int
+    in_review: bool
+
+
 class _IdRow(BaseModel):
     id: int
 
@@ -570,6 +596,7 @@ class _UsageRow(BaseModel):
 
 
 _ATTEMPTED = TypeAdapter(list[_AttemptedJob])
+_MISSING = TypeAdapter(list[_MissingSlotRow])
 _ID_ROWS = TypeAdapter(list[_IdRow])
 _TOPICS = TypeAdapter(list[TopicRef])
 _COUNT = TypeAdapter(int)
@@ -679,6 +706,25 @@ class SupabaseStore:
         )
         jobs = parse(_ATTEMPTED, reply, "attempted_jobs")
         return {job_key(job.topic, job.mode, job.difficulty) for job in jobs}
+
+    def missing_slots(self) -> list[MissingSlot]:
+        """Every slot a listed topic lacks, oldest topic first (migration 009)."""
+        reply = self._rest.send("POST", "/rpc/missing_slots", json={}, retries=RETRIES)
+        return [
+            MissingSlot(
+                topic=TopicRef(
+                    name=row.topic,
+                    kind=row.kind,
+                    lead_url=row.lead_url,
+                    retire_after=row.retire_after,
+                ),
+                mode=row.mode,
+                difficulty=row.difficulty,
+                attempts=row.attempts,
+                in_review=row.in_review,
+            )
+            for row in parse(_MISSING, reply, "missing_slots")
+        ]
 
     def topics(self) -> list[TopicRef]:
         """Every topic, most recent first (the latest 1,000), with each news topic's article."""

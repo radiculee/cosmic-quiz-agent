@@ -2,6 +2,7 @@
 
 python -m curator build [--topics N] [--cap USD] [--workers N] [--yes]
 python -m curator daily [--cap USD] [--workers N] [--yes]
+python -m curator complete [--cap USD] [--workers N] [--yes]
 python -m curator review [--mode learn|quiz] [--difficulty easy|medium|hard] [--reported]
 python -m curator upkeep
 python -m curator rejev [--yes]
@@ -12,15 +13,20 @@ cost still fits under it.
 
 build researches the approved evergreen topics (curator/topics.py) in LEARN and QUIZ at every
 difficulty. It can be re-run: jobs already in the bank are skipped, so an interrupted or capped
-build continues where it stopped. daily first finishes a recent news topic that an earlier run
-left incomplete; otherwise it picks one new topic from the NASA and ESA news feeds. Either way it
-runs the same pipeline and retires news items past their date. review shows each item the
-gate sent to review, with its sources, and publishes or discards it on your decision (free);
-with --reported it shows the published items that players' reports have hidden instead, to keep
-or discard. upkeep does the free part of a daily run only: it stores runs an earlier run left on
-disk and retires news items past their date, with no model calls. The scheduled workflow runs it
-on days without a paid run, which also keeps the free database from pausing for inactivity. Both
-daily and upkeep clear visitor hashes past their time (migration 008).
+build continues where it stopped. daily first fills up to six slots (a mode at a difficulty) that
+listed topics still lack, oldest topic first: a live search's leftovers, or a news topic an
+earlier run stopped on. Then it picks one new topic from the NASA and ESA news feeds, if the cap
+still allows. Either way it runs the same pipeline and retires news items past their date.
+complete fills every missing slot at once, under its cap, and reports what is still missing.
+Learn and Quiz list a topic only once it has every slot (decided 2026-10-28); a slot is tried at
+most three times, and one with an item in review waits for the review queue.
+review shows each item the gate sent to review, with its sources, and publishes or discards it
+on your decision (free); with --reported it shows the published items that players' reports
+have hidden instead, to keep or discard. upkeep does the free part of a daily run only: it stores
+runs an earlier run left on disk and retires news items past their date, with no model calls.
+The scheduled workflow runs it on days without a paid run, which also keeps the free database
+from pausing for inactivity. Both daily and upkeep clear visitor hashes past their time
+(migration 008).
 rejev re-runs Jev on items the gate sent to review because their Jev check failed (an outage or
 a wrong key), from the page text stored with each run, and applies the same gate rule again.
 It costs a fraction of a cent on TypeSafe and nothing on Anthropic.
@@ -30,7 +36,7 @@ from __future__ import annotations
 
 import argparse
 import sys
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import get_args
@@ -40,7 +46,7 @@ from agent.console import confirm, use_utf8_output
 from agent.gate import decide
 from agent.llm import AnthropicProvider
 from agent.schemas import Difficulty, Mode
-from agent.store import CuratorSummary, StoreError, SupabaseStore, TopicRef
+from agent.store import CuratorSummary, MissingSlot, StoreError, SupabaseStore, TopicRef
 from agent.tools import ToolContext, make_http_client
 from agent.verifiers import make_jev
 from agent.verifiers.jev import verify_with_jev
@@ -49,13 +55,16 @@ from curator.discover import discover, read_news
 from curator.pipeline import (
     DIFFICULTIES,
     JOB_COST_TYPICAL,
+    MAX_SLOT_ATTEMPTS,
     MODES,
     Budget,
     Curator,
     Job,
+    can_retry,
     estimate,
     flush_pending,
     job_cost_limit,
+    open_jobs,
 )
 from curator.review import review, review_reported
 from curator.topics import BUILD_TOPICS
@@ -64,9 +73,13 @@ from curator.topics import BUILD_TOPICS
 CURATOR_MAX_RETRIES = 6
 BUILD_CAP_USD = 6.00  # approved 2026-10-02 for the 30-topic build (estimate about $5)
 DAILY_CAP_USD = 0.40  # approved 2026-10-02 for one news topic a day (estimate about $0.17)
+COMPLETE_CAP_USD = 3.00  # approved 2026-10-28 for the 67 missing slots (estimate about $2)
 DEFAULT_WORKERS = 3
 DISCOVERY_COST_TYPICAL = 0.004  # one short Haiku call over the feed headlines
-RESUME_LOOKBACK = 7  # recent news topics checked for jobs an earlier daily run left unfinished
+# Missing slots a daily run fills before its news topic: one topic's worth, about $0.17 typical
+# (decided 2026-10-28). The rest of the cap goes to the news topic, and whatever the cap stops
+# is filled the next day.
+FINISH_JOBS_PER_DAY = 6
 
 
 def _positive_int(text: str) -> int:
@@ -83,25 +96,68 @@ def _positive_float(text: str) -> float:
     return value
 
 
-def _describe(jobs: list[Job], skipped: int, cap: float, settings: Settings) -> str:
+def _describe(jobs: list[Job], note: str, cap: float, settings: Settings) -> str:
     typical, worst = estimate(jobs, settings)
     return (
-        f"{len(jobs)} jobs ({skipped} already in the bank): about ${typical:.2f} on Anthropic, "
+        f"{len(jobs)} jobs ({note}): about ${typical:.2f} on Anthropic, "
         f"at most ${min(worst, cap):.2f} (hard cap ${cap:.2f}); under "
         f"${len(jobs) * JEV_COST_PER_ITEM:.3f} on TypeSafe (Jev)."
     )
 
 
 def _describe_daily(cap: float, settings: Settings) -> str:
-    jobs = len(MODES) * len(DIFFICULTIES)
+    topic_jobs = len(MODES) * len(DIFFICULTIES)
+    jobs = FINISH_JOBS_PER_DAY + topic_jobs
     typical = DISCOVERY_COST_TYPICAL + len(DIFFICULTIES) * sum(JOB_COST_TYPICAL.values())
     worst = DISCOVERY_MAX_COST_USD + jobs * job_cost_limit(settings)
     return (
-        f"one news topic (finishing an earlier one, or choosing a new one) and up to {jobs} jobs "
-        f"on it: about ${typical:.2f} on Anthropic, at "
-        f"most ${min(worst, cap):.2f} (hard cap ${cap:.2f}); under "
-        f"${jobs * JEV_COST_PER_ITEM:.3f} on TypeSafe (Jev)."
+        f"up to {FINISH_JOBS_PER_DAY} missing slots on listed topics, then one new news topic "
+        f"and up to {topic_jobs} jobs on it, while the cap allows: about ${typical:.2f} on "
+        f"Anthropic for a topic's worth, at most ${min(worst, cap):.2f} (hard cap ${cap:.2f}); "
+        f"under ${jobs * JEV_COST_PER_ITEM:.3f} on TypeSafe (Jev)."
     )
+
+
+def _topics_of(jobs: Sequence[Job]) -> list[TopicRef]:
+    """The jobs' topics, each once, in the jobs' order."""
+    return list({job.topic.name.casefold(): job.topic for job in jobs}.values())
+
+
+def _slot_label(slot: MissingSlot) -> str:
+    if slot.in_review:
+        state = "in review"
+    elif slot.attempts >= MAX_SLOT_ATTEMPTS:
+        state = f"out of tries, {slot.attempts}"
+    else:
+        state = f"{slot.attempts} {'try' if slot.attempts == 1 else 'tries'}"
+    return f"{slot.mode} {slot.difficulty} ({state})"
+
+
+def report_missing(
+    before: Sequence[MissingSlot], after: Sequence[MissingSlot], say: Callable[[str], None]
+) -> None:
+    """The topics a run completed, and every slot still missing, grouped by topic."""
+    still = {slot.topic.name for slot in after}
+    completed = sorted({slot.topic.name for slot in before} - still, key=str.casefold)
+    say(f"Now on every level: {len(completed)} more topic(s).")
+    for name in completed:
+        say(f"  {name}")
+    if not after:
+        say("No slot is missing: every listed topic is on every level.")
+        return
+    retry = sum(1 for slot in after if can_retry(slot))
+    review = sum(1 for slot in after if slot.in_review)
+    out = len(after) - retry - review
+    say(
+        f"Still missing: {len(after)} slot(s) on {len(still)} topic(s), which stay off Learn and "
+        f"Quiz until filled: {retry} to retry, {review} in review (python -m curator review), "
+        f"{out} out of tries (for a person to look at)."
+    )
+    by_topic: dict[str, list[str]] = {}
+    for slot in after:
+        by_topic.setdefault(slot.topic.name, []).append(_slot_label(slot))
+    for name, labels in by_topic.items():
+        say(f"  {name}: {', '.join(labels)}")
 
 
 def _print_summary(summary: CuratorSummary) -> None:
@@ -139,29 +195,35 @@ def command_build(args: argparse.Namespace, settings: Settings, store: SupabaseS
     if not jobs:
         print("Every job is already in the bank; nothing to do.")
         return 0
-    if not confirm(_describe(jobs, skipped, args.cap, settings), args.yes):
+    if not confirm(_describe(jobs, f"{skipped} already in the bank", args.cap, settings), args.yes):
         return 1
     summary = curator.run("build", topics, jobs, skipped, Budget(args.cap), args.workers)
     _print_summary(summary)
     return 0
 
 
-def _unfinished_news_topic(
-    curator: Curator, existing: Sequence[TopicRef], now: datetime
-) -> tuple[TopicRef, list[Job], int] | None:
-    """The most recent live news topic that an earlier daily run left with jobs to do (for
-    example because it reached its cap), with those jobs and how many were already done."""
-    recent = [
-        topic
-        for topic in existing
-        if topic.kind == "news" and (topic.retire_after is None or topic.retire_after > now)
-    ][:RESUME_LOOKBACK]
-    jobs, _ = curator.plan(recent)
+def command_complete(args: argparse.Namespace, settings: Settings, store: SupabaseStore) -> int:
+    curator = _curator(store, settings)
+    if curator is None:
+        return 1
+    curator.flush_pending()
+    before = store.missing_slots()
+    jobs = open_jobs(before)
+    held = len(before) - len(jobs)
+    print(
+        f"Complete: {len(before)} slot(s) missing on {len({s.topic.name for s in before})} "
+        f"topic(s); {len(jobs)} can run, {held} held (in review, or tried "
+        f"{MAX_SLOT_ATTEMPTS} times)."
+    )
     if not jobs:
-        return None
-    topic = jobs[0].topic
-    left = [job for job in jobs if job.topic == topic]
-    return topic, left, len(MODES) * len(DIFFICULTIES) - len(left)
+        report_missing(before, before, print)
+        return 0
+    if not confirm(_describe(jobs, f"{held} held", args.cap, settings), args.yes):
+        return 1
+    summary = curator.run("complete", _topics_of(jobs), jobs, held, Budget(args.cap), args.workers)
+    _print_summary(summary)
+    report_missing(before, store.missing_slots(), print)
+    return 0
 
 
 def purge_visitor_hashes(store: SupabaseStore) -> int:
@@ -195,20 +257,19 @@ def _daily(args: argparse.Namespace, settings: Settings, store: SupabaseStore) -
         return 1
     budget = Budget(args.cap)
     now = datetime.now(UTC)
-    existing = store.topics()
-    unfinished = _unfinished_news_topic(curator, existing, now)
-    if unfinished is not None:
-        left_topic, left_jobs, done = unfinished
+    # Listed topics' missing slots run before the news topic's jobs, so a live search's topic
+    # reaches Learn and Quiz by the next day (decided 2026-10-28).
+    jobs = open_jobs(store.missing_slots(), FINISH_JOBS_PER_DAY)
+    topics = _topics_of(jobs)
+    if jobs:
         curator.say(
-            f"Finishing {len(left_jobs)} job(s) an earlier run left on {left_topic.name!r}."
+            f"Finishing {len(jobs)} missing slot(s) on: {', '.join(t.name for t in topics)}."
         )
-        summary = curator.run("daily", [left_topic], left_jobs, done, budget, args.workers)
-        _print_summary(summary)
-        return 0
 
     if not budget.try_reserve(DISCOVERY_MAX_COST_USD):
         print(f"The cap of ${args.cap:.2f} is too small to choose a topic.")
         return 1
+    existing = store.topics()
     with make_http_client(settings) as http:
         ctx = ToolContext(settings=settings, http=http)
         items = read_news(ctx, curator.say)
@@ -222,16 +283,15 @@ def _daily(args: argparse.Namespace, settings: Settings, store: SupabaseStore) -
     for note in discovery.notes:
         curator.say(f"Discover: {note}")
 
-    topics: list[TopicRef] = []
-    jobs: list[Job] = []
     skipped = 0
     if discovery.topic is None:
-        curator.say("No new topic today; retiring stale items only.")
+        curator.say("No new topic today.")
     else:
         topic = discovery.topic
         curator.say(f"Discover: chose {topic.name!r} from {topic.lead_url}")
-        topics = [topic]
-        jobs, skipped = curator.plan(topics)
+        news_jobs, skipped = curator.plan([topic])
+        topics.append(topic)
+        jobs += news_jobs
     summary = curator.run("daily", topics, jobs, skipped, budget, args.workers)
     _print_summary(summary)
     return 0
@@ -328,7 +388,14 @@ def main(argv: list[str] | None = None) -> int:
         "--cap", type=_positive_float, default=DAILY_CAP_USD, help="Anthropic cap in USD."
     )
 
-    for command in (build, daily):
+    complete = commands.add_parser(
+        "complete", help="Fill every slot a listed topic lacks, so it is on every level."
+    )
+    complete.add_argument(
+        "--cap", type=_positive_float, default=COMPLETE_CAP_USD, help="Anthropic cap in USD."
+    )
+
+    for command in (build, daily, complete):
         command.add_argument("--workers", type=_positive_int, default=DEFAULT_WORKERS)
         command.add_argument("--yes", action="store_true", help="Approve the cost in advance.")
 
@@ -351,6 +418,7 @@ def main(argv: list[str] | None = None) -> int:
     handlers = {
         "build": command_build,
         "daily": command_daily,
+        "complete": command_complete,
         "review": command_review,
         "upkeep": command_upkeep,
         "rejev": command_rejev,
