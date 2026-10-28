@@ -150,6 +150,10 @@ entry; record a reversal as a new one.
   (run by Claude Code on Vedant's word; not pushed), and Vedant applied migration 009; the live
   bank shows 67 missing slots in 27 topics, as counted. `session/latency` rebased onto it, and
   the explore text is folded into `docs/PLAN.md` and `CHANGELOG.md` (`30fafd2`).
+- 2026-10-28, latency: The Anthropic workspace reached its monthly limit during the fill (access
+  back on 1 November 00:00 UTC). Vedant raises October's limit by about $2, a dated exception to
+  hard rule 1, so live research, the Curator and the parallel-search real searches work before
+  the go/no-go. The review queue is decided: 17 published, 9 discarded.
 
 ---
 

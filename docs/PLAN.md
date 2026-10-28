@@ -1828,6 +1828,29 @@ slots on 22 topics: 26 waiting in review and 12 open to a retry. Still to do: th
 (`python -m curator review`, free), the 12 retries, and the new key in Vercel and the GitHub
 Actions secrets (Vedant), before the push.
 
+The review queue, the same day: Claude Code read each of the 26 items against the page text the
+agent stored and recommended, and Vedant decided in three batches, recorded with
+`decide_review` (free). Published 17: 225 (red dwarfs), 236 (Titan), 244 (open clusters), 245
+and 246 (Sagittarius A*), 253 and 254 (black holes), 266, 269 and 271 (Olympus Mons), 276
+(tidal locking), 277 (niobium), 278 and 281 (the far side of the Moon), 289 (EGS-z11-R0), 291
+(wormholes) and 295 (meteoroids); most doubts were the verifier misreading its page or quoting
+itself wrongly. Discarded 9: 233 (calls the 2009 eclipse the longest totality ever recorded),
+243 (a garbled correct option), 249 (a "wrong" option that is also a real advantage of Hubble),
+256 (puts a z = 9.29 object's "3% of the universe's age" on one at z = 7.04), 263 (the Moon
+landing as the most distant human journey), 280 (calls the matter-antimatter asymmetry
+"baryogenesis"), 283 (two options that are not masses, and an invented claim), 292 (a "wrong"
+option that is also defensible) and 293 (overstates what later wormhole studies show). Then
+`missing_slots()` gives 21 slots on 16 topics, every one open to a retry: 28 of the 44 topics are
+on every level (17 before the fill). The new key is in Vercel and the GitHub Actions secrets
+(Vedant).
+
+The last fill jobs also met the Anthropic workspace's monthly limit ("You will regain access on
+2026-11-01 at 00:00 UTC"): item 295's Haiku check and the 4 jobs without an item. Every
+Anthropic call (live searches, the Curator) fails until the limit is raised or resets. Vedant
+chose to raise October's limit by about $2, an exception to hard rule 1 for the rest of October,
+so live research and the Curator work again and the parallel-search real searches can run before
+the go/no-go on 1 November.
+
 ### Faster live searches: every run at once (2026-10-28, planned)
 
 Vedant asked why a live search takes more than a minute, and for the architecture to be
@@ -2173,3 +2196,7 @@ tier), decided together with the newsletter's subscribers (Vedant, 2026-10-10).
   published nothing, because TypeSafe rejected the Jev key (HTTP 401) from 00:59 UTC. With
   Vedant's new key, `curator rejev` ($0.0137 on TypeSafe) published 35 of the 62 items waiting
   on Jev. 38 slots on 22 topics are still missing: 26 in review, 12 to retry. Not pushed.
+- 2026-10-28 - The review queue: 26 items read against their stored pages, 17 published and 9
+  discarded on Vedant's decisions (free). 21 slots on 16 topics remain, all open to a retry; 28
+  of 44 topics are on every level. The Anthropic workspace reached its monthly limit during the
+  fill; Vedant raises October's by about $2 (an exception to hard rule 1). Not pushed.
