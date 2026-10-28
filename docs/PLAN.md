@@ -1681,6 +1681,65 @@ the build. Committed and pushed on his word (`3765728` the code, `0cbcf4f` the r
 checks run passed and Vercel deployed it, and production's `/api/quota` still offers 2 a
 visitor until the window opens.
 
+### The launch week's code review and November's budget (2026-10-22, open)
+
+Vedant asked for a code review of `3765728`. The code holds: the limits are passed to
+`begin_on_demand_run`, which counts under its advisory lock and is callable only with the
+secret key, so the window cannot be bypassed; `/api/quota` and the live search read the same
+`limits_at`; and the page takes the number from `/api/quota`. Its 58 tests pass. Findings:
+
+1. **The $4 monthly cap runs out on the launch's second day.** 1 and 2 November spend at most
+   $1.00 at the usual limits, so at least $3.00 is left on 3 November; $2.50 a day can spend
+   it by 4 November, and then live research pauses for everyone until 1 December ("resumes
+   next month"), through most of the launch week. About 25 searches in all, not the 140 that
+   20 a day suggests.
+2. A search that starts before midnight on 9 November keeps the launch limits for its later
+   runs, which are checked against 10 November's spend with $2.50, not $0.50. At most 3 runs
+   at $0.17 (about $0.51) over that day's cap; the month cap still holds. Deliberate; worth a
+   line in the `_Search.limits` comment.
+3. `limit_message` formats every message, so a later message with a literal brace would raise
+   when a player is refused. Format only the `user_day` template.
+4. The `(5, 20, 2.50)` assert in `tests/test_quota.py` repeats the constants; it changes with
+   any new numbers.
+
+Vedant's aim: raise the cap for November only, because the LinkedIn post may bring more
+visitors and everyone who comes should get to try a live search. Claude Code's assessment:
+
+- **The app's cap alone cannot do it.** The Curator and live research share the Anthropic
+  account, and the Console's $10 limit stops both. The Curator needs about $5.10 in November
+  (one news topic a day at about $0.17; its own cap is $0.40 a day, so up to $12 in a bad
+  month), which leaves room for an app cap of about $4.50: still gone on the second day. The
+  Console limit has to go up for November too, which is an exception to hard rule 1 in
+  `CLAUDE.md` ("capped at $10 a month") and to the README's "$10 a month spend cap".
+- **The November cap must cover the calendar month, not the launch window.** As built, the
+  monthly cap goes back to $4 on 10 November, when November's spend is already past it, so live
+  research would pause from 10 to 30 November.
+- November's most at the launch numbers: $1.00 (1 and 2 November) + $17.50 (7 days at $2.50) +
+  $0.50 a day after. Live research spent $0.07 in all of October, so the real figure is likely
+  far lower; the caps are ceilings.
+
+Options, to be decided by Vedant at the start of the next session:
+
+- **(Recommended) $20 for live research in November, with the Console at $27.** The launch
+  numbers stay (5 a visitor, 20 and $2.50 a day); the usual daily limits apply after 9
+  November and nothing pauses. $27 is $20 + about $5 for the Curator + $2 spare, and the most
+  November can cost, since the Console stops everything there. The Console goes back to $10 on
+  1 December.
+- **Cheaper: $12 in November, with the Console at $19.** The launch days become 12 searches and
+  $1.50 a day, still lasting the whole week.
+
+Only Vedant can change the Console limit (Anthropic Console, the organisation's limits), and it
+must be raised before 3 November. Once chosen, the build:
+
+- [ ] `agent/limits.py`: a November monthly cap for the UTC days 1 to 30 November 2026, read
+      through `limits_at`, so it ends by itself on 1 December; the launch numbers changed if the
+      cheaper option is chosen. Findings 2 and 3 fixed with it.
+- [ ] Tests: both ends of November, the November cap in force after the launch week, and the
+      usual $4 again on 1 December.
+- [ ] Docs: a dated November exception to the $10 rule in `CLAUDE.md`, `docs/DESIGN.md` (the
+      cost line and decision 9) and the README (its spend cap and limits), and the `CHANGELOG`.
+- [ ] Vedant: the Console limit raised before 3 November, and back to $10 on 1 December.
+
 ### Faster live searches: every run at once (2026-10-28, planned)
 
 Vedant asked why a live search takes more than a minute, and for the architecture to be
@@ -1994,6 +2053,13 @@ tier), decided together with the newsletter's subscribers (Vedant, 2026-10-10).
   searches a visitor, 20 and $2.50 a day for everyone, the $4 month unchanged), dated in code so
   they end by themselves. 347 Python and 148 TypeScript tests. Nothing spent. Committed and
   pushed (`3765728`, `0cbcf4f`); deployed, with the usual limits in force until 3 November.
+- 2026-10-22 - Code review of the launch week (`3765728`): the code holds and its 58 tests pass,
+  but the unchanged $4 month cap runs out on the launch's second day, after which live research
+  pauses until December. Vedant wants a higher cap for November only, so everyone who comes from
+  the post can try a search; that needs the Console's $10 limit raised for November too (an
+  exception to hard rule 1). Recorded with both options ($20 with the Console at $27,
+  recommended, or $12 with $19) under "The launch week's code review and November's budget";
+  Vedant chooses at the start of the next session. Docs only. Nothing spent.
 - 2026-10-28 - Why a live search takes over a minute: its items run one at a time, about 17 s
   each (measured from the Session 3 eval), only so a search never reserves more than $0.17.
   Planned with Vedant in a grill-me session, for the six-item search of universal topics:
