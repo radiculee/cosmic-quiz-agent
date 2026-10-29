@@ -1818,9 +1818,10 @@ to a retry and 1 waiting in review, and "Bang" and "Meteroid" are gone ("The Big
 The fill, on Vedant's word the same day (`python -m curator complete`, run from
 `../cqa-latency`): 66 jobs for $1.717 on Anthropic (cap $3), but 0 published, 56 to review, 6
 discarded and 4 without an item, because TypeSafe rejected the API key (HTTP 401) on every Jev
-check. Jev last worked at 00:37 UTC and failed from 00:59; a Jev error sends an item to review
-under `all_must_pass`. Vedant issued a new key; it was tested with one on-topic check
-($0.000022) and put in place of the old one in the three local `.env` files. Then
+check: Vedant had changed the TypeSafe key, and the local `.env` the fill read still held the
+old one. Jev last worked at 00:37 UTC and failed from 00:59; a Jev error sends an item to review
+under `all_must_pass`. The new key was tested with one on-topic check ($0.000022) and put in
+place of the old one in the three local `.env` files. Then
 `python -m curator rejev` re-checked the 62 items waiting on a failed Jev check, for $0.0137 on
 TypeSafe and nothing on Anthropic: 35 published, 25 still in review (21 that Jev passed but the
 Haiku verifier doubted, 4 Jev borderline) and 2 discarded. Afterwards `missing_slots()` gives 38
@@ -2214,8 +2215,8 @@ tier), decided together with the newsletter's subscribers (Vedant, 2026-10-10).
   The explore session's text folded into this plan and the changelog. Docs only. Nothing spent;
   nothing pushed.
 - 2026-10-28 - The universal-topics fill: `curator complete` spent $1.717 on Anthropic and
-  published nothing, because TypeSafe rejected the Jev key (HTTP 401) from 00:59 UTC. With
-  Vedant's new key, `curator rejev` ($0.0137 on TypeSafe) published 35 of the 62 items waiting
+  published nothing: Vedant had changed the TypeSafe key and the local `.env` still held the
+  old one, so Jev answered 401 from 00:59 UTC. With the new key, `curator rejev` ($0.0137 on TypeSafe) published 35 of the 62 items waiting
   on Jev. 38 slots on 22 topics are still missing: 26 in review, 12 to retry. Not pushed.
 - 2026-10-28 - The review queue: 26 items read against their stored pages, 17 published and 9
   discarded on Vedant's decisions (free). 21 slots on 16 topics remain, all open to a retry; 28

@@ -30,11 +30,11 @@ Decisions in `docs/SESSIONS.md`.
   queue, 37 of 44 topics are on every level. 8 slots are missing on 7 topics: 2 open to a retry
   (the daily run takes them) and 6 out of tries, listed in `docs/PLAN.md` under "Universal
   topics", waiting for Vedant to decide what to do with them. The review queue is empty.
-- **Keys and limits:** the TypeSafe key was replaced on 2026-10-28 (the old one returned 401)
-  in all three local `.env` files, Vercel and the GitHub Actions secrets. The Anthropic workspace
-  hit its October limit; Vedant raised it by about $2 (an exception to hard rule 1). October's
-  spend after this session's runs is close to that new limit, so keep paid work small until
-  1 November.
+- **Keys and limits:** Vedant changed the TypeSafe key on 2026-10-28 (the old one returns
+  401); the new one is in all three local `.env` files, Vercel and the GitHub Actions secrets.
+  The Anthropic workspace hit its October limit; Vedant raised it by about $2 (an exception to
+  hard rule 1). October's spend after this session's runs is close to that new limit, so keep
+  paid work small until 1 November.
 - **Checks** (`.github/workflows/checks.yml`), run here before the push: see the session log in
   `docs/PLAN.md`.
 - **Decided, not yet built:**
