@@ -4,8 +4,9 @@ Notes for the main session (`docs/SESSIONS.md`), which plans, writes the other s
 and reviews their branches. It edits no code: only `docs/SESSIONS.md` and `docs/handoff/*.md`
 (and `docs/DESIGN.md` and `CLAUDE.md` when Vedant approves the exact text).
 
-Last update: 2026-10-30, 02:00 Dublin. The session ended on the Mac; Vedant continues on the
-Windows machine, which has the API keys.
+Last update: 2026-10-30, 17:30 Dublin, on Windows. Every session stopped for a check; the
+verified work is on `main` (not pushed). "Where things stand (2026-10-30, 17:30)" below is
+current; the 02:00 sections after it are kept for the record.
 
 ## Read first (a new main session)
 
@@ -45,6 +46,47 @@ typo redirects and rover ranks. Everything ships before the launch on Tuesday 3 
 - **Open until Monday:** the title tag. Vedant's direction is "Curiosity: Quiz on the wonders of
   our world beyond earth", or something better; candidates are in `docs/handoff/seo.md`. It is one
   line in `src/brand.ts`.
+
+## Where things stand (2026-10-30, 17:30)
+
+The Windows plan of 2026-10-29 (sessions backend, product, frontend; commit `aee722b`) was never
+pushed and was scrapped by Vedant: its worktrees and branches are deleted. The five worktrees
+were made fresh on Windows from `200185a` (`C:\Users\vedan\cqa-<name>`, Python 3.12 venvs made
+with `py -3.12`, since plain `python` is 3.14 here). The status board for Vedant is the
+"Curiosity Launch Board" artifact on claude.ai (sessions, his checklist, gates, decisions).
+
+Decided today, beyond the 22 grill-me decisions:
+- November's Anthropic Console limit is **$32** (Vedant): $20 live research, about $5 for the
+  daily Curator, $5 for the 30-topic fill, $2 spare. The fill counts against the Console only.
+- Main approved for latency (Vedant left it to main): small edits to `agent/stats.py`,
+  `agent/config.py` (the Console limit by date), `agent/verifiers/__init__.py` (thread names),
+  `.github/workflows/curator.yml` (one env line, not yet made) and `docs/DEVELOPMENT.md`.
+- seo may edit two tests in `tests/test_packaging.py` and add the brand plugin to
+  `vite.config.ts`. Lint is not a check (CI runs none).
+- Main lands a branch by its reviewed commit hash, never by branch name.
+
+On `main` (not pushed; every CI check passes at `85084fa`):
+- latency: November's budget, Mission Control's caps by date, the 429 log (up to `a8c5947`).
+- seo step 1: `src/brand.ts` and the name pass; README links kept on `cosmic.` until DNS.
+- data: migration 011 as a file (not run) and its decisions; ui: its handoff. Copied with
+  `git cherry-pick -x`, so each session's `git rebase main` drops them by itself.
+
+Reviewed and approved, held off `main`:
+- **latency, parallel search** (`537f4ed`..`cda56a5`): lands only after Vedant pastes 010, the
+  check script says CHECK PASSED, and 2 real local searches pass. Before 010 every live search
+  fails. The headless drive passed (first question 3.3 s, search 6.4 s on the stub).
+- **seo step 2** (`86b984e`, `bdbb48f`): metadata, icons, 8 redirects, close-match 404. Its
+  canonical URL, preview image and redirects point at `curiosity.`, so it lands only when
+  `curiosity.vedantgaikwad.ie` loads over HTTPS.
+
+Not reviewed:
+- **media** sent no report. Its worktree has uncommitted edits to files it does not own
+  (`agent/bank.py`, `src/types.ts`: latency's; `requirements-dev.txt`: ask first). It was told
+  to stop and report why; nothing of it is on `main`.
+
+Open for Vedant: push `main` by Saturday (November's budget); paste 010 and its check; A or B
+for the Learn card (main recommends B); approve latency's `CLAUDE.md` and `docs/DESIGN.md`
+drafts ($32); DNS for `curiosity.`; the setup checklist on the board.
 
 ## Where things stand (2026-10-30, 02:00)
 
@@ -167,8 +209,10 @@ decision 15 (the overhaul), and "Player state" changed to optional accounts.
 
 ## Next
 
-- Vedant: continue on Windows (above), start seo first, then the others.
-- main: review each piece when Vedant says it is ready.
+- Vedant: the "Open for Vedant" list in "Where things stand (2026-10-30, 17:30)".
+- main: read media's report and decide with Vedant who commits its edits; land latency's
+  parallel search after 010 and the real searches; land seo step 2 after DNS.
+- Each session, on restart: `git rebase main` first. ui waits for Vedant's card pick.
 
 ## Blockers
 
