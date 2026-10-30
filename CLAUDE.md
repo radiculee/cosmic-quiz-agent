@@ -6,8 +6,8 @@ Persistent context for Claude Code. Read this, then `docs/DESIGN.md` and `docs/P
 
 ## What this project is
 
-**Cosmic Quiz Agent** (working name) by **Vedant Gaikwad**, a Dublin-based Data Analyst and Full-Stack
-Developer. An autonomous astronomy and space AI agent, surfaced as a Learn / Quiz web game.
+**Curiosity** (the repo is `cosmic-quiz-agent`; renamed 2026-10-30 by Vedant, after the Mars rover; it
+was "Cosmic Quiz Agent") by **Vedant Gaikwad**, a Dublin-based Data Analyst and Full-Stack Developer. An autonomous astronomy and space AI agent, surfaced as a Learn / Quiz web game.
 
 - **v1:** a Learn / Quiz web game on separate pages with real URLs. (Changed 2026-10-08 by Vedant; it was one Speedrun-style page.)
   - Home: a full-screen hero over a slideshow of Vedant's scenes, with the title, the tagline and a compact row of Learn, Quiz and "Try a new topic" (from the web); the rank, points and a trophy shelf in a card below the fold. (Changed 2026-10-10 by Vedant; inner pages show the observatory scene as a still.)
@@ -15,10 +15,11 @@ Developer. An autonomous astronomy and space AI agent, surfaced as a Learn / Qui
   - Quiz: runs of 10, 30 or 60 four-option MCQs, each on a different topic, against the clock. After each answer, the game shows the explanation and cited sources.
   - The web page (`/explore`): a typed topic researched live by the agent, behind guardrails. It also opens "Mission Control", the agent's measured statistics by mode and difficulty (Session 9).
   - Tiered bronze, silver and gold trophies that pop up when earned.
+  - Optional sign-in (Google or an email link) saves progress to Supabase; guests play as before. (Changed 2026-10-30 by Vedant; it was "no accounts" until v2.)
 - **v2:** an astronomy newsletter (email via Resend, then WhatsApp) produced by the same agent. (The analytics page moved from v2 into v1 on 2026-10-08.)
 
-It is a standalone project with its own repo, hosted on Vercel and served at `cosmic.vedantgaikwad.ie`, a
-subdomain of Vedant's existing domain. The repo went public with an MIT licence on 2026-10-19, after a
+It is a standalone project with its own repo, hosted on Vercel and served at `curiosity.vedantgaikwad.ie`, a
+subdomain of Vedant's existing domain (`cosmic.vedantgaikwad.ie` redirects there; changed 2026-10-30). The repo went public with an MIT licence on 2026-10-19, after a
 security audit. (Changed 2026-10-08 by Vedant; it was "its own repo and domain".) It is **not** part of the
 portfolio repo (`Modernpersonalportfoliowebsite`, a separate folder), which is used only as a reference for
 patterns and design tokens. Recruiters will read this code, so code quality is part of the deliverable.
@@ -55,13 +56,13 @@ Vercel Python function (`api/research.py`), behind guardrails, with steps stream
 
 ## Hard rules
 
-1. **Capped running cost.** Anthropic API usage is capped at $10 a month by a Console spend limit. TypeSafe (Jev, the second-opinion verifier) runs on a prepaid balance (EUR 5 for evals at 2026-10-01) at $0.042 per million input tokens. Every other service stays on a free tier, and there is no other paid item: the site uses a subdomain of vedantgaikwad.ie, which Vedant already owns. Log tokens and cost for every model run. Before adding any service, dependency or API, state its free tier or price. (Changed 2026-10-01; changed 2026-10-08 by Vedant, when a new domain stopped being a cost. See `docs/PLAN.md`.)
+1. **Capped running cost.** Anthropic API usage is capped at $10 a month by a Console spend limit. TypeSafe (Jev, the second-opinion verifier) runs on a prepaid balance (EUR 5 for evals at 2026-10-01) at $0.042 per million input tokens. Every other service stays on a free tier, and there is no other paid item: the site uses a subdomain of vedantgaikwad.ie, which Vedant already owns. Log tokens and cost for every model run. Before adding any service, dependency or API, state its free tier or price. (Changed 2026-10-01; changed 2026-10-08 by Vedant, when a new domain stopped being a cost. See `docs/PLAN.md`.) Free tiers in use for accounts and images (2026-10-30): Resend sends sign-in links (3,000 emails a month, 100 a day); Supabase Auth covers 50,000 monthly users; Supabase Storage holds topic images (1 GB stored, 5 GB transferred a month).
 2. **Citation rule.** A source may only be a URL actually fetched during that run. This is enforced in code (`agent/verify.py`), never trusted to the prompt. Drop any other URL.
 3. **Publish gate.**
    - A separate verifier pass must quote a source passage that supports the correct answer and confirm each distractor is wrong.
    - Pass: `published`. Borderline: `review`. Fail: discard and log.
 4. **Guardrails on on-demand runs:** an on-topic check, a per-IP limit (salted-hash IPs only, for GDPR), a daily global cap in runs and dollars that stays under the $10 limit, and fallback to the bank.
-5. **Secrets** live only in env vars (Vercel, GitHub Actions secrets, a local `.env` that is never committed). The Supabase secret key (`SUPABASE_SECRET_KEY`, the new name for the service-role key) never reaches the browser; only the publishable key may.
+5. **Secrets** live only in env vars (Vercel, GitHub Actions secrets, a local `.env` that is never committed). The Supabase secret key (`SUPABASE_SECRET_KEY`, the new name for the service-role key) never reaches the browser; only the publishable key may. The browser holds a signed-in user's session token, never another key, and every user table is behind row-level security (added 2026-10-30).
 
 ---
 

@@ -6,9 +6,11 @@ analytics page of the agent's measured statistics by mode and difficulty ("Missi
 `docs/PLAN.md` Session 9); v2 adds an astronomy newsletter (email, then WhatsApp) produced by the same
 agent. (Changed 2026-10-08 by Vedant: the analytics page, added to v2 on 2026-10-01, moved into v1.) It
 started as a portfolio feature but is now a **standalone project**: its own repo (public with an MIT
-licence from Session 10, after a security audit), served at `cosmic.vedantgaikwad.ie` and hosted on
+licence from Session 10, after a security audit), served at `curiosity.vedantgaikwad.ie` and hosted on
 Vercel. (Changed 2026-10-08 by Vedant: it was "own domain"; it is now a subdomain of his existing
-vedantgaikwad.ie.) The portfolio repo is not changed (at most a Projects link later). Aim: a capped running cost (Anthropic API up to $10 a month, TypeSafe Jev on a prepaid balance, every other service free), a real agent (the model chooses tools in a loop and
+vedantgaikwad.ie.) (Changed 2026-10-30 by Vedant: the site is named **Curiosity**, after the Mars
+rover, and moves to `curiosity.vedantgaikwad.ie`; `cosmic.` and a few typo subdomains redirect there
+permanently. The repo keeps the name `cosmic-quiz-agent`.) The portfolio repo is not changed (at most a Projects link later). Aim: a capped running cost (Anthropic API up to $10 a month, TypeSafe Jev on a prepaid balance, every other service free), a real agent (the model chooses tools in a loop and
 runs on a schedule with no human trigger), and code that reads well to recruiters.
 
 ## Decisions (grill-me session, 2026-09-30)
@@ -82,10 +84,17 @@ runs on a schedule with no human trigger), and code that reads well to recruiter
     - Decided 2026-10-01 from the Session 3 eval and Vedant's hand review: **all_must_pass** with a Jev threshold of **0.8**. Any layer failing discards; any doubt goes to review. Measured: 38 of 40 planted faults handled, 43% of generated items published directly. See `docs/EVALS.md`.
     - Amended 2026-10-02: when the Haiku verifier's own supporting quote is not word for word on a cited page, the item goes to `review` instead of being discarded. That is the verifier's mistake, not evidence against the item: re-scored on the Session 3 eval it caught 0 of 40 planted faults and discarded 5 items, which now go to review; none is newly published and 38 of 40 planted faults are still handled.
     - A Report button on each question; 2 reports hide it. A visitor sends at most 10 a day, and `python -m curator review --reported` keeps or discards each hidden item (added 2026-10-09).
+15. **Pre-launch overhaul** (grill-me, 2026-10-30): optional accounts (see "Player state"); parallel
+    search plus a Curator fill of 30 likely topics; progress rows driven by the agent's real steps;
+    real NASA or Wikimedia images on topic cards (public domain or CC only, credited, served from the
+    site's own origin), with a fact card where none fits; a sticky header with navigation and each
+    page's settings, while each question's actions stay on its card; prerendered Learn pages with
+    structured data; rover ranks (Sojourner to Perseverance). Full list: `docs/SESSIONS.md`,
+    Decisions, 2026-10-30.
 
 ## Defaults chosen without asking (change if wanted)
 - **Review queue:** Vedant decides borderline items with `python -m curator review`, which shows each item with its question, answer, explanation, why it is in review, every cited source with its quote, and Jev's source check (changed 2026-10-02: the table editor does not show an item's sources, and nothing is approved without seeing them). `items.reviewed_at` records when each item left review, so the verifiers' doubts can be compared with his decisions. No admin UI in v1.
-- **Player state:** no accounts. Streak and score are kept in `localStorage`. Decided 2026-10-10 by Vedant: saving progress across devices waits for accounts in v2, decided together with the newsletter (which needs subscribers' emails anyway). Known limits until then: the profile does not move between devices, and Safari deletes script-written storage after 7 days of use without a visit; `navigator.storage.persist()` does not prevent that (it only guards against eviction when space runs low, and Safari usually refuses it in a tab).
+- **Player state:** optional accounts (changed 2026-10-30 by Vedant, grill-me; it was "no accounts", with accounts planned for v2). Guests play as before, with the profile in `localStorage`. Signing in (Google, or an email link through Resend; no passwords) saves progress to Supabase: one row per answer, plus what was read and seen, behind row-level security, so a server-scored leaderboard can be added later. On sign-in, guest progress is added to the account and points and trophies are recalculated from the history. Signed-in users are limited per account, guests per salted IP hash; the global caps are unchanged. An account can be exported and deleted from its page. Before 2026-10-30: no accounts; streak and score in `localStorage`; decided 2026-10-10 by Vedant that saving progress across devices would wait for accounts in v2, together with the newsletter. Known limits until then: the profile does not move between devices, and Safari deletes script-written storage after 7 days of use without a visit; `navigator.storage.persist()` does not prevent that (it only guards against eviction when space runs low, and Safari usually refuses it in a tab).
 - **Model selection:** a small eval set (about 20 fixed topics) scored on tool-call success, citation pass rate and verifier agreement. It scores the configured model and runs again whenever a model is swapped.
 - **Verifier evaluation:** the eval also includes a seeded-error set: generated items with planted faults (a wrong number, an unsupported claim, a quote that is not on the page, a distractor that is actually true). Each layer's catch rate and false-reject rate is measured on it, together with Haiku/Jev agreement and whether Jev's confidence is calibrated (do 0.9-confidence verdicts turn out right about 90% of the time).
 - **Secrets:** `ANTHROPIC_API_KEY`, `TYPESAFE_API_KEY`, `SUPABASE_URL`, `SUPABASE_SECRET_KEY` (Actions and server only; Supabase's new name for the service-role key), `SUPABASE_PUBLISHABLE_KEY` (the new name for the anon key: read-only, row-level security), `IP_HASH_SALT`. `NASA_API_KEY` is kept in `.env` but unused while APOD is read from its pages; `SEARCH_API_KEY` only if a web search fallback is added.
@@ -93,7 +102,8 @@ runs on a schedule with no human trigger), and code that reads well to recruiter
 ## Repo layout
 Changed 2026-10-08 by Vedant: the UI is split into pages with a router and trophies, `api/quota.py`
 (Session 8) and `api/stats.py` (Session 9) are added, and the repo gets an MIT licence when it goes
-public (Session 10). The repo is `radiculee/cosmic-quiz-agent`, served at `cosmic.vedantgaikwad.ie`.
+public (Session 10). The repo is `radiculee/cosmic-quiz-agent`, served at `curiosity.vedantgaikwad.ie`
+(it was `cosmic.vedantgaikwad.ie` until 2026-10-30, which now redirects).
 ```
 agent/                 Python package (shared core)
   llm.py               provider interface + Anthropic implementation, model config
