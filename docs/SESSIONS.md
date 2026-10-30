@@ -20,7 +20,7 @@ A new session: `dev/new-session.sh <name>` (Git Bash) or `dev/new-session.ps1 <n
 | data | `session/data` | `../cqa-data` | Accounts: see "data owns" | Active: migration 011 written; `agent/auth.py` next (`docs/handoff/data.md`) | 2026-10-30 |
 | ui | `session/ui` | `../cqa-ui` | Header, cards, progress rows, ranks: see "ui owns" | Briefed, not started (`docs/handoff/ui.md`) | 2026-10-30 |
 | seo | `session/seo` | `../cqa-seo` | The rename, metadata, prerendering, redirects: see "seo owns" | Briefed, not started (`docs/handoff/seo.md`) | 2026-10-30 |
-| media | `session/media` | `../cqa-media` | Topic images: see "media owns" | Briefed, not started (`docs/handoff/media.md`) | 2026-10-30 |
+| media | `session/media` | `../cqa-media` | Topic images: see "media owns" | Built and tested; dry run for Vedant to read, then migration 012 and the real fill (`docs/handoff/media.md`) | 2026-10-30 |
 
 Both sessions were still running in the main folder on `main` when this file was written, so
 until they move, their uncommitted changes share one working tree ("Uncommitted work" below).
@@ -263,6 +263,23 @@ entry; record a reversal as a new one.
     the token, and the account page asks the player to confirm.
   - Rows are kept until the player deletes the account. A purge of inactive accounts is a
     follow-up after the launch.
+
+- 2026-10-30, media: Plan answered by Vedant (each the recommendation):
+  - `agent/bank.py` and `src/types.ts` (latency's) get small additive edits: optional `image` and
+    `fact` on `BankTopic`, with the `TopicImage` and `TopicFact` types. Nothing else in them changes.
+  - Pillow 13.0.0 (free, HPND licence) is approved as a Curator-only dependency in the new
+    `requirements-media.txt`, kept out of `requirements.txt` and `pyproject.toml`. `requirements-dev.txt`
+    includes it so the tests run; `tests/test_images.py` checks it never reaches the Vercel lists.
+  - The step in `.github/workflows/curator.yml` is written as text in `docs/handoff/media.md`; latency
+    adds it.
+  - Order of work: code and tests, then `python -m curator.images --dry-run` for Vedant to read,
+    then migration 012 and the real fill. Nothing is uploaded or written before that.
+- 2026-10-30, media: Design choices inside the brief: images are in a `topic_images` table (not
+  columns on `topics`); a card is 640 x 360 WebP (16:9, about 40 KB), a link preview 1200 x 630
+  (up to 120 KB, only when the source is big enough); Commons' `Attribution` field is the credit;
+  CC BY-SA IGO is accepted as a CC BY-SA variant; a NASA library result passes only if every
+  credit it names is NASA's and nothing claims copyright; `/api/topics` leaves `image` and
+  `fact` out when a topic has neither.
 
 ---
 
