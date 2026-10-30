@@ -14,7 +14,7 @@ A new session: `dev/new-session.sh <name>` (Git Bash) or `dev/new-session.ps1 <n
 
 | Session | Branch | Worktree path | Owns (files/dirs) | Status | Last update |
 | --- | --- | --- | --- | --- | --- |
-| latency | `session/latency` | `../cqa-latency` | The live-search backend, the bank schema and the shared docs: see "latency owns" | Paused: on `main` and pushed; parallel search and November's budget next (`docs/handoff/latency.md`) | 2026-10-28 |
+| latency | `session/latency` | `../cqa-latency` | The live-search backend, the bank schema and the shared docs: see "latency owns" | Active: November's budget committed, ready for review; parallel search in progress (`docs/handoff/latency.md`) | 2026-10-30 |
 | explore | `session/explore` (landed on `main`) | `../cqa-explore` | The Explore page's frontend: see "explore owns" | Done: universal topics and Surprise me are on `main`; follow-ups in `docs/handoff/explore.md`. Its files pass to ui and media (2026-10-30) | 2026-10-30 |
 | main | `main` | the main folder | Coordination only, no code: this file, `docs/handoff/*.md` briefs, reviews | Active: the pre-launch overhaul (`docs/handoff/main.md`) | 2026-10-30 |
 | data | `session/data` | `../cqa-data` | Accounts: see "data owns" | Briefed, not started (`docs/handoff/data.md`) | 2026-10-30 |
@@ -220,6 +220,15 @@ entry; record a reversal as a new one.
     prerendering, then image cards.
   - Sessions: five (latency, data, ui, seo, media) in Vedant's terminal tabs; main writes the
     briefs and reviews every branch, and edits no code.
+- 2026-10-30, latency: November's budget built (Vedant's answers, relayed by main). The Console
+  limit for November is $32: $20 live research, about $5 for the daily Curator, $5 for the
+  30-topic fill, $2 spare; back to $10 on 1 December. The fill counts against the Console only,
+  not the $20 live cap. The worst case ($3.25 a day for 7 days, $22.75) is accepted: the $20 cap
+  holds and pauses live search late in the launch week. Mission Control reads the live cap
+  through `limits_at`. Progress estimates come from a SQL function in migration 010 (medians of
+  the last 30 days of runs). The deploy hook fires once per Curator run that published anything.
+  latency may edit `.github/workflows/curator.yml` (one env line), `agent/stats.py` (the cap
+  line) and `docs/DEVELOPMENT.md` (parallel search).
 
 ---
 

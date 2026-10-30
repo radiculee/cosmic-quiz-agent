@@ -13,8 +13,8 @@ An astronomy quiz written by an AI agent that checks every answer against the pa
   before a player sees it. In an eval with 40 planted faults, 38 never reached a player.
 - **It runs on its own.** The model chooses its own tools in a hand-rolled loop, with no agent
   framework, and a scheduled job grows the question bank every day with no one pressing a button.
-- **It is live, at a capped cost.** A visitor can watch it research a new topic, at about $0.12
-  a search, under a $10 a month spend cap. Every model call's tokens and cost are logged, and the
+- **It is live, at a capped cost.** A visitor can watch it research a new topic, at about $0.17
+  a search, under a $10 a month spend cap ($32 for November 2026, the launch month). Every model call's tokens and cost are logged, and the
   site shows them.
 
 **Stack:** Python 3.12 with the Anthropic SDK and Pydantic; Claude Haiku 4.5; TypeSafe's Jev as
@@ -115,15 +115,20 @@ quote each source was cited for.
   API requests an hour, 10 reports a day.
 - **For everyone:** 4 searches and $0.50 a day, $4 a month. Each run reserves the most it can
   cost ($0.17) until it ends, so the caps hold even when searches start at the same moment.
-- **Launch week** (the UTC days 3 to 9 November 2026): 5 searches a day per visitor, and 20
-  searches and $2.50 a day for everyone; the $4 month is unchanged. The dates are in code, so
-  the usual limits come back by themselves.
+- **November 2026,** the launch month: $20 a month for live research, so the launch cannot use up
+  the month in its first days.
+- **Launch week** (the UTC days 3 to 9 November 2026): 5 searches a day per visitor, and 14
+  searches and $3.25 a day for everyone. At about $0.17 a search, the whole week at full use
+  costs about $17, inside November's $20. The dates are in code, so the usual limits come back
+  by themselves, and the $4 month on 1 December.
 - Over a limit, the visitor keeps everything the bank already has.
 
 ## Cost
 
 - One model for every step: Claude Haiku 4.5. Anthropic usage is capped at $10 a month by a
-  Console spend limit. Jev runs on a prepaid TypeSafe balance ($0.042 per million input tokens).
+  Console spend limit, raised to $32 for November 2026 only: $20 for the launch month's live
+  research, about $5 for the daily Curator, $5 to fill the bank with 30 likely topics, and $2
+  spare. Jev runs on a prepaid TypeSafe balance ($0.042 per million input tokens).
   Everything else is on a free tier: Vercel Hobby, Supabase and GitHub Actions.
 - Measured on the live site by 13 October 2026: 213 runs for $5.89, all checks included, which
   is about $0.028 a run and $0.051 for each item published directly. A median run takes 19.2 s

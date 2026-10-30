@@ -1755,7 +1755,37 @@ around 8 November if every launch search were used, so the launch day count come
   Live research spent $0.07 in all of October, so these are ceilings.
 
 The build list above stands, with these numbers in place of the launch week's 20 and $2.50.
-Not built yet.
+
+Built on 2026-10-30 (the latency session, `session/latency`):
+
+- [x] `agent/limits.py`: `NOVEMBER_STARTS`, `NOVEMBER_ENDS` and `NOVEMBER_LIMITS` ($20 a month,
+      the usual daily numbers) for the UTC days 1 to 30 November; `LAUNCH_LIMITS` at 5 a visitor,
+      14 searches and $3.25 a day, under November's $20. `limits_at` picks the launch week, then
+      November, then the usual limits. Finding 3: only the `user_day` message is formatted.
+      Finding 2: a comment on `_Search.limits` in `agent/ondemand.py`.
+- [x] Tests (5 new, 2 changed): both ends of November, November's cap after the launch week,
+      $4 again on 1 December, November changing only the month cap, the launch changing only the
+      daily numbers (finding 4: no repeated constants), the decision's $18.02 sum fitting $20,
+      and a message with a brace. The usual daily cap stays $0.50 until parallel search.
+- [x] `agent/stats.py`: Mission Control's live month cap read through `limits_at` at the time
+      the figures were made, so November shows $20 (approved 2026-10-30), with a test.
+- [x] `README.md` (the spend cap, the limits and the cost) and `CHANGELOG.md`.
+- [ ] `CLAUDE.md` and `docs/DESIGN.md`: the dated exceptions to the $10 rule (October's $2 and
+      November's $32), drafted in `docs/handoff/latency.md` for Vedant to approve.
+- [ ] Vedant: the Console limit at $32 before 3 November, back to $10 on 1 December.
+
+Changed by Vedant on 2026-10-30: the Console limit for November is $32, not $27: $20 for live
+research, about $5 for the daily Curator, $5 for the 30-topic Curator fill (the pre-launch
+overhaul) and $2 spare. The fill counts against the Console only, not the $20 live cap.
+
+Found on the way: the $3.25 daily cap is a ceiling a day reaches only with unusually costly
+searches. If every launch day reached it, 7 x $3.25 = $22.75 would meet the $20 month cap on the
+launch's last day; at the typical $0.17 a search the week is $16.66. Accepted by Vedant on
+2026-10-30: the $20 month cap holds, so the worst case pauses live search late in the launch week.
+
+Also found: Mission Control showed the usual `LIMITS.usd_per_month` ($4) as the live cap, so in
+November it would have shown $4 where $20 applies; fixed above. It still shows the $10 Anthropic
+limit (`ANTHROPIC_MONTHLY_LIMIT_USD` in `agent/config.py`) in November, where the Console is $32.
 
 ### Universal topics (2026-10-28)
 

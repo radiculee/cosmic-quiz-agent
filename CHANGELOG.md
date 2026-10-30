@@ -4,6 +4,19 @@ What changed on the live site and in the repo since the README was rewritten for
 release. Everything before that, session by session with its decisions, checks and costs, is in
 [`docs/PLAN.md`](docs/PLAN.md).
 
+## 2026-10-30
+
+- **November's budget for the launch.** Live research gets $20 for the calendar month of
+  November 2026 (usually $4), so the launch cannot use up the month in its first days. The launch
+  week (the UTC days 3 to 9 November) now allows 14 searches and $3.25 a day for everyone (was 20
+  and $2.50), still 5 a visitor: at about $0.17 a six-item search, the whole week at full use
+  costs about $17. Both windows are dated in code (`limits_at` in `agent/limits.py`), so the usual
+  limits come back after 9 November, and the $4 month on 1 December, with no deploy. The
+  Anthropic Console limit is $32 for November ($20 here, about $5 for the daily Curator, $5 to
+  fill the bank with 30 likely topics, $2 spare) and goes back to $10 on 1 December. Mission
+  Control shows the live-research cap in force, so November shows $20. Also from the launch code review: a refusal message
+  can no longer fail on a stray brace.
+
 ## 2026-10-28
 
 - **Every topic at every level.** Learn and Quiz now list a topic only once it has an
