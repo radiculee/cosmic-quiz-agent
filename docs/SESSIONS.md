@@ -14,7 +14,7 @@ A new session: `dev/new-session.sh <name>` (Git Bash) or `dev/new-session.ps1 <n
 
 | Session | Branch | Worktree path | Owns (files/dirs) | Status | Last update |
 | --- | --- | --- | --- | --- | --- |
-| latency | `session/latency` | `../cqa-latency` | The live-search backend, the bank schema and the shared docs: see "latency owns" | Active: November's budget committed, ready for review; parallel search in progress (`docs/handoff/latency.md`) | 2026-10-30 |
+| latency | `session/latency` | `../cqa-latency` | The live-search backend, the bank schema and the shared docs: see "latency owns" | Active: November's budget on `main`; parallel search and migration 010 committed, 010 in review (`docs/handoff/latency.md`) | 2026-10-30 |
 | explore | `session/explore` (landed on `main`) | `../cqa-explore` | The Explore page's frontend: see "explore owns" | Done: universal topics and Surprise me are on `main`; follow-ups in `docs/handoff/explore.md`. Its files pass to ui and media (2026-10-30) | 2026-10-30 |
 | main | `main` | the main folder | Coordination only, no code: this file, `docs/handoff/*.md` briefs, reviews | Active: the pre-launch overhaul (`docs/handoff/main.md`) | 2026-10-30 |
 | data | `session/data` | `../cqa-data` | Accounts: see "data owns" | Active: migration 011 written; `agent/auth.py` next (`docs/handoff/data.md`) | 2026-10-30 |
