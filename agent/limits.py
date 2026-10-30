@@ -1,12 +1,12 @@
 """The on-demand guardrails' numbers and types (DESIGN.md decision 9, set 2026-10-04).
 
-The counting happens in the database (migrations 004 and 006) so it holds across serverless
-instances; the numbers are passed in from here, so they live in reviewed code.
+The counting happens in the database (migrations 004, 006 and 010) so it holds across
+serverless instances; the numbers are passed in from here, so they live in reviewed code.
 
-Since 2026-10-08 a live search on the web page makes a whole topic, one agent run at a time: up
-to six items since 2026-10-28 (a question and an explanation at each level). The daily limits
-count searches; the dollar caps count every run, each reserving the most it can cost until it
-ends.
+Since 2026-10-08 a live search on the web page makes a whole topic: up to six items since
+2026-10-28 (a question and an explanation at each level), all at once since 2026-10-30. The daily
+limits count searches; the dollar caps count every run, each reserving the most it can cost
+until it ends, and a search reserves all its runs when it starts.
 """
 
 from __future__ import annotations
@@ -17,9 +17,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-# "search" is not a limit a player meets: it is the database refusing a later run that cannot
-# join its search (another visitor's, still running, or already full).
-LimitName = Literal["user_day", "day_searches", "day_usd", "month_usd", "search"]
+LimitName = Literal["user_day", "day_searches", "day_usd", "month_usd"]
 
 
 class LimitSettings(BaseModel):
@@ -40,9 +38,13 @@ class LimitSettings(BaseModel):
     runs_per_search: int = Field(default=6, gt=0)
     # Every run reserves the most it can cost until it ends, so the dollar caps hold even while
     # runs are in flight. The monthly ceiling leaves room for the daily Curator (about $5 a
-    # month) under the $10 Anthropic limit. A run starts only if today's spend plus its
-    # reservation fits, so the day's last search may end early (decided 2026-10-08).
-    usd_per_day: float = Field(default=0.50, gt=0)
+    # month) under the $10 Anthropic limit. A search reserves its runs together when it starts,
+    # as many as today's and the month's caps fit (migration 010). The day's last search makes
+    # every item only when the daily cap holds (searches_per_day - 1) searches' real cost and
+    # one whole reservation: 3 x $0.17 + 6 x $0.17 = $1.53, so $1.55 (changed 2026-10-30 with
+    # parallel search; it was $0.50, one run's reservation at a time). Real spend per search is
+    # unchanged; the daily cap only paces it.
+    usd_per_day: float = Field(default=1.55, gt=0)
     usd_per_month: float = Field(default=4.00, gt=0)
     # Per visitor: reports a day (UTC). Two reports from different visitors hide an item, so
     # without a limit two connections could hide the whole bank (docs/SECURITY_AUDIT.md S2,
@@ -99,18 +101,20 @@ class RequestCount(BaseModel):
     retry_after: int
 
 
-class RunSlot(BaseModel):
-    """Permission to start a live run, or the limit that refused it."""
+class SearchSlots(BaseModel):
+    """The runs a new search reserved (`begin_on_demand_search`, migration 010), or the limit
+    that refused it. `ids` are the items reserved, in plan order: the first of those asked for,
+    as many as the caps fit. `limit` names the cap that refused the rest, or all of them."""
 
     model_config = ConfigDict(frozen=True)
 
     ok: bool
-    id: int | None = None
+    ids: tuple[int, ...] = ()
     limit: LimitName | None = None
 
 
 class OnDemandUsage(BaseModel):
-    """Live research so far, counted as `begin_on_demand_run` counts it: by start time in UTC,
+    """Live research so far, counted as `begin_on_demand_search` counts it: by start time in UTC,
     searches by the run that opened each one, and a run that has not ended at its reservation."""
 
     model_config = ConfigDict(frozen=True)
@@ -158,8 +162,8 @@ def global_limit(
     usage: OnDemandUsage, limits: LimitSettings, reserve_usd: float
 ) -> LimitName | None:
     """The global cap that would refuse a new search now, or None. It repeats
-    `begin_on_demand_run`'s checks for a search's first run (migration 006), in the same order;
-    the database still decides."""
+    `begin_on_demand_search`'s checks for a search's first run (migration 010), in the same
+    order: a search starts when at least its first run fits. The database still decides."""
     if usage.searches_today >= limits.searches_per_day:
         return "day_searches"
     if not _fits(usage.usd_today, reserve_usd, limits.usd_per_day):
@@ -199,7 +203,6 @@ _LIMIT_MESSAGES: dict[LimitName, str] = {
     ),
     "day_usd": "Live research has reached today's budget. It resets at midnight UTC.",
     "month_usd": "Live research has used this month's budget and resumes next month.",
-    "search": "This search cannot start another run.",
 }
 
 

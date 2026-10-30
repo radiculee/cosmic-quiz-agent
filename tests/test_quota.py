@@ -25,6 +25,7 @@ from agent.limits import (
     quota,
 )
 from agent.rest import StoreError
+from agent.schemas import Difficulty, Mode
 from agent.store import SupabaseStore
 from agent.web import ApiRequest, salted_hash
 from api import quota as quota_api
@@ -202,40 +203,48 @@ def test_store_reads_the_visitors_searches_and_sums_the_month_without_other_hash
     assert "user_hash" not in month
 
 
-def test_a_reservation_sends_the_search_limits_and_the_search_it_joins() -> None:
+def test_a_search_reserves_its_items_in_plan_order_with_the_limits_in_force() -> None:
     sent: list[dict[str, object]] = []
 
     def handler(request: httpx2.Request) -> httpx2.Response:
+        assert request.url.path.endswith("/rpc/begin_on_demand_search")
         sent.append(json.loads(request.content))
-        return httpx2.Response(200, json={"ok": True, "id": 13})
+        return httpx2.Response(200, json={"ok": True, "ids": [13, 14, 15], "limit": "day_usd"})
 
     client = httpx2.Client(transport=httpx2.MockTransport(handler))
     store = SupabaseStore(BASE, "sb_secret_test", client=client, retry_backoff_seconds=0.0)
+    items: list[tuple[Mode, Difficulty]] = [
+        ("quiz", "easy"),
+        ("quiz", "hard"),
+        ("learn", "easy"),
+        ("learn", "hard"),
+    ]
 
-    opened = store.begin_on_demand_run("abc123", "Pulsars", "learn", "hard", RESERVE, LIMITS)
-    joined = store.begin_on_demand_run(
-        "abc123", "Pulsars", "quiz", "hard", RESERVE, LIMITS, search_id=13
-    )
+    slots = store.begin_on_demand_search("abc123", "Pulsars", items, RESERVE, LIMITS)
 
-    assert opened.ok and opened.id == 13 and joined.ok
-    first, later = sent
-    assert first["p_search_id"] is None and later["p_search_id"] == 13
-    assert first == {
-        "p_user_hash": "abc123",
-        "p_topic": "Pulsars",
-        "p_mode": "learn",
-        "p_difficulty": "hard",
-        "p_search_id": None,
-        "p_reserve_usd": 0.17,
-        "p_user_day_searches": 2,
-        "p_day_searches": 4,
-        "p_search_runs": 6,
-        "p_day_usd": 0.50,
-        "p_month_usd": 4.00,
-    }
+    # A partial fit: the first three items, and the cap that refused the fourth.
+    assert slots.ok and slots.ids == (13, 14, 15) and slots.limit == "day_usd"
+    assert sent == [
+        {
+            "p_user_hash": "abc123",
+            "p_topic": "Pulsars",
+            "p_items": [
+                {"mode": "quiz", "difficulty": "easy"},
+                {"mode": "quiz", "difficulty": "hard"},
+                {"mode": "learn", "difficulty": "easy"},
+                {"mode": "learn", "difficulty": "hard"},
+            ],
+            "p_reserve_usd": 0.17,
+            "p_user_day_searches": LIMITS.user_searches_per_day,
+            "p_day_searches": LIMITS.searches_per_day,
+            "p_search_runs": LIMITS.runs_per_search,
+            "p_day_usd": LIMITS.usd_per_day,
+            "p_month_usd": LIMITS.usd_per_month,
+        }
+    ]
 
 
-def test_a_refused_reservation_names_the_limit() -> None:
+def test_a_refused_search_names_the_limit_and_reserves_nothing() -> None:
     client = httpx2.Client(
         transport=httpx2.MockTransport(
             lambda _: httpx2.Response(200, json={"ok": False, "limit": "day_searches"})
@@ -243,9 +252,46 @@ def test_a_refused_reservation_names_the_limit() -> None:
     )
     store = SupabaseStore(BASE, "sb_secret_test", client=client, retry_backoff_seconds=0.0)
 
-    slot = store.begin_on_demand_run("abc123", "Pulsars", "learn", "hard", RESERVE, LIMITS)
+    slots = store.begin_on_demand_search("abc123", "Pulsars", [("learn", "hard")], RESERVE, LIMITS)
 
-    assert not slot.ok and slot.limit == "day_searches"
+    assert not slots.ok and slots.ids == () and slots.limit == "day_searches"
+
+
+def test_a_reservation_is_sent_once_even_when_the_database_fails() -> None:
+    calls: list[str] = []
+
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        calls.append(request.url.path)
+        return httpx2.Response(503, json={"message": "down"})
+
+    client = httpx2.Client(transport=httpx2.MockTransport(handler))
+    store = SupabaseStore(BASE, "sb_secret_test", client=client, retry_backoff_seconds=0.0)
+
+    with pytest.raises(StoreError):
+        store.begin_on_demand_search("abc123", "Pulsars", [("quiz", "easy")], RESERVE, LIMITS)
+    assert len(calls) == 1  # a retry could reserve a second search
+
+
+def test_the_store_reads_each_levels_usual_run_time() -> None:
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        assert request.url.path.endswith("/rpc/live_run_estimates")
+        return httpx2.Response(
+            200,
+            json=[
+                {"mode": "learn", "difficulty": "hard", "median_seconds": 24.5, "runs": 12},
+                {"mode": "quiz", "difficulty": "easy", "median_seconds": 15.1, "runs": 3},
+            ],
+        )
+
+    client = httpx2.Client(transport=httpx2.MockTransport(handler))
+    store = SupabaseStore(BASE, "sb_secret_test", client=client, retry_backoff_seconds=0.0)
+
+    found = store.live_run_estimates()
+
+    assert [(row.mode, row.difficulty, row.median_seconds, row.runs) for row in found] == [
+        ("learn", "hard", 24.5, 12),
+        ("quiz", "easy", 15.1, 3),
+    ]
 
 
 class FakeStore:

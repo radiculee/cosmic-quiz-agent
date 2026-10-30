@@ -26,7 +26,7 @@ from agent.limits import (
     LimitSettings,
     OnDemandUsage,
     RequestCount,
-    RunSlot,
+    SearchSlots,
     day_start,
     month_start,
 )
@@ -557,6 +557,19 @@ class ReviewStore(Protocol):
     def decide_reported(self, item_id: int, decision: ReportDecision) -> bool: ...
 
 
+class RunEstimate(BaseModel):
+    """How long one item usually takes at a mode and level, from the last 30 days of runs
+    (`live_run_estimates`, migration 010): the median seconds and how many runs it is drawn
+    from."""
+
+    model_config = ConfigDict(frozen=True)
+
+    mode: Mode
+    difficulty: Difficulty
+    median_seconds: float = Field(ge=0)
+    runs: int = Field(ge=0)
+
+
 class _AttemptedJob(BaseModel):
     topic: str
     mode: Mode
@@ -602,7 +615,8 @@ _TOPICS = TypeAdapter(list[TopicRef])
 _COUNT = TypeAdapter(int)
 _REVIEW_ITEMS = TypeAdapter(list[ReviewItem])
 _REQUEST_COUNT = TypeAdapter(RequestCount)
-_RUN_SLOT = TypeAdapter(RunSlot)
+_SEARCH_SLOTS = TypeAdapter(SearchSlots)
+_ESTIMATES = TypeAdapter(list[RunEstimate])
 _USAGE_ROWS = TypeAdapter(list[_UsageRow])
 _PURGE = TypeAdapter(PurgeCounts)
 _REVIEW_SELECT = (
@@ -779,29 +793,25 @@ class SupabaseStore:
         )
         return parse(_REQUEST_COUNT, reply, "hit_request_limit")
 
-    def begin_on_demand_run(
+    def begin_on_demand_search(
         self,
         user_hash: str,
         topic: str,
-        mode: Mode,
-        difficulty: Difficulty,
+        items: Sequence[tuple[Mode, Difficulty]],
         reserve_usd: float,
         limits: LimitSettings,
-        search_id: int | None = None,
-    ) -> RunSlot:
-        """Start a live run if the limits allow it, reserving `reserve_usd` against the dollar
-        caps until `finish_on_demand_run` (migration 006). Without `search_id` the run opens a
-        search, which counts against the daily search limits; with it, the run joins that search
-        and is not counted again. Sent once."""
+    ) -> SearchSlots:
+        """Open a live search and reserve its runs in the order given, `reserve_usd` each against
+        the dollar caps until `finish_on_demand_run` (migration 010). The search counts once
+        against the daily search limits; the runs are reserved while the caps fit, so the ids
+        name the first items given, and `limit` the cap that refused the rest. Sent once."""
         reply = self._rest.send(
             "POST",
-            "/rpc/begin_on_demand_run",
+            "/rpc/begin_on_demand_search",
             json={
                 "p_user_hash": user_hash,
                 "p_topic": topic,
-                "p_mode": mode,
-                "p_difficulty": difficulty,
-                "p_search_id": search_id,
+                "p_items": [{"mode": mode, "difficulty": level} for mode, level in items],
                 "p_reserve_usd": round(reserve_usd, 6),
                 "p_user_day_searches": limits.user_searches_per_day,
                 "p_day_searches": limits.searches_per_day,
@@ -810,7 +820,12 @@ class SupabaseStore:
                 "p_month_usd": limits.usd_per_month,
             },
         )
-        return parse(_RUN_SLOT, reply, "begin_on_demand_run")
+        return parse(_SEARCH_SLOTS, reply, "begin_on_demand_search")
+
+    def live_run_estimates(self) -> list[RunEstimate]:
+        """How long one item usually takes, per mode and level (migration 010). Numbers only."""
+        reply = self._rest.send("POST", "/rpc/live_run_estimates", json={}, retries=RETRIES)
+        return parse(_ESTIMATES, reply, "live_run_estimates")
 
     def on_demand_usage(self, user_hash: str, now: datetime) -> OnDemandUsage:
         """Live searches so far today (the visitor's and everyone's) and the money spent today

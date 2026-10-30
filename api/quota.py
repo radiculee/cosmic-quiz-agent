@@ -3,8 +3,9 @@ the global caps would let a search start now.
 
 The web page shows it before a live search is spent (DESIGN.md decision 9). It is counted from
 `on_demand_runs` with the secret key, on the server only: the browser gets four values and never
-a visitor hash. The database still decides when a run starts (`begin_on_demand_run`), so a quota
-that is a moment out of date can only make the page more cautious or less, never break a limit.
+a visitor hash. The database still decides when a search starts (`begin_on_demand_search`), so a
+quota that is a moment out of date can only make the page more cautious or less, never break a
+limit.
 """
 
 from __future__ import annotations

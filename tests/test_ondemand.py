@@ -10,6 +10,7 @@ from __future__ import annotations
 import functools
 import json
 import threading
+import time
 from collections.abc import Callable, Generator, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -29,10 +30,10 @@ from agent.limits import (
     LimitName,
     LimitSettings,
     OnDemandUsage,
-    RunSlot,
+    SearchSlots,
     limit_message,
 )
-from agent.llm import Usage
+from agent.llm import Completion, Message, ToolSpec, Usage
 from agent.loop import run_learn, run_quiz
 from agent.ondemand import (
     FallbackEvent,
@@ -44,19 +45,19 @@ from agent.ondemand import (
     RejectedEvent,
     ResearchEvent,
     ResultEvent,
+    RunTimes,
     SearchRequest,
     Services,
     StatsEvent,
     plan_search,
     research,
-    run_budget,
     step_event,
     step_progress,
     tool_detail,
 )
 from agent.rest import StoreError
 from agent.schemas import Difficulty, ItemRecord, Mode, RunResult, Status, Step
-from agent.store import ItemPayload, OnDemandOutcome, RecordedIds, TopicKind
+from agent.store import ItemPayload, OnDemandOutcome, RecordedIds, RunEstimate, TopicKind
 from agent.topic_check import (
     InvalidTopicError,
     TopicCheckError,
@@ -68,7 +69,7 @@ from agent.topic_check import (
 from agent.topic_pick import TopicPick
 from agent.web import ApiRequest, ApiResponse, StreamResponse
 from api import research as research_api
-from tests.conftest import FakeLLM, FakeWeb, completion
+from tests.conftest import CALL_USAGE, FakeLLM, FakeWeb, completion
 from tests.test_loop import ARTICLE, FETCH, QUOTE
 from tests.test_store import quiz_record
 from tests.test_tools import WIKI_API, wiki_extract
@@ -230,19 +231,68 @@ def test_the_plan_takes_from_the_bank_what_it_already_has() -> None:
     assert keys(plan, "bank") == ["quiz-easy", "quiz-hard", "learn-easy"]
 
 
-def test_a_late_run_gets_a_shorter_agent_budget_so_the_search_ends_in_time() -> None:
-    settings = Settings()
+def test_every_run_has_the_agents_whole_budget_and_ends_inside_vercels_limit() -> None:
+    # Every run of a search starts in its first seconds, so none needs a shorter budget.
+    assert Settings().max_seconds < ondemand.SEARCH_SECONDS < 300  # Vercel's limit
 
-    assert run_budget(settings, 0.0) == settings.max_seconds  # every typical run
-    assert run_budget(settings, 100.0) == settings.max_seconds
-    assert run_budget(settings, 150.0) == pytest.approx(90.0)
-    # The last moment a run may start still leaves it time to finish under the limit.
-    at_cutoff = run_budget(settings, ondemand.RUN_START_SECONDS)
-    assert at_cutoff > 0
-    assert ondemand.RUN_START_SECONDS + at_cutoff + ondemand.VERIFY_SECONDS <= (
-        ondemand.SEARCH_SECONDS
-    )
-    assert ondemand.SEARCH_SECONDS < 300  # Vercel's limit
+
+def test_each_live_item_carries_its_usual_run_time_and_bank_items_none() -> None:
+    have = BankTopic(name="Black holes", kind="evergreen", learn=["easy"], quiz=[])
+    times = RunTimes(lambda: [estimate("quiz", "hard", 21.4, 9)])
+
+    plan = ondemand.with_estimates(plan_search(have), times)
+
+    assert [(item.key, item.estimate_seconds) for item in plan] == [
+        ("quiz-easy", ondemand.ESTIMATE_FALLBACK_SECONDS),
+        ("quiz-medium", ondemand.ESTIMATE_FALLBACK_SECONDS),
+        ("quiz-hard", 21.4),
+        ("learn-easy", None),  # in the bank: no run
+        ("learn-medium", ondemand.ESTIMATE_FALLBACK_SECONDS),
+        ("learn-hard", ondemand.ESTIMATE_FALLBACK_SECONDS),
+    ]
+
+
+def estimate(mode: Mode, difficulty: Difficulty, seconds: float, runs: int) -> RunEstimate:
+    return RunEstimate(mode=mode, difficulty=difficulty, median_seconds=seconds, runs=runs)
+
+
+def test_run_times_are_read_once_an_hour_and_need_enough_runs() -> None:
+    reads: list[float] = []
+    clock = [0.0]
+
+    def read() -> list[RunEstimate]:
+        reads.append(clock[0])
+        return [estimate("learn", "easy", 31.0, 12), estimate("quiz", "easy", 9.0, 4)]
+
+    times = RunTimes(read, now=lambda: clock[0])
+
+    assert times.seconds("learn", "easy") == 31.0
+    # Fewer runs than the minimum, or none at all: the fallback.
+    assert times.seconds("quiz", "easy") == ondemand.ESTIMATE_FALLBACK_SECONDS
+    assert times.seconds("quiz", "hard") == ondemand.ESTIMATE_FALLBACK_SECONDS
+    clock[0] = ondemand.ESTIMATE_TTL_SECONDS - 1
+    times.seconds("learn", "easy")
+    assert reads == [0.0]  # still fresh
+    clock[0] = ondemand.ESTIMATE_TTL_SECONDS
+    times.seconds("learn", "easy")
+    assert reads == [0.0, ondemand.ESTIMATE_TTL_SECONDS]
+
+
+def test_run_times_that_cannot_be_read_never_stop_a_search() -> None:
+    attempts: list[int] = []
+    rows = [estimate("learn", "easy", 31.0, 12)]
+
+    def read() -> list[RunEstimate]:
+        attempts.append(1)
+        if len(attempts) == 1:
+            raise StoreError("down")
+        return rows
+
+    times = RunTimes(read, now=lambda: 0.0)
+
+    assert times.seconds("learn", "easy") == ondemand.ESTIMATE_FALLBACK_SECONDS
+    assert times.seconds("learn", "easy") == 31.0  # tried again on the next search
+    assert len(attempts) == 2
 
 
 # --- Fakes -------------------------------------------------------------------------------------
@@ -305,57 +355,80 @@ class FakePicker:
 
 @dataclass
 class FakeStore:
-    # Limits that refuse the n-th reservation (0 = the run that opens the search).
-    refuse: dict[int, LimitName] = field(default_factory=dict)
+    """Behaves as begin_on_demand_search does (migration 010): the search limits refuse it
+    whole, then its items are reserved in the order given while the dollar caps fit."""
+
+    # The limit that refuses the search before anything is reserved.
+    refuse: LimitName | None = None
+    # How many items the dollar caps fit (None: all of them), and the cap that refuses the rest.
+    fit: int | None = None
+    fit_limit: LimitName = "day_usd"
     down: bool = False
-    began: list[tuple[str, str, Mode, Difficulty, int | None]] = field(default_factory=list)
+    began: list[tuple[str, str, list[tuple[Mode, Difficulty]]]] = field(default_factory=list)
     finished: list[tuple[int, float, OnDemandOutcome, int | None]] = field(default_factory=list)
     payloads: list[ItemPayload] = field(default_factory=list)
     calls: list[str] = field(default_factory=list)
     limits_seen: list[LimitSettings] = field(default_factory=list)
+    estimates: list[RunEstimate] = field(default_factory=list)
     # What the limits have counted so far today and this month, read before the paid check.
     usage: OnDemandUsage = field(
         default_factory=lambda: OnDemandUsage(
             visitor_searches_today=0, searches_today=0, usd_today=0.0, usd_this_month=0.0
         )
     )
+    # A search's runs record and settle from threads of their own.
+    lock: threading.Lock = field(default_factory=threading.Lock)
 
     def on_demand_usage(self, user_hash: str, now: datetime) -> OnDemandUsage:
         if self.down:
             raise StoreError("down")
         return self.usage
 
-    def begin_on_demand_run(
+    def begin_on_demand_search(
         self,
         user_hash: str,
         topic: str,
-        mode: Mode,
-        difficulty: Difficulty,
+        items: Sequence[tuple[Mode, Difficulty]],
         reserve_usd: float,
         limits: LimitSettings,
-        search_id: int | None = None,
-    ) -> RunSlot:
-        number = len(self.began)
-        self.began.append((user_hash, topic, mode, difficulty, search_id))
+    ) -> SearchSlots:
+        self.began.append((user_hash, topic, list(items)))
         self.limits_seen.append(limits)
         self.calls.append("begin")
         assert reserve_usd == Settings().max_job_cost_usd
+        assert 1 <= len(items) <= limits.runs_per_search  # the database raises otherwise
         if self.down:
             raise StoreError("down")
-        if number in self.refuse:
-            return RunSlot(ok=False, limit=self.refuse[number])
-        return RunSlot(ok=True, id=100 + number)
+        if self.refuse is not None:
+            return SearchSlots(ok=False, limit=self.refuse)
+        count = len(items) if self.fit is None else min(self.fit, len(items))
+        if count == 0:
+            return SearchSlots(ok=False, limit=self.fit_limit)
+        return SearchSlots(
+            ok=True,
+            ids=tuple(range(100, 100 + count)),
+            limit=None if count == len(items) else self.fit_limit,
+        )
+
+    def live_run_estimates(self) -> list[RunEstimate]:
+        return self.estimates
 
     def finish_on_demand_run(
         self, slot_id: int, spent_usd: float, outcome: OnDemandOutcome, run_id: int | None
     ) -> None:
-        self.finished.append((slot_id, spent_usd, outcome, run_id))
-        self.calls.append("finish")
+        with self.lock:
+            self.finished.append((slot_id, spent_usd, outcome, run_id))
+            self.calls.append("finish")
 
     def record_item(self, payload: ItemPayload) -> RecordedIds:
-        self.payloads.append(payload)
-        number = len(self.payloads)
+        with self.lock:
+            self.payloads.append(payload)
+            number = len(self.payloads)
         return RecordedIds(topic_id=1, run_id=200 + number, item_id=40 + number)
+
+    def settled(self) -> dict[int, tuple[float, OnDemandOutcome, int | None]]:
+        """How each reservation ended, by its id: 100 is the plan's first live item."""
+        return {slot: (spent, outcome, run) for slot, spent, outcome, run in self.finished}
 
 
 NO_CHECK = SourceCheck(options=[], sentences=0, sentences_supported=0)
@@ -410,6 +483,7 @@ def services(
         llm=llm or object(),  # type: ignore[arg-type]
         jev=jev,  # type: ignore[arg-type]
         settings=Settings(),
+        run_times=RunTimes(store.live_run_estimates),
         limits=lambda now: limits,
         sign=lambda purpose, value: f"signed:{purpose}:{value}",
     )
@@ -426,20 +500,23 @@ EVERY_ITEM = QUESTIONS + EXPLANATIONS
 
 @dataclass
 class Script:
-    """What the replaced runs saw: each run's key and its agent time budget."""
+    """What the replaced runs saw: each run's key, its agent time budget and its thread's name."""
 
-    runs: list[tuple[str, float]] = field(default_factory=list)
+    runs: list[tuple[str, float, str]] = field(default_factory=list)
 
 
 def script(
     monkeypatch: pytest.MonkeyPatch,
     statuses: dict[str, Status | None] | None = None,
     crash: frozenset[str] = frozenset(),
+    together: int = 0,
 ) -> Script:
     """Replace each agent run and the gate with the stored quiz record, made for the run's mode
-    and difficulty and decided as `statuses` says (published by default)."""
+    and difficulty and decided as `statuses` says (published by default). With `together`, each
+    run waits until that many runs are going at once, and fails if they never are."""
     record = quiz_record()
     seen = Script()
+    barrier = threading.Barrier(together) if together else None
 
     def fake_run(mode: Mode) -> Callable[..., RunResult]:
         def run(
@@ -450,7 +527,9 @@ def script(
             on_step: Callable[[Step], None],
         ) -> RunResult:
             key = f"{mode}-{difficulty}"
-            seen.runs.append((key, settings.max_seconds))
+            seen.runs.append((key, settings.max_seconds, threading.current_thread().name))
+            if barrier is not None:
+                barrier.wait(timeout=5)
             if key in crash:
                 raise RuntimeError("the agent fell over")
             for step in record.run.steps:
@@ -473,13 +552,20 @@ def of_type[E](events: list[ResearchEvent], kind: type[E]) -> list[E]:
     return [event for event in events if isinstance(event, kind)]
 
 
+def result_keys(events: list[ResearchEvent]) -> list[str]:
+    """The keys of the items sent, in plan order: runs at once finish in any order, and the
+    page plays them in plan order."""
+    sent = {result.key for result in of_type(events, ResultEvent)}
+    return [key for key in EVERY_ITEM if key in sent]
+
+
 # --- Searches ----------------------------------------------------------------------------------
 
 
-def test_a_search_makes_every_item_one_run_at_a_time_and_counts_once(
+def test_a_search_reserves_every_item_in_one_call_and_counts_once(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    script(monkeypatch)
+    seen = script(monkeypatch)
     live, store = services()
 
     events = list(research(SEARCH, live))
@@ -488,40 +574,88 @@ def test_a_search_makes_every_item_one_run_at_a_time_and_counts_once(
     assert isinstance(plan, PlanEvent) and plan.topic == "Neutron stars"
     assert keys(plan.items, "live") == EVERY_ITEM
     results = of_type(events, ResultEvent)
-    assert [result.key for result in results] == EVERY_ITEM
-    assert all(result.reveal_token is None for result in results[3:])  # explanations need none
-    assert [result.reveal_token for result in results[:3]] == [
-        f"signed:reveal:{result.item.id}" for result in results[:3]
-    ]
+    assert result_keys(events) == EVERY_ITEM and len(results) == 6
+    for result in results:
+        if result.key in QUESTIONS:
+            assert result.reveal_token == f"signed:reveal:{result.item.id}"
+        else:
+            assert result.reveal_token is None  # explanations need none
     assert "correct_index" not in json.dumps([r.model_dump(mode="json") for r in results])
 
-    # The first run opens the search; the later runs join it, one at a time.
-    assert [search_id for *_, search_id in store.began] == [None] + [100] * 5
-    assert store.calls == ["begin", "finish"] * 6
-    record = quiz_record()
-    assert [(slot, outcome) for slot, _, outcome, _ in store.finished] == [
-        (slot, "published") for slot in range(100, 106)
+    # One reservation for the whole search, in plan order; every run settles its own.
+    assert store.began == [
+        ("v1", "Neutron stars", [(k.split("-")[0], k.split("-")[1]) for k in EVERY_ITEM])
     ]
+    assert store.calls == ["begin"] + ["finish"] * 6
+    record = quiz_record()
     assert all(
-        spent == pytest.approx(record.anthropic_cost_usd) for _, spent, _, _ in store.finished
+        outcome == "published" and spent == pytest.approx(record.anthropic_cost_usd)
+        for spent, outcome, _ in store.settled().values()
     )
-    assert [(p.run.mode, p.run.difficulty, p.run.source) for p in store.payloads] == [
+    assert sorted(store.settled()) == list(range(100, 106))
+    assert sorted((p.run.mode, p.run.difficulty, p.run.source) for p in store.payloads) == sorted(
         (mode, level, "on_demand")
         for mode in ("quiz", "learn")
         for level in ("easy", "medium", "hard")
-    ]
+    )
+    # Every run has the agent's whole time budget, on a thread named by the search and item.
+    assert sorted((key, budget, name) for key, budget, name in seen.runs) == sorted(
+        (key, Settings().max_seconds, f"live-search-100-{key}") for key in EVERY_ITEM
+    )
 
     # Every line after the on-topic check names its item.
     lines = of_type(events, LogEvent)
     assert lines[0].label == "On-topic check (Jev)" and lines[0].key is None
     assert all(line.key in EVERY_ITEM for line in lines[1:])
-    budgets = [line.detail for line in lines if line.label == "Budget"]
-    assert budgets[0] == "up to $0.17 reserved for the EASY question"
-    assert budgets[1] == "up to $0.17 reserved for the MEDIUM question"
-    assert budgets[3] == "up to $0.17 reserved for the EASY explanation"
+    budgets = {line.key: line.detail for line in lines if line.label == "Budget"}
+    assert budgets["quiz-easy"] == "up to $0.17 reserved for the EASY question"
+    assert budgets["learn-hard"] == "up to $0.17 reserved for the HARD explanation"
+    assert not any(line.label == "Time" for line in lines)  # no shortened runs any more
     # Which option the sources support would give a quiz answer away.
     jev_lines = [line for line in lines if line.label.startswith("Jev")]
     assert jev_lines and all(line.verdict is None for line in jev_lines)
+
+
+def test_every_run_of_a_search_goes_at_once(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Each run waits until all six are going: run one at a time, the first would time out.
+    script(monkeypatch, together=6)
+    live, store = services()
+
+    events = list(research(SEARCH, live))
+
+    assert result_keys(events) == EVERY_ITEM
+    assert of_type(events, MissedEvent) == []
+    assert len(store.finished) == 6
+
+
+def test_runs_finishing_out_of_order_each_send_their_own_item(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    script(monkeypatch)
+    # The HARD explanation's record is stored first, the EASY question's last.
+    original = ondemand._produce
+
+    def slower_for_easier(
+        topic: str,
+        planned: PlannedItem,
+        services: Services,
+        clock: ondemand._Clock,
+        emit: Callable[[ResearchEvent | None], None],
+    ) -> ItemRecord:
+        time.sleep(0.05 * (len(EVERY_ITEM) - 1 - EVERY_ITEM.index(planned.key)))
+        return original(topic, planned, services, clock, emit)
+
+    monkeypatch.setattr(ondemand, "_produce", slower_for_easier)
+    live, store = services()
+
+    events = list(research(SEARCH, live))
+
+    results = of_type(events, ResultEvent)
+    assert results[0].key == "learn-hard"
+    assert results[-1].key == "quiz-easy"
+    for result in results:
+        assert result.key == f"{result.item.mode}-{result.item.difficulty}"
+    assert len(store.finished) == 6
 
 
 def test_a_topic_the_bank_has_at_every_level_is_free_and_not_counted() -> None:
@@ -551,21 +685,19 @@ def test_a_bank_topic_with_gaps_makes_only_the_missing_items(
     plan = events[0]
     assert isinstance(plan, PlanEvent) and plan.topic == "Black holes"  # the bank's spelling
     assert keys(plan.items, "bank") == ["quiz-easy", "quiz-hard"]
-    assert [result.key for result in of_type(events, ResultEvent)] == [
-        "quiz-medium",
-        *EXPLANATIONS,
-    ]
-    assert [(topic, mode, level) for _, topic, mode, level, _ in store.began] == [
-        ("Black holes", "quiz", "medium"),
-        ("Black holes", "learn", "easy"),
-        ("Black holes", "learn", "medium"),
-        ("Black holes", "learn", "hard"),
+    assert result_keys(events) == ["quiz-medium", *EXPLANATIONS]
+    assert store.began == [
+        (
+            "v1",
+            "Black holes",
+            [("quiz", "medium"), ("learn", "easy"), ("learn", "medium"), ("learn", "hard")],
+        )
     ]
 
 
 def test_a_visitor_over_the_daily_limit_keeps_what_the_bank_has() -> None:
     have = BankTopic(name="Black holes", kind="evergreen", learn=[], quiz=["easy"])
-    store = FakeStore(refuse={0: "user_day"})
+    store = FakeStore(refuse="user_day")
     live, _ = services(bank=FakeBank(known="Black holes", have=have), store=store)
 
     events = list(research(SEARCH, live))
@@ -582,7 +714,7 @@ def test_a_visitor_over_the_daily_limit_keeps_what_the_bank_has() -> None:
     [
         ({"visitor_searches_today": 2}, "user_day"),
         ({"searches_today": 4}, "day_searches"),
-        ({"usd_today": 0.34, "usd_this_month": 0.34}, "day_usd"),
+        ({"usd_today": 1.40, "usd_this_month": 1.40}, "day_usd"),  # 1.40 + 0.17 > 1.55
         ({"usd_this_month": 3.90}, "month_usd"),
     ],
 )
@@ -623,8 +755,8 @@ def test_in_the_launch_week_a_visitor_gets_more_searches_and_every_run_keeps_the
     events = list(research(SEARCH, live))
 
     assert of_type(events, FallbackEvent) == []
-    assert [result.key for result in of_type(events, ResultEvent)] == EVERY_ITEM
-    assert store.limits_seen == [LAUNCH_LIMITS] * 6  # read once, kept by every run
+    assert result_keys(events) == EVERY_ITEM
+    assert store.limits_seen == [LAUNCH_LIMITS]  # read once, for the one reservation
 
 
 def test_surprise_me_picks_a_new_topic_and_skips_the_on_topic_check(
@@ -642,11 +774,13 @@ def test_surprise_me_picks_a_new_topic_and_skips_the_on_topic_check(
     assert isinstance(picked, LogEvent) and picked.label == "Agent picked a topic"
     assert picked.detail == "Pulsars" and picked.key is None
     assert isinstance(plan, PlanEvent) and plan.topic == "Pulsars"
-    assert [result.key for result in of_type(events, ResultEvent)] == EVERY_ITEM
+    assert result_keys(events) == EVERY_ITEM
     assert picker.seen == [names]  # every bank topic, so the pick is new
     assert judge.topics == []  # the agent's own pick is not checked again
-    assert [search_id for *_, search_id in store.began] == [None] + [100] * 5
-    assert {topic for _, topic, *_ in store.began} == {"Pulsars"}
+    # The limits, then the paid pick, then the one reservation that decides.
+    assert [(visitor, topic, len(items)) for visitor, topic, items in store.began] == [
+        ("v1", "Pulsars", 6)
+    ]
 
 
 def test_surprise_me_over_a_limit_never_pays_for_the_pick() -> None:
@@ -730,13 +864,9 @@ def test_a_discarded_item_is_reported_and_the_search_goes_on(
     [missed] = of_type(events, MissedEvent)
     assert (missed.key, missed.reason) == ("quiz-medium", "discarded")
     assert "the MEDIUM question" in missed.message
-    assert [result.key for result in of_type(events, ResultEvent)] == [
-        "quiz-easy",
-        "quiz-hard",
-        *EXPLANATIONS,
-    ]
+    assert result_keys(events) == ["quiz-easy", "quiz-hard", *EXPLANATIONS]
     assert len(store.payloads) == 6  # the discarded run is still stored
-    assert store.finished[1][2] == "discarded"
+    assert store.settled()[101][1] == "discarded"
 
 
 def test_every_run_that_made_a_record_sends_its_figures_before_its_item(
@@ -750,11 +880,13 @@ def test_every_run_that_made_a_record_sends_its_figures_before_its_item(
     stats = of_type(events, StatsEvent)
     # The discarded run cost money too, so it counts towards the search; the crashed run made
     # no record, so it has no figures.
-    assert [(s.key, s.stats.mode, s.stats.status) for s in stats] == [
-        ("quiz-easy", "quiz", "published"),
-        ("quiz-medium", "quiz", "discarded"),
-        *[(key, "learn", "published") for key in EXPLANATIONS],
-    ]
+    assert sorted((s.key, s.stats.mode, s.stats.status) for s in stats) == sorted(
+        [
+            ("quiz-easy", "quiz", "published"),
+            ("quiz-medium", "quiz", "discarded"),
+            *[(key, "learn", "published") for key in EXPLANATIONS],
+        ]
+    )
     for result in of_type(events, ResultEvent):
         [figures] = [s for s in stats if s.key == result.key]
         assert events.index(figures) < events.index(result)
@@ -776,11 +908,11 @@ def test_figures_that_cannot_be_built_never_cost_the_run(monkeypatch: pytest.Mon
     events = list(research(SEARCH, live))
 
     assert of_type(events, StatsEvent) == []
-    assert [result.key for result in of_type(events, ResultEvent)] == EVERY_ITEM
+    assert result_keys(events) == EVERY_ITEM
     assert [outcome for _, _, outcome, _ in store.finished] == ["published"] * 6
 
 
-def test_a_crashed_run_keeps_its_reservation_and_the_search_goes_on(
+def test_a_run_failing_keeps_its_reservation_while_the_others_finish(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     script(monkeypatch, crash=frozenset({"quiz-medium"}))
@@ -790,54 +922,64 @@ def test_a_crashed_run_keeps_its_reservation_and_the_search_goes_on(
 
     [missed] = of_type(events, MissedEvent)
     assert (missed.key, missed.reason) == ("quiz-medium", "failed")
-    assert store.finished[1] == (101, Settings().max_job_cost_usd, "failed", None)
-    assert [result.key for result in of_type(events, ResultEvent)] == [
-        key for key in EVERY_ITEM if key != "quiz-medium"
-    ]
+    assert store.settled()[101] == (Settings().max_job_cost_usd, "failed", None)
+    assert result_keys(events) == [key for key in EVERY_ITEM if key != "quiz-medium"]
+    assert len(store.finished) == 6
 
 
-def test_a_later_run_refused_by_a_cap_leaves_out_the_rest(
+def test_a_cap_that_fits_only_some_runs_leaves_out_the_last_in_plan_order(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     script(monkeypatch)
-    store = FakeStore(refuse={2: "day_usd"})
+    store = FakeStore(fit=3)  # today's budget holds three more reservations
     live, _ = services(store=store)
 
     events = list(research(SEARCH, live))
 
-    assert [result.key for result in of_type(events, ResultEvent)] == EVERY_ITEM[:2]
+    assert result_keys(events) == QUESTIONS
     skipped = of_type(events, MissedEvent)
-    # The explanations run last, so a search cut short loses them before any question.
-    assert [(m.key, m.reason) for m in skipped] == [(key, "skipped") for key in EVERY_ITEM[2:]]
-    assert "today's budget" in skipped[0].message
-    assert len(store.began) == 3 and len(store.finished) == 2
+    # The explanations come last, so a search cut short loses them before any question.
+    assert [(m.key, m.reason) for m in skipped] == [(key, "skipped") for key in EXPLANATIONS]
+    assert all(m.message == f"Not started. {limit_message('day_usd', LIMITS)}" for m in skipped)
+    assert len(store.began) == 1 and sorted(store.settled()) == [100, 101, 102]
 
 
-def test_no_run_starts_after_the_cutoff(monkeypatch: pytest.MonkeyPatch) -> None:
-    script(monkeypatch)
-    monkeypatch.setattr(ondemand, "RUN_START_SECONDS", -1.0)
-    live, store = services()
+def test_a_cap_that_fits_no_run_keeps_what_the_bank_has() -> None:
+    store = FakeStore(fit=0, fit_limit="month_usd")
+    live, _ = services(store=store)
 
     events = list(research(SEARCH, live))
 
-    assert [result.key for result in of_type(events, ResultEvent)] == ["quiz-easy"]
-    skipped = of_type(events, MissedEvent)
-    assert [m.key for m in skipped] == EVERY_ITEM[1:]
-    assert all("ran out of time" in m.message for m in skipped)
-    assert len(store.began) == 1
+    last = events[-1]
+    assert isinstance(last, FallbackEvent) and last.reason == "limit"
+    assert last.message == limit_message("month_usd", LIMITS)
+    assert store.finished == []
 
 
-def test_a_run_that_starts_late_is_given_only_the_time_left(
+def test_a_reservation_the_search_cannot_use_is_settled_at_once(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    seen = script(monkeypatch)
-    monkeypatch.setattr(ondemand, "SEARCH_SECONDS", 150.0)  # as if the search were late
-    live, _ = services()
+    script(monkeypatch)
+
+    class OneTooMany(FakeStore):
+        def begin_on_demand_search(
+            self,
+            user_hash: str,
+            topic: str,
+            items: Sequence[tuple[Mode, Difficulty]],
+            reserve_usd: float,
+            limits: LimitSettings,
+        ) -> SearchSlots:
+            slots = super().begin_on_demand_search(user_hash, topic, items, reserve_usd, limits)
+            return slots.model_copy(update={"ids": (*slots.ids, 999)})
+
+    store = OneTooMany()
+    live, _ = services(store=store)
 
     events = list(research(SEARCH, live))
 
-    assert all(seconds < Settings().max_seconds for _, seconds in seen.runs)
-    assert any(line.label == "Time" for line in of_type(events, LogEvent))
+    assert result_keys(events) == EVERY_ITEM
+    assert store.settled()[999] == (0.0, "failed", None)
 
 
 def test_a_player_leaving_mid_search_still_gets_every_run_stored_and_settled(
@@ -849,12 +991,13 @@ def test_a_player_leaving_mid_search_still_gets_every_run_stored_and_settled(
 
     assert isinstance(next(stream), PlanEvent)
     assert isinstance(next(stream), LogEvent)  # the on-topic check
-    budget = next(stream)  # the first run is reserved and the search's thread has started
-    stream.close()  # the player leaves: closing waits for the search to be stored
+    budget = next(stream)  # the runs are reserved and the search's thread has started
+    stream.close()  # the player leaves: closing waits for every run to be stored
 
     assert isinstance(budget, LogEvent) and budget.label == "Budget"
     assert len(store.payloads) == 6
-    assert [outcome for _, _, outcome, _ in store.finished] == ["published"] * 6
+    assert sorted(store.settled()) == list(range(100, 106))
+    assert {outcome for _, outcome, _ in store.settled().values()} == {"published"}
 
 
 def test_the_verifier_s_reasons_are_kept_out_of_quiz_log_lines(
@@ -866,7 +1009,8 @@ def test_the_verifier_s_reasons_are_kept_out_of_quiz_log_lines(
     events = list(research(SEARCH, live))
 
     haiku = [e for e in of_type(events, LogEvent) if e.label == "Haiku verifier"]
-    assert [line.detail for line in haiku if line.key in QUESTIONS] == ["borderline"] * 3
+    assert sorted(line.key or "" for line in haiku if line.key in QUESTIONS) == sorted(QUESTIONS)
+    assert all(line.detail == "borderline" for line in haiku if line.key in QUESTIONS)
     assert all(r.item.status == "review" for r in of_type(events, ResultEvent))
 
 
@@ -905,19 +1049,53 @@ def quiz_answer(difficulty: Difficulty) -> tuple[str, dict[str, Any]]:
     )
 
 
+class PerItemLLM:
+    """A scripted model for each item of a search, since its runs go at once: the agent's calls
+    are routed by the run's thread name (live-search-<id>-<key>), and the Haiku verifier's by its
+    schema, as it runs on a thread pool of its own (agent/verifiers)."""
+
+    def __init__(self, scripts: dict[str, FakeLLM]) -> None:
+        self.scripts = scripts
+
+    @property
+    def model(self) -> str:
+        return "claude-haiku-4-5"
+
+    def complete(
+        self,
+        system: str,
+        messages: Sequence[Message],
+        tools: Sequence[ToolSpec],
+        max_tokens: int,
+    ) -> Completion:
+        name = threading.current_thread().name
+        [key] = [key for key in self.scripts if name.endswith(f"-{key}")]
+        return self.scripts[key].complete(system, messages, tools, max_tokens)
+
+    def complete_json(
+        self, system: str, prompt: str, schema: dict[str, Any], max_tokens: int
+    ) -> tuple[dict[str, Any], Usage]:
+        is_quiz = "answer" in schema.get("properties", {})
+        return (haiku_reply() if is_quiz else {"explanation_problems": []}), CALL_USAGE
+
+    def count_json_tokens(self, system: str, prompt: str, schema: dict[str, Any]) -> int:
+        return (len(system) + len(prompt)) // 4
+
+
 def test_a_whole_search_through_the_real_loop_and_verifiers(
     monkeypatch: pytest.MonkeyPatch, web: FakeWeb, http: httpx2.Client
 ) -> None:
     web.add(WIKI_API, wiki_extract)
     # Each run reads the article, then answers; then the Haiku verifier checks it.
-    llm = FakeLLM(
-        [reply for level in LEVELS for reply in (completion(FETCH), completion(quiz_answer(level)))]
-        + [
-            reply
+    llm = PerItemLLM(
+        {
+            f"quiz-{level}": FakeLLM([completion(FETCH), completion(quiz_answer(level))])
             for level in LEVELS
-            for reply in (completion(FETCH), completion(learn_answer(level)))
-        ],
-        json_replies=[haiku_reply()] * 3 + [{"explanation_problems": []}] * 3,
+        }
+        | {
+            f"learn-{level}": FakeLLM([completion(FETCH), completion(learn_answer(level))])
+            for level in LEVELS
+        }
     )
     # The real loops, reading the fake web instead of the network.
     monkeypatch.setattr(ondemand, "run_learn", functools.partial(run_learn, http_client=http))
@@ -926,9 +1104,10 @@ def test_a_whole_search_through_the_real_loop_and_verifiers(
 
     events = list(research(SEARCH, live))
 
-    assert [result.key for result in of_type(events, ResultEvent)] == EVERY_ITEM
+    assert result_keys(events) == EVERY_ITEM
     assert of_type(events, MissedEvent) == []
-    assert [outcome for _, _, outcome, _ in store.finished] == ["published"] * 6
+    assert {outcome for _, outcome, _ in store.settled().values()} == {"published"}
+    assert len(store.finished) == 6
     # Each run settles at its own measured cost, far below its reservation.
     assert all(0 < spent < Settings().max_job_cost_usd for _, spent, _, _ in store.finished)
     assert all(p.item is not None and p.item.status == "published" for p in store.payloads)

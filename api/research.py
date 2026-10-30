@@ -23,7 +23,7 @@ from agent.bank import BankReader, LiveResults
 from agent.config import load_settings
 from agent.limits import limits_at
 from agent.llm import AnthropicProvider
-from agent.ondemand import ResearchEvent, SearchRequest, Services, research
+from agent.ondemand import ResearchEvent, RunTimes, SearchRequest, Services, research
 from agent.rest import StoreError
 from agent.store import SupabaseStore
 from agent.topic_check import InvalidTopicError, JevTopicJudge, clean_topic
@@ -91,6 +91,7 @@ def services() -> Services:
                 raise NotConfiguredError(f"missing {', '.join(missing)}")
             settings = load_settings()
             llm = AnthropicProvider(settings.model, client=anthropic_client())
+            store = SupabaseStore.from_env()
             _services = Services(
                 judge=JevTopicJudge(
                     settings.jev_model, settings.jev_timeout_seconds, settings.jev_input_per_mtok
@@ -98,10 +99,11 @@ def services() -> Services:
                 picker=HaikuTopicPicker(llm, settings),
                 bank=BankReader.from_env(),
                 results=LiveResults.from_env(),
-                store=SupabaseStore.from_env(),
+                store=store,
                 llm=llm,
                 jev=make_jev(settings),
                 settings=settings,
+                run_times=RunTimes(store.live_run_estimates),
                 limits=limits_at,
                 sign=sign,
             )

@@ -4,28 +4,30 @@ A search makes a whole topic at every level (changed 2026-10-28 by Vedant; it wa
 explanation at one chosen level): a QUIZ question at each level, then the LEARN explanation at
 each level, easiest first, leaving out any the bank already has. The questions come first and
 the explanations last (changed 2026-10-10 by Vedant), so the first question is ready sooner and
-the explanations, which can give answers away, are read after them. What a search's time limit
-leaves out, the daily Curator fills (`python -m curator daily`), and Learn and Quiz list the
-topic once it has every level. `research` yields events while it works:
+the explanations, which can give answers away, are read after them. What a search's caps leave
+out, the daily Curator fills (`python -m curator daily`), and Learn and Quiz list the topic once
+it has every level. `research` yields events while it works:
 
 0. Surprise me (no topic sent): the visitor's limits and the global caps are read first, so a
    search they would refuse ends before the paid pick; then the agent picks a topic the bank
    does not have (`agent/topic_pick.py`) and the search goes on with it. A failed pick counts
    nothing.
-1. The plan: which items the search makes live and which the bank already has (free). When the
-   bank has them all, that is the whole search: free, and not counted.
+1. The plan: which items the search makes live and which the bank already has (free), with how
+   long each live item's run usually takes (`RunTimes`). When the bank has them all, that is the
+   whole search: free, and not counted.
 2. The on-topic check (`agent/topic_check.py`) rejects anything that is not a plain astronomy
    or space topic. It runs once per search, and only after the visitor's limits and the global
    caps are read: it is paid, so a search they would refuse ends before it. A topic the agent
    picked skips it.
-3. The first run is reserved, which opens the search and counts it against the visitor's daily
-   limit and everyone's (`agent/limits.py`, migration 006). Over a limit, the player keeps what
-   the bank has.
-4. The runs go one at a time, each the Curator's evaluated pipeline: the agent researches the
-   item and the same three-layer gate decides (`agent/publish.py`). Every step is streamed as a
-   log line, including each Jev claim check. Each later run reserves its own slot in the search,
-   so only one run's cost bound is ever reserved, and none starts once the search has run for
-   three minutes.
+3. Every run is reserved in one call (migration 010), which opens the search and counts it
+   against the visitor's daily limit and everyone's (`agent/limits.py`). The runs are reserved
+   in plan order while the dollar caps fit, so a cap leaves out the last items, which are
+   reported as not started. Over a limit, the player keeps what the bank has.
+4. The reserved runs go all at once (changed 2026-10-30; they went one at a time, so a search
+   took about 100 s), each the Curator's evaluated pipeline: the agent researches the item and
+   the same three-layer gate decides (`agent/publish.py`). Every step is streamed as a log line,
+   including each Jev claim check, tagged with its item, so the lines of runs at once
+   interleave.
 5. Each run is stored in the bank whatever the outcome, its real cost settles its reservation,
    and a published or review item is sent to the player. A quiz item comes without its answer
    and with a signed token that lets /api/reveal answer it once the player has picked.
@@ -36,10 +38,12 @@ Every event after the plan that concerns one item names it (`key`, such as "quiz
 the log lines, each live run sends its progress (`ProgressEvent`): the stage of its work and a
 status line that names it, for the page's progress rows.
 
-From step 4 the work runs on its own thread, started before anything more is streamed: a run
-that has started is paid for, so it is always finished, stored and settled, and the search's
-later runs with it. If the player leaves, closing the stream waits for that thread, which keeps
-the request (and a serverless instance) alive until the search is stored.
+From step 4 the work runs on a thread of its own, started before anything more is streamed,
+which runs each reserved item on a thread named by the search and the item (so a rate-limit log
+line in api/research.py says which item met it). A reserved run is paid for, so it is always
+finished, stored and settled. If the player leaves, closing the stream waits for the search's
+thread, which waits for every run, keeping the request (and a serverless instance) alive until
+the search is stored.
 """
 
 from __future__ import annotations
@@ -59,7 +63,7 @@ from pydantic import BaseModel, ConfigDict
 
 from agent.bank import DIFFICULTY_ORDER, BankTopic, LearnItem, QuizQuestion
 from agent.config import Settings
-from agent.limits import LimitSettings, OnDemandUsage, RunSlot, limit_message, search_limit
+from agent.limits import LimitSettings, OnDemandUsage, SearchSlots, limit_message, search_limit
 from agent.llm import LLMProvider
 from agent.loop import run_learn, run_quiz
 from agent.publish import verify_and_decide
@@ -70,6 +74,7 @@ from agent.store import (
     ItemPayload,
     OnDemandOutcome,
     RecordedIds,
+    RunEstimate,
     TopicKind,
     TopicRef,
     build_payload,
@@ -81,15 +86,17 @@ from agent.verifiers import JevClient
 
 REVEAL_PURPOSE = "reveal"
 
-# Vercel ends a function at 300 seconds, so a search must be stored and settled by this time.
+# Vercel ends a function at 300 seconds, so a search must be stored and settled by this time. Its
+# runs all start in the first seconds and each has the agent's 120 s budget, so they end well
+# inside it; this is how long a player leaving waits for them.
 SEARCH_SECONDS = 280.0
-# No run starts once a search has run this long (decided 2026-10-08): a slow search leaves out
-# its last questions instead of passing the limit.
-RUN_START_SECONDS = 180.0
-# Kept back from a run's agent time budget for the verifiers and the save. A run that starts in
-# the first two minutes keeps the full budget; a later one gets what is left (decided
-# 2026-10-08), so even the last run finishes inside SEARCH_SECONDS.
-VERIFY_SECONDS = 40.0
+
+# How long a live item's run usually takes, for the page's progress rows (migration 010): read at
+# most once an hour per server. A level with fewer runs than this in the last 30 days, or a failed
+# read, uses the Session 3 eval's median item time (agent loop and verifier).
+ESTIMATE_TTL_SECONDS = 3600.0
+ESTIMATE_MIN_RUNS = 5
+ESTIMATE_FALLBACK_SECONDS = 17.0
 
 # --- Events ------------------------------------------------------------------------------------
 
@@ -117,6 +124,8 @@ class PlannedItem(BaseModel):
     mode: Mode
     difficulty: Difficulty
     source: ItemSource
+    # How long its run usually takes, in seconds, for the progress rows; None for a bank item.
+    estimate_seconds: float | None = None
 
     @property
     def label(self) -> str:
@@ -240,22 +249,58 @@ ResearchEvent = (
 class LiveStore(Protocol):
     def on_demand_usage(self, user_hash: str, now: datetime) -> OnDemandUsage: ...
 
-    def begin_on_demand_run(
+    def begin_on_demand_search(
         self,
         user_hash: str,
         topic: str,
-        mode: Mode,
-        difficulty: Difficulty,
+        items: Sequence[tuple[Mode, Difficulty]],
         reserve_usd: float,
         limits: LimitSettings,
-        search_id: int | None = None,
-    ) -> RunSlot: ...
+    ) -> SearchSlots: ...
 
     def finish_on_demand_run(
         self, slot_id: int, spent_usd: float, outcome: OnDemandOutcome, run_id: int | None
     ) -> None: ...
 
     def record_item(self, payload: ItemPayload) -> RecordedIds: ...
+
+
+class RunTimes:
+    """How long each mode and level's run usually takes (`live_run_estimates`, migration 010),
+    read at most once every ESTIMATE_TTL_SECONDS. Shared by every request a process serves, so
+    it is thread-safe. A failed read keeps what it had and is tried again on the next search; a
+    progress estimate never stops a search."""
+
+    def __init__(
+        self,
+        read: Callable[[], Sequence[RunEstimate]],
+        now: Callable[[], float] = time.monotonic,
+    ) -> None:
+        self._read = read
+        self._now = now
+        self._lock = threading.Lock()
+        self._seconds: dict[tuple[Mode, Difficulty], float] = {}
+        self._read_at: float | None = None
+
+    def seconds(self, mode: Mode, difficulty: Difficulty) -> float:
+        with self._lock:
+            now = self._now()
+            if self._read_at is None or now - self._read_at >= ESTIMATE_TTL_SECONDS:
+                self._refresh(now)
+            return self._seconds.get((mode, difficulty), ESTIMATE_FALLBACK_SECONDS)
+
+    def _refresh(self, now: float) -> None:
+        try:
+            rows = self._read()
+        except StoreError as error:
+            print(f"live run estimates not read: {error}", file=sys.stderr)
+            return
+        self._seconds = {
+            (row.mode, row.difficulty): row.median_seconds
+            for row in rows
+            if row.runs >= ESTIMATE_MIN_RUNS
+        }
+        self._read_at = now
 
 
 class PublicBank(Protocol):
@@ -287,6 +332,7 @@ class Services:
     llm: LLMProvider
     jev: JevClient | None
     settings: Settings
+    run_times: RunTimes  # for the progress rows' estimates
     # The limits in force at a moment (agent/limits.limits_at), read when a search starts; every
     # run of that search keeps them.
     limits: Callable[[datetime], LimitSettings]
@@ -301,15 +347,14 @@ class SearchRequest:
 
 @dataclass(frozen=True)
 class _Search:
-    id: int  # the id of the run that opened it (migration 006)
+    id: int  # the id of the run that opened it (migrations 006 and 010)
     topic: str  # in the bank's spelling when the bank has it
     visitor: str
-    live: tuple[PlannedItem, ...]
-    # In force when the search started, and kept by every later run, even past midnight UTC.
-    # Deliberate: a search that starts late on 9 November keeps the launch week's daily cap for
-    # its later runs, checked against 10 November's spend, so it can go up to 3 runs (about
-    # $0.51) over that day's usual cap; the monthly cap still holds.
-    limits: LimitSettings
+    # Each reserved item with the id of its run's reservation, in plan order.
+    runs: tuple[tuple[PlannedItem, int], ...]
+    # The live items the caps left out, and why, as a sentence for the player.
+    left_out: tuple[PlannedItem, ...]
+    left_out_reason: str
 
 
 class _Clock:
@@ -348,9 +393,9 @@ class _Clock:
 
 def plan_search(have: BankTopic | None) -> list[PlannedItem]:
     """What a search makes, in order: a question at each level, then an explanation at each
-    level, easiest first. Live items run in this order, so when a cap or the time limit cuts a
-    search short, the harder explanations are what is left out (the daily Curator makes them).
-    An item the bank already has is served from it, free."""
+    level, easiest first. Live items are reserved in this order, so when a cap cuts a search
+    short, the harder explanations are what is left out (the daily Curator makes them). An item
+    the bank already has is served from it, free."""
     wanted: list[tuple[Mode, Difficulty]] = [
         (mode, level) for mode in ("quiz", "learn") for level in DIFFICULTY_ORDER
     ]
@@ -371,10 +416,14 @@ def plan_search(have: BankTopic | None) -> list[PlannedItem]:
     ]
 
 
-def run_budget(settings: Settings, elapsed: float) -> float:
-    """The agent's time budget for a run starting `elapsed` seconds into the search: the full
-    budget, or less for a late run, so the search is stored before SEARCH_SECONDS."""
-    return min(settings.max_seconds, SEARCH_SECONDS - VERIFY_SECONDS - elapsed)
+def with_estimates(plan: Sequence[PlannedItem], run_times: RunTimes) -> list[PlannedItem]:
+    """The plan with each live item's usual run time, for the progress rows."""
+    return [
+        item.model_copy(update={"estimate_seconds": run_times.seconds(item.mode, item.difficulty)})
+        if item.source == "live"
+        else item
+        for item in plan
+    ]
 
 
 def research(request: SearchRequest, services: Services) -> Generator[ResearchEvent]:
@@ -398,7 +447,7 @@ def research(request: SearchRequest, services: Services) -> Generator[ResearchEv
         yield _unavailable()
         return
     topic = known or requested
-    plan = plan_search(have)
+    plan = with_estimates(plan_search(have), services.run_times)
     yield PlanEvent(topic=topic, items=plan)
     live = tuple(item for item in plan if item.source == "live")
     if not live:
@@ -443,40 +492,48 @@ def research(request: SearchRequest, services: Services) -> Generator[ResearchEv
             yield RejectedEvent(message=verdict.reason)
             return
 
-    first = live[0]
     try:
-        slot = services.store.begin_on_demand_run(
+        slots = services.store.begin_on_demand_search(
             request.visitor,
             topic,
-            first.mode,
-            first.difficulty,
+            [(item.mode, item.difficulty) for item in live],
             services.settings.max_job_cost_usd,
             limits,
         )
     except StoreError as error:
-        print(f"live search: could not reserve a slot: {error}", file=sys.stderr)
+        print(f"live search: could not reserve its runs: {error}", file=sys.stderr)
         yield _unavailable()
         return
-    if not slot.ok or slot.id is None:
-        message = limit_message(slot.limit, limits) if slot.limit else "Live research is paused."
-        yield FallbackEvent(reason="limit", message=message)
+    if not slots.ok or not slots.ids:
+        yield FallbackEvent(reason="limit", message=_refusal(slots, limits))
         return
+    reserved = tuple(zip(live, slots.ids, strict=False))
+    for extra in slots.ids[len(live) :]:  # never sent by the database; settled all the same
+        _settle(services, extra, 0.0, "failed", None)
 
-    # From here the first run is reserved, so the search's thread starts before anything else is
-    # sent: whatever happens to the stream, that thread settles every run it starts.
-    search = _Search(id=slot.id, topic=topic, visitor=request.visitor, live=live, limits=limits)
+    # From here runs are reserved, so the search's thread starts before anything else is sent:
+    # whatever happens to the stream, that thread settles every run it reserved.
+    search = _Search(
+        id=slots.ids[0],
+        topic=topic,
+        visitor=request.visitor,
+        runs=reserved,
+        left_out=live[len(reserved) :],
+        left_out_reason=_refusal(slots, limits),
+    )
     events: queue.Queue[ResearchEvent | None] = queue.Queue()
     worker = threading.Thread(
         target=_run_search,
         args=(search, services, clock),
         kwargs={"emit": events.put},
-        name=f"live-search-{slot.id}",
+        name=f"live-search-{search.id}",
     )
     try:
         worker.start()
     except RuntimeError as error:  # no thread could be started: nothing was spent
-        print(f"live search {slot.id}: could not start: {error}", file=sys.stderr)
-        _settle(services, slot.id, 0.0, "failed", None)
+        print(f"live search {search.id}: could not start: {error}", file=sys.stderr)
+        for _, slot_id in search.runs:
+            _settle(services, slot_id, 0.0, "failed", None)
         yield _unavailable()
         return
     try:
@@ -493,7 +550,12 @@ def _surprise(
 ) -> Generator[ResearchEvent, None, str | None]:
     """Surprise me: the topic the agent picks, or None once the reason has been sent. The limits
     are read first, so a search they would refuse ends before the paid pick; a failed pick
-    reserves nothing, so it is not counted."""
+    reserves nothing, so it is not counted.
+
+    The order is: the limits read, then the paid pick, then `begin_on_demand_search`, which
+    decides. So two visitors at the last place under a cap can both pay for a pick, and then one
+    is refused: about $0.003 for the refused pick. Accepted on 2026-10-30 (docs/SESSIONS.md),
+    since reserving before the pick would count a search that may pick nothing."""
     now = datetime.now(UTC)
     limits = services.limits(now)
     try:
@@ -528,6 +590,11 @@ def _surprise(
     return pick.topic
 
 
+def _refusal(slots: SearchSlots, limits: LimitSettings) -> str:
+    """Why runs were not reserved, as a sentence for the player."""
+    return limit_message(slots.limit, limits) if slots.limit else "Live research is paused."
+
+
 def _unavailable() -> FallbackEvent:
     return FallbackEvent(
         reason="unavailable",
@@ -556,65 +623,48 @@ def _run_search(
     clock: _Clock,
     emit: Callable[[ResearchEvent | None], None],
 ) -> None:
-    """The paid part of a search, on its own thread: its live items one at a time, the first on
-    the slot the search opened with and each later one on a slot of its own. Every run it starts
-    is settled, and the stream always ends (`emit(None)`), whatever happens."""
+    """The paid part of a search, on its own thread: every reserved run at once, each on a thread
+    named by the search and the item, then the items the caps left out. It waits for every run it
+    started, so each is settled, and the stream always ends (`emit(None)`), whatever happens."""
+    runs: list[threading.Thread] = []
     try:
-        for index, planned in enumerate(search.live):
-            if index == 0:
-                slot_id = search.id
-            else:
-                started = _later_slot(search, planned, services, clock)
-                if isinstance(started, _NotStarted):
-                    for left in search.live[index:]:
-                        emit(
-                            MissedEvent(
-                                key=left.key,
-                                reason="skipped",
-                                message=f"Not started. {started.reason}",
-                            )
-                        )
-                    return
-                slot_id = started
-            _run_item(search, planned, slot_id, services, clock.for_item(planned.key), emit)
-    except Exception:  # each run settles itself; this only guards the loop
+        for planned, slot_id in search.runs:
+            run = threading.Thread(
+                target=_run_item,
+                args=(search, planned, slot_id, services, clock.for_item(planned.key), emit),
+                name=f"live-search-{search.id}-{planned.key}",
+            )
+            try:
+                run.start()
+            except RuntimeError as error:  # this run never started: nothing was spent on it
+                print(
+                    f"live search {search.id}: {planned.key} not started: {error}",
+                    file=sys.stderr,
+                )
+                _settle(services, slot_id, 0.0, "failed", None)
+                emit(
+                    MissedEvent(
+                        key=planned.key,
+                        reason="failed",
+                        message=f"Something went wrong with {planned.label} on our side.",
+                    )
+                )
+                continue
+            runs.append(run)
+        for left in search.left_out:
+            emit(
+                MissedEvent(
+                    key=left.key,
+                    reason="skipped",
+                    message=f"Not started. {search.left_out_reason}",
+                )
+            )
+    except Exception:  # each run settles itself; this only guards the starts
         traceback.print_exc(file=sys.stderr)
     finally:
+        for run in runs:
+            run.join()
         emit(None)
-
-
-@dataclass(frozen=True)
-class _NotStarted:
-    """Why a later run of a search was not started, as a sentence for the player."""
-
-    reason: str
-
-
-def _later_slot(
-    search: _Search, planned: PlannedItem, services: Services, clock: _Clock
-) -> int | _NotStarted:
-    """Reserve a later run of the search, or say why it cannot start. The database counts it
-    against the dollar caps but not against the search limits (migration 006)."""
-    if clock.elapsed() > RUN_START_SECONDS:
-        return _NotStarted("The search ran out of time.")
-    try:
-        slot = services.store.begin_on_demand_run(
-            search.visitor,
-            search.topic,
-            planned.mode,
-            planned.difficulty,
-            services.settings.max_job_cost_usd,
-            search.limits,
-            search_id=search.id,
-        )
-    except StoreError as error:
-        print(f"live search {search.id}: could not reserve a run: {error}", file=sys.stderr)
-        return _NotStarted("Live research is not available right now.")
-    if not slot.ok or slot.id is None:
-        return _NotStarted(
-            limit_message(slot.limit, search.limits) if slot.limit else "Live research is paused."
-        )
-    return slot.id
 
 
 def _run_item(
@@ -706,11 +756,6 @@ def _produce(
 ) -> ItemRecord:
     """The agent run and the publish gate, with every step sent to the log."""
     settings = services.settings
-    budget = run_budget(settings, clock.elapsed())
-    run_settings = settings
-    if budget < settings.max_seconds:
-        run_settings = settings.model_copy(update={"max_seconds": budget})
-        emit(clock.log("Time", f"{budget:.0f} s for the agent, so the search ends in time"))
     answer_word = NOUNS[planned.mode]
 
     def on_step(step: Step) -> None:
@@ -723,7 +768,7 @@ def _produce(
     emit(clock.log("Agent", f"researching with {settings.model}"))
 
     run = run_learn if planned.mode == "learn" else run_quiz
-    result = run(topic, planned.difficulty, services.llm, run_settings, on_step=on_step)
+    result = run(topic, planned.difficulty, services.llm, settings, on_step=on_step)
 
     if result.code_check is not None:
         problems = result.code_check.problems
