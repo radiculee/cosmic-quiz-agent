@@ -95,6 +95,9 @@ SEARCH_SECONDS = 280.0
 # most once an hour per server. A level with fewer runs than this in the last 30 days, or a failed
 # read, uses the Session 3 eval's median item time (agent loop and verifier).
 ESTIMATE_TTL_SECONDS = 3600.0
+# After a failed read, the next try waits this long, so a database that is down is not asked again
+# by every search (the read holds the lock other searches wait on).
+ESTIMATE_RETRY_SECONDS = 60.0
 ESTIMATE_MIN_RUNS = 5
 ESTIMATE_FALLBACK_SECONDS = 17.0
 
@@ -268,8 +271,8 @@ class LiveStore(Protocol):
 class RunTimes:
     """How long each mode and level's run usually takes (`live_run_estimates`, migration 010),
     read at most once every ESTIMATE_TTL_SECONDS. Shared by every request a process serves, so
-    it is thread-safe. A failed read keeps what it had and is tried again on the next search; a
-    progress estimate never stops a search."""
+    it is thread-safe. A failed read keeps what it had and is tried again after
+    ESTIMATE_RETRY_SECONDS; a progress estimate never stops a search."""
 
     def __init__(
         self,
@@ -280,12 +283,12 @@ class RunTimes:
         self._now = now
         self._lock = threading.Lock()
         self._seconds: dict[tuple[Mode, Difficulty], float] = {}
-        self._read_at: float | None = None
+        self._next_read: float | None = None  # None: never read yet
 
     def seconds(self, mode: Mode, difficulty: Difficulty) -> float:
         with self._lock:
             now = self._now()
-            if self._read_at is None or now - self._read_at >= ESTIMATE_TTL_SECONDS:
+            if self._next_read is None or now >= self._next_read:
                 self._refresh(now)
             return self._seconds.get((mode, difficulty), ESTIMATE_FALLBACK_SECONDS)
 
@@ -294,13 +297,14 @@ class RunTimes:
             rows = self._read()
         except StoreError as error:
             print(f"live run estimates not read: {error}", file=sys.stderr)
+            self._next_read = now + ESTIMATE_RETRY_SECONDS
             return
         self._seconds = {
             (row.mode, row.difficulty): row.median_seconds
             for row in rows
             if row.runs >= ESTIMATE_MIN_RUNS
         }
-        self._read_at = now
+        self._next_read = now + ESTIMATE_TTL_SECONDS
 
 
 class PublicBank(Protocol):

@@ -278,21 +278,28 @@ def test_run_times_are_read_once_an_hour_and_need_enough_runs() -> None:
     assert reads == [0.0, ondemand.ESTIMATE_TTL_SECONDS]
 
 
-def test_run_times_that_cannot_be_read_never_stop_a_search() -> None:
-    attempts: list[int] = []
+def test_run_times_that_cannot_be_read_never_stop_a_search_and_wait_to_retry() -> None:
+    attempts: list[float] = []
+    clock = [0.0]
     rows = [estimate("learn", "easy", 31.0, 12)]
 
     def read() -> list[RunEstimate]:
-        attempts.append(1)
+        attempts.append(clock[0])
         if len(attempts) == 1:
             raise StoreError("down")
         return rows
 
-    times = RunTimes(read, now=lambda: 0.0)
+    times = RunTimes(read, now=lambda: clock[0])
 
     assert times.seconds("learn", "easy") == ondemand.ESTIMATE_FALLBACK_SECONDS
-    assert times.seconds("learn", "easy") == 31.0  # tried again on the next search
-    assert len(attempts) == 2
+    # The searches after a failed read do not ask the database again until the retry time.
+    clock[0] = ondemand.ESTIMATE_RETRY_SECONDS - 1
+    assert times.seconds("learn", "easy") == ondemand.ESTIMATE_FALLBACK_SECONDS
+    assert attempts == [0.0]
+    clock[0] = ondemand.ESTIMATE_RETRY_SECONDS
+    assert times.seconds("learn", "easy") == 31.0
+    assert attempts == [0.0, ondemand.ESTIMATE_RETRY_SECONDS]
+    assert ondemand.ESTIMATE_RETRY_SECONDS < ondemand.ESTIMATE_TTL_SECONDS
 
 
 # --- Fakes -------------------------------------------------------------------------------------
@@ -1056,6 +1063,7 @@ class PerItemLLM:
 
     def __init__(self, scripts: dict[str, FakeLLM]) -> None:
         self.scripts = scripts
+        self.verifier_threads: list[str] = []
 
     @property
     def model(self) -> str:
@@ -1075,6 +1083,7 @@ class PerItemLLM:
     def complete_json(
         self, system: str, prompt: str, schema: dict[str, Any], max_tokens: int
     ) -> tuple[dict[str, Any], Usage]:
+        self.verifier_threads.append(threading.current_thread().name)
         is_quiz = "answer" in schema.get("properties", {})
         return (haiku_reply() if is_quiz else {"explanation_problems": []}), CALL_USAGE
 
@@ -1106,6 +1115,10 @@ def test_a_whole_search_through_the_real_loop_and_verifiers(
 
     assert result_keys(events) == EVERY_ITEM
     assert of_type(events, MissedEvent) == []
+    # The verifier's own threads carry the item's name, so a 429 there says which item met it.
+    assert sorted(name.rsplit("_", 1)[0] for name in llm.verifier_threads) == sorted(
+        f"live-search-100-{key}" for key in EVERY_ITEM
+    )
     assert {outcome for _, outcome, _ in store.settled().values()} == {"published"}
     assert len(store.finished) == 6
     # Each run settles at its own measured cost, far below its reservation.
