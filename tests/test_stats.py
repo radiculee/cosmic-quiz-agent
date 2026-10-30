@@ -13,12 +13,13 @@ import httpx2
 import pytest
 
 from agent.config import ANTHROPIC_MONTHLY_LIMIT_USD
-from agent.limits import LIMITS
+from agent.limits import LIMITS, NOVEMBER_LIMITS
 from agent.llm import Usage
 from agent.rest import RestClient, StoreError
 from agent.run_stats import run_stats, tools_asked
 from agent.schemas import Step
 from agent.stats import (
+    AgentStats,
     ModelTokens,
     StatsFilters,
     StatsReader,
@@ -268,6 +269,16 @@ def test_the_reader_takes_a_reply_with_fields_added_later() -> None:
     body = stats_reply(stats).model_dump(mode="json")
     assert "added_later" not in body["stats"]["volume"] and "new_group" not in body["stats"]
     assert "topic" not in body["stats"]["filters"]
+
+
+def test_the_live_month_cap_is_the_one_in_force_when_the_figures_were_made() -> None:
+    def cap_at(when: str) -> float:
+        stats = AgentStats.model_validate({**SAMPLE, "generated_at": when})
+        return stats_reply(stats).caps.live_month_usd
+
+    assert cap_at("2026-10-31T23:59:59+00:00") == LIMITS.usd_per_month
+    assert cap_at("2026-11-20T12:00:00+00:00") == NOVEMBER_LIMITS.usd_per_month
+    assert cap_at("2026-12-01T00:00:00+00:00") == LIMITS.usd_per_month
 
 
 def test_caching_savings_price_tokens_with_and_without_the_cache() -> None:
