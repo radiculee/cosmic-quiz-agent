@@ -36,6 +36,14 @@ describe("research events", () => {
     };
     expect(isResearchEvent(plan)).toBe(true);
     const mislabelled = { ...plan, items: [{ ...plan.items[0], key: "quiz-medium" }] };
+    const estimated = { ...plan, items: [{ ...plan.items[0], estimate_seconds: 21.4 }] };
+    expect(isResearchEvent(estimated)).toBe(true);
+    expect(isResearchEvent({ ...plan, items: [{ ...plan.items[0], estimate_seconds: null }] })).toBe(
+      true,
+    );
+    expect(isResearchEvent({ ...plan, items: [{ ...plan.items[0], estimate_seconds: "21" }] })).toBe(
+      false,
+    );
     expect(isResearchEvent(mislabelled)).toBe(false);
   });
 

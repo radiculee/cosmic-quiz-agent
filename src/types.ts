@@ -104,6 +104,10 @@ export interface PlannedItem {
   mode: Mode;
   difficulty: Difficulty;
   source: "live" | "bank";
+  /** How long a live item's run usually takes, in seconds, from the median of recent runs at its
+   * mode and level (migration 010), for the progress rows' time left. Null or absent for a bank
+   * item. */
+  estimate_seconds?: number | null;
 }
 
 export type Tone = "info" | "ok" | "warn";

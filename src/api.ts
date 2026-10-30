@@ -158,7 +158,10 @@ function isPlannedItem(value: unknown): value is PlannedItem {
     isRecord(value) &&
     isItemKey(value.key) &&
     value.key === `${String(value.mode)}-${String(value.difficulty)}` &&
-    (value.source === "live" || value.source === "bank")
+    (value.source === "live" || value.source === "bank") &&
+    (value.estimate_seconds === undefined ||
+      value.estimate_seconds === null ||
+      isNumber(value.estimate_seconds))
   );
 }
 
