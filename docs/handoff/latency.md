@@ -98,3 +98,46 @@ tries.
   uncommitted work marked resolved.
 - `docs/handoff/latency.md`.
 - Outside git: `TYPESAFE_API_KEY` in the three local `.env` files.
+
+## Pre-launch overhaul additions (brief from main, 2026-10-30)
+
+The 2026-10-30 grill-me (`docs/SESSIONS.md`, Decisions, and `docs/handoff/main.md`) added work
+to this session and four new sessions beside it: data (accounts), ui (header, cards, progress
+rows, ranks), seo (the rename to Curiosity, metadata, prerendering, redirects) and media (topic
+images). Everything ships before the launch; code freeze **Monday 2 November 18:00 Dublin**.
+This session stays on the critical path; November's budget and parallel search come first and
+are must-ship.
+
+On this Mac the session starts fresh: `dev/new-session.sh latency` makes `../cqa-latency` from
+`main` (the Windows worktree's work is already on `main`).
+
+### Added to "Next"
+
+1. **November's budget** (step 3 above): merged and deployed by **Saturday 31 October**.
+2. **Parallel search** (step 4 above), with migration **010** (the number is reserved for you;
+   data has 011 and media 012). Go/no-go Sunday 1 November as decided.
+3. **Progress events** for ui's new progress rows: each item's stage as it changes (search,
+   fetch, write, verify, done or failed) and an estimate in seconds from the measured median for
+   its mode and level (the `run_stats` data; say which query or constant, and how it is kept
+   current). The event types go in `src/types.ts`, which you own; ui reads them. Keep the
+   existing log lines.
+4. **`AgentLog.tsx`**: a prop or hook so ui can put it behind "Show details".
+5. **Likely-topic fill** (Q20): 30 topics, about $5, on or after 1 November, from November's
+   budget (say which cap it counts against). Choose them from what visitors have typed
+   (`on_demand_runs`) plus the classics, and list them for Vedant before running.
+6. **Deploy hook:** after the Curator publishes a new topic, call the Vercel deploy hook
+   (secret `VERCEL_DEPLOY_HOOK_URL` in GitHub Actions, made by Vedant) so seo's prerendered
+   pages pick it up. At most once per Curator run.
+7. **Per-account limits** (Q5), once data's `agent/auth.py` and `src/session.ts` are on `main`:
+   `api/research.py` and `api/quota.py` key a signed-in visitor's limits by account (same numbers),
+   guests by the salted IP hash as now; `src/api.ts` sends data's `authHeader()`. Global caps
+   unchanged. This is part of accounts, so it is cut with them if they are late.
+8. **Fold migrations 011 and 012** into `supabase/schema.sql` as they land.
+9. **Docs:** `docs/PLAN.md`, `CHANGELOG.md` and `README.md` stay yours, except the README rename,
+   which seo makes. Fold in the other sessions' changelog text.
+
+### Ownership changes
+
+- `api/topics.py` passes to media for the image fields.
+- `supabase/migrations/011_*.sql` and `012_*.sql` are written by data and media; you keep
+  `schema.sql` and `010`.

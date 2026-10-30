@@ -15,7 +15,12 @@ A new session: `dev/new-session.sh <name>` (Git Bash) or `dev/new-session.ps1 <n
 | Session | Branch | Worktree path | Owns (files/dirs) | Status | Last update |
 | --- | --- | --- | --- | --- | --- |
 | latency | `session/latency` | `../cqa-latency` | The live-search backend, the bank schema and the shared docs: see "latency owns" | Paused: on `main` and pushed; parallel search and November's budget next (`docs/handoff/latency.md`) | 2026-10-28 |
-| explore | `session/explore` (landed on `main`) | `../cqa-explore` | The Explore page's frontend: see "explore owns" | Done: universal topics and Surprise me are on `main`; follow-ups in `docs/handoff/explore.md` | 2026-10-28 |
+| explore | `session/explore` (landed on `main`) | `../cqa-explore` | The Explore page's frontend: see "explore owns" | Done: universal topics and Surprise me are on `main`; follow-ups in `docs/handoff/explore.md`. Its files pass to ui and media (2026-10-30) | 2026-10-30 |
+| main | `main` | the main folder | Coordination only, no code: this file, `docs/handoff/*.md` briefs, reviews | Active: the pre-launch overhaul (`docs/handoff/main.md`) | 2026-10-30 |
+| data | `session/data` | `../cqa-data` | Accounts: see "data owns" | Briefed, not started (`docs/handoff/data.md`) | 2026-10-30 |
+| ui | `session/ui` | `../cqa-ui` | Header, cards, progress rows, ranks: see "ui owns" | Briefed, not started (`docs/handoff/ui.md`) | 2026-10-30 |
+| seo | `session/seo` | `../cqa-seo` | The rename, metadata, prerendering, redirects: see "seo owns" | Briefed, not started (`docs/handoff/seo.md`) | 2026-10-30 |
+| media | `session/media` | `../cqa-media` | Topic images: see "media owns" | Briefed, not started (`docs/handoff/media.md`) | 2026-10-30 |
 
 Both sessions were still running in the main folder on `main` when this file was written, so
 until they move, their uncommitted changes share one working tree ("Uncommitted work" below).
@@ -43,6 +48,34 @@ Random topics on the Explore page (`/explore`).
 - `src/components/TopicInput.tsx`, `src/components/DiceIcon.tsx`
 - `src/topics.ts`, `src/useTopics.ts`, `src/topics.test.ts`
 - `docs/handoff/explore.md`
+
+### The pre-launch overhaul (2026-10-30)
+
+Five sessions, briefed by main in `docs/handoff/<name>.md`. latency keeps everything above,
+except `api/topics.py` (to media). explore's files pass to ui (`ExplorePage.tsx`,
+`TopicInput.tsx`, `DiceIcon.tsx`) and media (`src/topics.ts`, `src/useTopics.ts`,
+`src/topics.test.ts`). Migrations have reserved numbers: **010 latency, 011 data, 012 media**;
+each writes only its own file, and latency folds them into `supabase/schema.sql`.
+
+**data owns:** `supabase/migrations/011_*.sql`, `agent/auth.py`, `api/account.py`,
+`src/session.ts`, `src/useSession.ts`, `src/profile.ts`, `src/useProfile.ts`,
+`src/profile.test.ts`, `src/pages/AccountPage.tsx`, `src/components/SignInButton.tsx`,
+`src/pages/PrivacyPage.tsx`, their tests, `docs/handoff/data.md`.
+
+**ui owns:** `src/App.tsx`, `src/game.ts` (ranks), `src/index.css`, every page in `src/pages/`
+except `NotFoundPage.tsx` (seo), `PrivacyPage.tsx` and `AccountPage.tsx` (data), every component
+in `src/components/` except `AgentLog.tsx` (latency) and `SignInButton.tsx` (data), the new
+`SearchProgress.tsx` and `FactCard.tsx`, their tests, `docs/handoff/ui.md`.
+
+**seo owns:** `src/brand.ts`, `index.html`, `vercel.json` (sole editor), `public/robots.txt`,
+the favicon set and web manifest, the sitemap and prerender scripts, `src/router.ts`,
+`src/router.test.ts`, `src/pages/NotFoundPage.tsx`, the close-match module, the README rename
+only, `docs/handoff/seo.md`. Its first pass, the brand-string replacement across `src/`, merges
+before ui edits those files.
+
+**media owns:** `curator/images.py`, `supabase/migrations/012_*.sql`, `api/topics.py`,
+`src/topics.ts`, `src/useTopics.ts`, `src/topics.test.ts`, `tests/test_images.py`,
+`docs/handoff/media.md`.
 
 ### Files both could plausibly touch
 
@@ -158,6 +191,35 @@ entry; record a reversal as a new one.
   queue is empty and 37 of 44 topics are on every level. Vedant asked to end the session clean
   and push: `session/latency` rebased onto the explore close, `main` fast-forwarded and pushed.
   Parallel search and November's budget (steps 3 to 5) continue in the next latency session.
+- 2026-10-30, main: The pre-launch overhaul (Vedant, grill-me session; each the recommendation
+  unless noted). Briefs in `docs/handoff/{latency,data,ui,seo,media}.md`; coordination in
+  `docs/handoff/main.md`.
+  - Accounts: optional, guests as now; Google and an email link (Resend), no passwords; private
+    profiles with one row per answer (leaderboard-ready); guest progress added to the account on
+    sign-in, no prompt; signed-in limits per account, same numbers, global caps unchanged.
+  - Speed: parallel search as planned, plus a Curator fill of 30 likely topics (about $5, from
+    November's budget, on or after 1 November). Jev cannot crawl; model calls are 90% of a run.
+  - Progress: one row per item, moved by real streamed steps, time left from measured medians, a
+    status line naming the real work, the agent log behind "Show details".
+  - Topic cards: real NASA or Wikimedia images (public domain or CC only, credited, code-only
+    fill, no model calls), WebP in Supabase Storage served from the site's own origin; a fact
+    card where none fits; no AI art.
+  - Controls: a sticky header with navigation, sign-in and each page's settings; each question's
+    actions on its card ("Read the explanation", "Sources (n)", "Next"), the panels closed but
+    remembering the last choice, also on web search cards.
+  - Search: prerendered Learn pages, /quiz and /explore with JSON-LD, rebuilt by a deploy hook
+    after the Curator publishes; subdomain aliases and close-match paths for typos; no
+    look-alike domains.
+  - Name (Vedant's own idea, after the Mars rovers): **Curiosity**, at
+    `curiosity.vedantgaikwad.ie`, with `cosmic.` and the aliases redirecting (301); the repo
+    keeps its name. The title tag is decided last, on Monday 2 November (Vedant's direction: "the
+    wonders beyond Earth"). Ranks become the six rovers in launch order, each with a cited fact.
+  - Link previews: Vedant makes the site-wide `og-v2.jpg`; each topic's is generated at build.
+  - Timing (Vedant's call, against the recommendation to ship some after launch): everything
+    before the launch. Code freeze Monday 2 November 18:00 Dublin; if late, cut accounts, then
+    prerendering, then image cards.
+  - Sessions: five (latency, data, ui, seo, media) in Vedant's terminal tabs; main writes the
+    briefs and reviews every branch, and edits no code.
 
 ---
 
@@ -168,9 +230,10 @@ it wants in its own `docs/handoff/<session>.md` and asks Vedant.
 
 | File | Owner | Why |
 | --- | --- | --- |
-| `supabase/schema.sql`, `supabase/migrations/**` | latency | Migrations are numbered and run once on the live bank; two sessions picking the same number breaks it |
+| `supabase/schema.sql`, `supabase/migrations/**` | latency (011 data, 012 media, from 2026-10-30) | Migrations are numbered and run once on the live bank; two sessions picking the same number breaks it, hence the reserved numbers |
 | `docs/PLAN.md` | latency | Nearly 2,000 lines, edited in many places; parallel edits conflict |
-| `CHANGELOG.md`, `README.md` | latency | One voice for what shipped |
+| `CHANGELOG.md`, `README.md` | latency (the README rename: seo) | One voice for what shipped |
+| `vercel.json` | seo | Redirects, rewrites and the CSP in one place; data and media send seo the exact change |
 | `CLAUDE.md` | Vedant | Changes only with his approval, from one session at a time |
 | `docs/NEXT_SESSION.md` | none (frozen) | Replaced by `docs/handoff/<session>.md`; left as it stands |
 | `docs/DESIGN.md` | Vedant | Locked decisions; reopen only after flagging it to him |
