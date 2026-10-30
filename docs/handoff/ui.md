@@ -3,7 +3,7 @@
 Notes for the ui session (`docs/SESSIONS.md`). They replace `docs/NEXT_SESSION.md` for this
 session. Update them before finishing, and commit them on `session/ui`.
 
-Last update: 2026-10-30 (ui: prototypes built, waiting for Vedant's pick)
+Last update: 2026-10-30 (ui: stopped at main's request; prototypes built, waiting for Vedant's pick)
 
 ## Current goal
 
@@ -123,7 +123,8 @@ The checks above pass and main's review has no open findings.
 
 ## Blockers
 
-- seo: `src/brand.ts` and the brand-string pass are not on `main` (`session/seo` has no commits yet).
+- Stopped at main's request: no rebase, no header, no new work. Main lands this branch.
+- seo: `src/brand.ts` and the brand-string pass are not on `main` (they are on `session/seo`: `8cb0d15`, `cef5818`, `0906f49`).
 - Vedant: pick A or B.
 - latency: progress event types in `src/types.ts`, and a prop on `AgentLog.tsx` for "Show details".
 - media: image, credit, category and key-fact fields on `BankTopic`.
@@ -134,3 +135,21 @@ The checks above pass and main's review has no open findings.
 - `docs/handoff/ui.md` (this file, committed).
 - `proto.html` (untracked, throwaway).
 - `src/prototypes/` (untracked, throwaway).
+- `proto-shots/` (untracked, screenshots).
+
+## Needs from Vedant
+
+Pick card A or B. Screenshots, all in `C:\Users\vedan\cqa-ui\proto-shots\` (untracked, do not commit):
+
+- `A-390.png`: A, 390 px, all 8 cards.
+- `A-1280.png`: A, 1280 px, all 8 cards.
+- `A-390-focus-title.png`: A, 390 px, focus on the title link.
+- `A-390-focus-credit.png`: A, 390 px, focus on a credit link.
+- `A-1280-focus-title.png`: A, 1280 px, focus on the title link.
+- `A-1280-focus-credit.png`: A, 1280 px, focus on a credit link.
+- `B-390.png`: B, 390 px, all 8 cards.
+- `B-1280.png`: B, 1280 px, all 8 cards.
+- `B-390-focus-title.png`: B, 390 px, focus on the title link.
+- `B-1280-focus-title.png`: B, 1280 px, focus on the title link.
+
+Also: `package.json` has no `lint` script. Say whether to add one.
