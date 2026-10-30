@@ -3,26 +3,29 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta
-      name="description"
-      content="An astronomy quiz written by an AI agent that checks every answer against the pages it read."
-    />
-    <title>Cosmic Quiz</title>
-    <!-- The link preview (public/og-v1.jpg, 1200 x 630), on the site's own domain. -->
+    <!-- The double-brace brand tokens are filled from src/brand.ts by the brand-html plugin in vite.config.ts. -->
+    <title>{{brand.title}}</title>
+    <meta name="description" content="{{brand.description}}" />
+    <meta name="application-name" content="{{brand.name}}" />
+    <meta name="theme-color" content="{{brand.themeColor}}" />
+    <link rel="icon" href="/favicon.ico" sizes="48x48" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/site.webmanifest" />
+    <!-- The link preview (1200 x 630), on the site's own domain. -->
     <meta property="og:type" content="website" />
-    <meta property="og:site_name" content="Cosmic Quiz" />
-    <meta property="og:title" content="Cosmic Quiz" />
-    <meta property="og:description" content="An astronomy quiz written by an AI agent that checks every answer against the pages it read." />
-    <meta property="og:url" content="https://cosmic.vedantgaikwad.ie/" />
-    <meta property="og:image" content="https://cosmic.vedantgaikwad.ie/og-v1.jpg" />
+    <meta property="og:site_name" content="{{brand.name}}" />
+    <meta property="og:title" content="{{brand.title}}" />
+    <meta property="og:description" content="{{brand.description}}" />
+    <meta property="og:url" content="{{brand.origin}}/" />
+    <meta property="og:image" content="{{brand.origin}}{{brand.socialImage}}" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
-    <meta property="og:image:alt" content="COSMIC QUIZ and the tagline over a white observatory in a pink grass field under a navy sky" />
+    <meta property="og:image:alt" content="{{brand.socialImageAlt}}" />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="Cosmic Quiz" />
-    <meta name="twitter:description" content="An astronomy quiz written by an AI agent that checks every answer against the pages it read." />
-    <meta name="twitter:image" content="https://cosmic.vedantgaikwad.ie/og-v1.jpg" />
-    <meta name="theme-color" content="#021a3d" />
+    <meta name="twitter:title" content="{{brand.title}}" />
+    <meta name="twitter:description" content="{{brand.description}}" />
+    <meta name="twitter:image" content="{{brand.origin}}{{brand.socialImage}}" />
     <!-- The first scene, at the width the screen needs (src/slideshow.ts: SCENES[0], SCENE_SIZES). -->
     <link
       rel="preload"

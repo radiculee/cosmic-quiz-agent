@@ -7,7 +7,7 @@ export const NAME = "Curiosity";
 export const TITLE = "Curiosity: Astronomy Quiz on the Wonders Beyond Earth";
 
 export const DESCRIPTION =
-  "An astronomy quiz written by an AI agent that checks every answer against the pages it read.";
+  "An astronomy and space quiz written by an AI agent that checks every answer against the pages it read.";
 
 export const TAGLINE =
   "An AI agent reads NASA, ESA and Wikipedia, writes the questions, and checks every answer against the pages it read.";
@@ -17,6 +17,15 @@ export const ASTRONOMY_LINE = "An astronomy and space quiz.";
 
 /** The canonical origin, with no trailing slash. */
 export const ORIGIN = "https://curiosity.vedantgaikwad.ie";
+
+/** The link preview, on the site's own domain (1200 x 630). Switch to /og-v2.jpg when it lands. */
+export const SOCIAL_IMAGE = "/og-v1.jpg";
+
+/** What the preview shows, for people who cannot see it. Change it with the image. */
+export const SOCIAL_IMAGE_ALT =
+  "COSMIC QUIZ and the tagline over a white observatory in a pink grass field under a navy sky";
+
+export const THEME_COLOR = "#021a3d";
 
 /** The tab title of an inner page. */
 export function pageTitle(title: string | null): string {

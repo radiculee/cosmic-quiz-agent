@@ -9,6 +9,8 @@ import re
 import tomllib
 from pathlib import Path
 
+from tests.site_files import brand, meta_tags
+
 ROOT = Path(__file__).resolve().parent.parent
 
 
@@ -270,33 +272,50 @@ def _jpeg_size(data: bytes) -> tuple[int, int]:
 
 def test_the_link_preview_is_a_small_1200_by_630_image_the_page_names() -> None:
     data = OG_IMAGE.read_bytes()
-    html = " ".join((ROOT / "index.html").read_text(encoding="utf-8").split())  # tags may wrap
-    meta = dict(re.findall(r'<meta (?:property|name)="([^"]+)" content="([^"]+)"', html))
+    meta = meta_tags()
+    site = brand()
 
     assert _jpeg_size(data) == (1200, 630) and len(data) <= SCENE_BUDGET
-    assert meta["og:image"] == meta["twitter:image"] == "https://cosmic.vedantgaikwad.ie/og-v1.jpg"
+    image = f"{site['ORIGIN']}{site['SOCIAL_IMAGE']}"
+    assert meta["og:image"] == meta["twitter:image"] == image
+    assert OG_IMAGE.name == site["SOCIAL_IMAGE"].lstrip("/")
     assert (meta["og:image:width"], meta["og:image:height"]) == ("1200", "630")
     assert meta["og:description"] == meta["twitter:description"] == meta["description"]
+    assert meta["og:title"] == meta["twitter:title"] == site["TITLE"]
     assert meta["twitter:card"] == "summary_large_image"
 
 
-def test_the_old_address_sends_every_page_to_the_site_s_own_domain() -> None:
-    # Decided 2026-10-13: cosmic-quiz-agent.vercel.app redirects for good to the domain the link
-    # preview names, keeping the path (Vercel keeps the query). Only that host: preview
-    # deployments keep their own addresses. The source is "/:path(.*)", not "/:path*": Vercel
-    # matches sources strictly, so "/:path*" misses "/" and any path ending in a slash, and the
-    # old home page went on being served (seen on production on 2026-10-13).
-    config = json.loads((ROOT / "vercel.json").read_text(encoding="utf-8"))
-    html = " ".join((ROOT / "index.html").read_text(encoding="utf-8").split())
-    meta = dict(re.findall(r'<meta (?:property|name)="([^"]+)" content="([^"]+)"', html))
-    site = meta["og:url"].rstrip("/")
+# Every address that sends visitors to the site's own domain: the old and typo subdomains of
+# vedantgaikwad.ie, and the Vercel address.
+REDIRECTED_HOSTS = [
+    "cosmic.vedantgaikwad.ie",
+    "quiz.vedantgaikwad.ie",
+    "astro.vedantgaikwad.ie",
+    "cosmik.vedantgaikwad.ie",
+    "curiousity.vedantgaikwad.ie",
+    "curiosty.vedantgaikwad.ie",
+    "cosmicquiz.vedantgaikwad.ie",
+    "cosmic-quiz-agent.vercel.app",
+]
 
-    [redirect] = config["redirects"]
-    assert site == "https://cosmic.vedantgaikwad.ie"
-    assert redirect["has"] == [{"type": "host", "value": "cosmic-quiz-agent.vercel.app"}]
-    assert redirect["source"] == "/:path(.*)"
-    assert redirect["destination"] == f"{site}/:path"
-    assert redirect["permanent"] is True
+
+def test_every_other_address_sends_every_page_to_the_site_s_own_domain() -> None:
+    # Decided 2026-10-13, widened 2026-10-30: each address redirects for good to the domain the
+    # link preview names, keeping the path (Vercel keeps the query). Only those hosts: preview
+    # deployments keep their own addresses. Every source is "/:path(.*)", never "/:path*":
+    # Vercel matches sources strictly, so "/:path*" misses "/" and any path ending in a slash,
+    # and the old home page went on being served (seen on production on 2026-10-13).
+    config = json.loads((ROOT / "vercel.json").read_text(encoding="utf-8"))
+    site = meta_tags()["og:url"].rstrip("/")
+
+    assert site == brand()["ORIGIN"] == "https://curiosity.vedantgaikwad.ie"
+    assert len(config["redirects"]) == len(REDIRECTED_HOSTS)
+    for redirect in config["redirects"]:
+        assert redirect["source"] == "/:path(.*)", redirect
+        assert redirect["destination"] == f"{site}/:path", redirect
+        assert redirect["permanent"] is True, redirect
+    hosts = [redirect["has"] for redirect in config["redirects"]]
+    assert hosts == [[{"type": "host", "value": host}] for host in REDIRECTED_HOSTS]
 
 
 FIELD_ENDS = {"input": "/>", "select": "</select>", "textarea": "</textarea>"}

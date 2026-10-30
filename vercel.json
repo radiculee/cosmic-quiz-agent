@@ -8,8 +8,50 @@
   "redirects": [
     {
       "source": "/:path(.*)",
+      "has": [{ "type": "host", "value": "cosmic.vedantgaikwad.ie" }],
+      "destination": "https://curiosity.vedantgaikwad.ie/:path",
+      "permanent": true
+    },
+    {
+      "source": "/:path(.*)",
+      "has": [{ "type": "host", "value": "quiz.vedantgaikwad.ie" }],
+      "destination": "https://curiosity.vedantgaikwad.ie/:path",
+      "permanent": true
+    },
+    {
+      "source": "/:path(.*)",
+      "has": [{ "type": "host", "value": "astro.vedantgaikwad.ie" }],
+      "destination": "https://curiosity.vedantgaikwad.ie/:path",
+      "permanent": true
+    },
+    {
+      "source": "/:path(.*)",
+      "has": [{ "type": "host", "value": "cosmik.vedantgaikwad.ie" }],
+      "destination": "https://curiosity.vedantgaikwad.ie/:path",
+      "permanent": true
+    },
+    {
+      "source": "/:path(.*)",
+      "has": [{ "type": "host", "value": "curiousity.vedantgaikwad.ie" }],
+      "destination": "https://curiosity.vedantgaikwad.ie/:path",
+      "permanent": true
+    },
+    {
+      "source": "/:path(.*)",
+      "has": [{ "type": "host", "value": "curiosty.vedantgaikwad.ie" }],
+      "destination": "https://curiosity.vedantgaikwad.ie/:path",
+      "permanent": true
+    },
+    {
+      "source": "/:path(.*)",
+      "has": [{ "type": "host", "value": "cosmicquiz.vedantgaikwad.ie" }],
+      "destination": "https://curiosity.vedantgaikwad.ie/:path",
+      "permanent": true
+    },
+    {
+      "source": "/:path(.*)",
       "has": [{ "type": "host", "value": "cosmic-quiz-agent.vercel.app" }],
-      "destination": "https://cosmic.vedantgaikwad.ie/:path",
+      "destination": "https://curiosity.vedantgaikwad.ie/:path",
       "permanent": true
     }
   ],
