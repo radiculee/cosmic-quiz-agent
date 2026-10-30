@@ -8,6 +8,7 @@ different rule or threshold without calling the models again.
 from __future__ import annotations
 
 import os
+import threading
 from collections.abc import Mapping
 from concurrent.futures import ThreadPoolExecutor
 
@@ -41,7 +42,9 @@ def verify(
     Never raises: an unexpected failure in either verifier becomes that layer's "error" verdict,
     which sends the item to review, so a paid agent run is never lost to a verifier bug.
     """
-    with ThreadPoolExecutor(max_workers=2) as pool:
+    with ThreadPoolExecutor(
+        max_workers=2, thread_name_prefix=threading.current_thread().name
+    ) as pool:
         haiku_future = pool.submit(verify_with_haiku, answer, pages, llm, settings)
         jev_future = pool.submit(verify_with_jev, answer, pages, jev, settings) if jev else None
         try:
