@@ -3,8 +3,8 @@
 Notes for the latency session (`docs/SESSIONS.md`). They replace `docs/NEXT_SESSION.md` for
 this session. Update them before finishing, and commit them on `session/latency`.
 
-Last update: 2026-10-30. November's budget is approved by main and ready to land. Parallel
-search is next, waiting for Vedant's go-ahead on migration 010.
+Last update: 2026-10-30. Parallel search and migration 010 are committed on `session/latency`.
+Main reviews 010's SQL before Vedant pastes it.
 
 ## Current goal
 
@@ -46,41 +46,36 @@ Decisions in `docs/SESSIONS.md`.
 
 ## Done
 
-- `fef385f`: handoff state recorded.
-- `afcfe33`: November's $20 month cap; launch week 5 a visitor, 14 searches, $3.25 a day; review findings 2, 3, 4.
-- `37a6696`: Mission Control reads the live month cap through `limits_at`; November shows $20.
-- `48c49c5`: README, CHANGELOG, PLAN.md and SESSIONS.md (row, decision) record November's budget.
-- `044896a`: handoff, November's budget ready for review.
-- Main reviewed November's budget on 2026-10-30: approved, ready to land.
-- `a712d09`: Mission Control shows the Anthropic limit by date ($32 in November 2026, $10 otherwise); two long lines wrapped.
-- Landing: Vedant fast-forwards `main` to `session/latency`.
-- Vedant decided (2026-10-30, via main): Console $32 in November; the fill counts against the Console only.
-- Accepted: the worst case ($22.75 in the launch week) pauses live search late in the week.
-- Checks pass at `a712d09`: 367 Python tests, 149 TypeScript tests, ruff, ruff format, mypy, typecheck, build.
+- On `main` (landed at `a8c5947`, not pushed): November's budget (`afcfe33`, `37a6696`, `48c49c5`, `a712d09`) and the 429 hook (`a8c5947`). Main approved each.
+- `f136300`: progress events (stage and status line per live run) in `agent/ondemand.py`, `src/types.ts`, `src/api.ts`, `src/search.ts` (`progressed`).
+- `ac435e0`: `AgentLog.tsx` tags each line (EASY Q, HARD EXPL); `open` prop (default true) for "Show details"; `itemTag` in `src/search.ts`.
+- `537f4ed`: migration 010 (`begin_on_demand_search`, `live_run_estimates`), folded into `supabase/schema.sql`; `supabase/checks/010_parallel_searches_check.sql`.
+- `6cc26b4`: parallel search. One reservation call; a thread per item named `live-search-<id>-<key>`; usual daily cap $1.55; `RunTimes` estimates on the plan.
+- `53fffc3`: the page accepts `estimate_seconds` on planned items.
+- `c1333cf`: `docs/PLAN.md` and `docs/SESSIONS.md` record it, with main's four notes and the stale-reservation query.
+- 010 parses with pglast (scratch venv). Not run on Postgres yet: no local Postgres.
+- Checks pass at `c1333cf`: 379 Python tests, 155 TypeScript tests, ruff, ruff format, mypy, typecheck, build.
 
 ## Next
 
-1. Migration 010 explained to Vedant on 2026-10-30. Write it on his go-ahead.
-2. Parallel search: `agent/store.py`, `agent/limits.py` ($1.55 usual daily cap), `agent/ondemand.py` (a thread per item).
-3. 429 logging: a response hook on the Anthropic client, built in `api/research.py`.
-4. Progress events: `estimate_seconds` per planned item, a `progress` event, in `src/types.ts` and `src/search.ts`.
-5. `src/components/AgentLog.tsx`: tagged lines and an `open` prop.
-6. Tests, every check, the headless drive, then 3 real searches (asked one by one).
-7. `docs/DEVELOPMENT.md` for parallel search (approved).
-8. Deploy hook: once per Curator run that published anything, with its `curator.yml` env line (approved).
-9. The 30-topic fill: list the topics for Vedant first.
-10. Per-account limits, folding 011 and 012, other sessions' changelog text.
+1. Main reviews 010's SQL; then Vedant pastes 010, then runs the check script (expect "CHECK PASSED").
+2. Headless drive against the stub API (ask Vedant before starting dev servers on 5173 and 8787).
+3. 2 real local searches, then 1 live after the deploy (about $0.17 each, asked one by one), timed against about 100 s.
+4. `CHANGELOG.md` entry and the before and after times, once deployed.
+5. `docs/DEVELOPMENT.md` for parallel search (approved).
+6. Deploy hook: once per Curator run that published anything, with its `curator.yml` env line (approved).
+7. The 30-topic fill: list the topics for Vedant first. On or after 1 November.
+8. Per-account limits (after data lands), fold 011 and 012, other sessions' changelog text.
 
 ## Blockers
 
-- Landing November's budget: Vedant's fast-forward.
-- Migration 010: waits for Vedant's go-ahead on the explanation.
+- Main's review of 010's SQL, then Vedant's paste.
+- `agent/verifiers/__init__.py` (not owned): the Haiku verifier's pool threads lose the item's name in 429 lines. One argument fixes it. Asked of main.
 - Per-account limits: wait for data's `agent/auth.py` and `src/session.ts` on `main`.
 - Migrations 011 and 012: wait for data and media.
 - `CLAUDE.md` and `docs/DESIGN.md` drafts: wait for Vedant's approval.
-- Vedant: Console to $32 before 3 November; back to $10 on 1 December.
-- Vedant: check the Anthropic rate-limit tier before the go/no-go.
-- October's Anthropic budget is nearly used. Paid work waits for 1 November 00:00 UTC, except small runs.
+- Vedant: Console to $32 before 3 November; rate-limit tier before the go/no-go.
+- Paid searches wait for 1 November 00:00 UTC unless Vedant says otherwise (October's budget is nearly used).
 
 ## Rules to keep in mind
 
@@ -101,11 +96,13 @@ Decisions in `docs/SESSIONS.md`.
   uncommitted work marked resolved.
 - `docs/handoff/latency.md`.
 - Outside git: `TYPESAFE_API_KEY` in the three local `.env` files.
-- 2026-10-30, committed: `agent/limits.py`, `agent/ondemand.py`, `tests/test_quota.py`,
-  `tests/test_ondemand.py` (`afcfe33`); `agent/stats.py`, `tests/test_stats.py` (`37a6696`);
-  `README.md`, `CHANGELOG.md`, `docs/PLAN.md`, `docs/SESSIONS.md` (`48c49c5`);
-  `agent/config.py`, `agent/stats.py`, `tests/test_stats.py`, `README.md`, `CHANGELOG.md`,
-  `docs/PLAN.md` (`a712d09`); `docs/handoff/latency.md`.
+- 2026-10-30, committed: November's budget and the 429 hook (on `main`); `agent/ondemand.py`,
+  `agent/store.py`, `agent/limits.py`, `api/research.py`, `api/quota.py`, `src/types.ts`,
+  `src/api.ts`, `src/api.test.ts`, `src/search.ts`, `src/search.test.ts`,
+  `src/components/AgentLog.tsx`, `src/components/AgentLog.test.tsx`, `tests/test_ondemand.py`,
+  `tests/test_quota.py`, `supabase/migrations/010_parallel_searches.sql`, `supabase/schema.sql`,
+  `supabase/checks/010_parallel_searches_check.sql`, `docs/PLAN.md`, `docs/SESSIONS.md`,
+  `docs/handoff/latency.md`.
 
 ## Pre-launch overhaul additions (brief from main, 2026-10-30)
 
