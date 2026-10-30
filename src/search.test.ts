@@ -7,6 +7,7 @@ import {
   firstReady,
   fromPlan,
   itemLabel,
+  itemTag,
   madeAnything,
   measured,
   missed,
@@ -260,6 +261,14 @@ describe("the search summary", () => {
 
     expect(madeAnything(search)).toBe(false);
     expect(summaryLine(summarize(search))).toMatch(/could not back any of it/);
+  });
+});
+
+describe("itemTag", () => {
+  it("is short enough to sit at the start of every log line", () => {
+    expect(itemTag("quiz-easy")).toBe("EASY Q");
+    expect(itemTag("quiz-medium")).toBe("MEDIUM Q");
+    expect(itemTag("learn-hard")).toBe("HARD EXPL");
   });
 });
 

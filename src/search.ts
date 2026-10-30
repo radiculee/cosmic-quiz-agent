@@ -56,6 +56,13 @@ export function itemLabel(key: ItemKey): string {
   return `${(difficulty ?? "").toUpperCase()} ${mode === "learn" ? "explanation" : "question"}`;
 }
 
+/** The short tag on each agent log line about an item: "EASY Q" or "HARD EXPL". The log is one
+ * stream in the order things happen, so a search's runs at once interleave line by line. */
+export function itemTag(key: ItemKey): string {
+  const [mode, difficulty] = key.split("-");
+  return `${(difficulty ?? "").toUpperCase()} ${mode === "learn" ? "EXPL" : "Q"}`;
+}
+
 export function fromPlan(id: number, topic: string, items: readonly PlannedItem[]): Search {
   return {
     id,

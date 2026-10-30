@@ -1,7 +1,7 @@
-import { Fragment, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { stillFollowing } from "../scroll";
-import { itemLabel } from "../search";
+import { itemLabel, itemTag } from "../search";
 import type { ItemKey, Tone, Verdict } from "../types";
 
 export interface LogLine {
@@ -50,17 +50,24 @@ function useElapsed(running: boolean): number {
   return elapsed;
 }
 
-/** The live agent log: each step of a search's runs as it happens, grouped by item. New lines
- * scroll the log's own box, and only while the reader is at its end; they never move the page,
- * so a player answering a question further down stays where they are. */
+/** The live agent log: each step of a search's runs as it happens, in one stream, each line
+ * tagged with its item ("EASY Q"), since a search's runs go at once and their lines interleave.
+ * New lines scroll the log's own box, and only while the reader is at its end; they never move
+ * the page, so a player answering a question further down stays where they are.
+ *
+ * `open` (default true) shows the lines. Closed, the log keeps only its header and outcome, for
+ * a page that puts the lines behind "Show details"; it still follows the newest line, so opening
+ * it shows the latest. The page owns the toggle. */
 export function AgentLog({
   topic,
   lines,
   outcome,
+  open = true,
 }: {
   topic: string;
   lines: LogLine[];
   outcome: LogOutcome;
+  open?: boolean;
 }) {
   const running = outcome.kind === "running";
   const elapsed = useElapsed(running);
@@ -76,7 +83,7 @@ export function AgentLog({
       box.scrollTop = box.scrollHeight;
       pinned.current = box.scrollTop;
     }
-  }, [lines.length]);
+  }, [lines.length, open]);
 
   function onScroll() {
     if (list.current) {
@@ -100,34 +107,37 @@ export function AgentLog({
 
       <ol
         ref={list}
+        hidden={!open}
         role="log"
         aria-live="polite"
         onScroll={onScroll}
         className="mt-3 max-h-96 space-y-1 overflow-y-auto font-mono text-[13px] leading-6"
       >
         {lines.map((line, index) => (
-          <Fragment key={index}>
-            {line.key !== null && line.key !== lines[index - 1]?.key && (
-              <li className="pixel-bullet pt-3 font-pixel text-[8px] uppercase text-slate">
-                {itemLabel(line.key)}
-              </li>
-            )}
-            <li className="flex items-baseline gap-2">
-              <span aria-hidden="true" className="text-slate">
-                &gt;
-              </span>
-              <span className={`shrink-0 ${TONE_COLOURS[line.tone]}`}>{line.label}</span>
-              <span aria-hidden="true" className="min-w-4 flex-1 -translate-y-1 border-b border-dotted border-white/15" />
+          <li key={index} className="flex items-baseline gap-2">
+            <span aria-hidden="true" className="text-slate">
+              &gt;
+            </span>
+            {line.key !== null && (
               <span
-                className={`max-w-[60%] truncate text-right ${
-                  line.verdict ? VERDICT_COLOURS[line.verdict] : "text-slate"
-                }`}
-                title={line.detail}
+                className="w-16 shrink-0 font-pixel text-[8px] uppercase text-slate"
+                title={itemLabel(line.key)}
               >
-                {line.detail}
+                <span aria-hidden="true">{itemTag(line.key)}</span>
+                <span className="sr-only">{itemLabel(line.key)}:</span>
               </span>
-            </li>
-          </Fragment>
+            )}
+            <span className={`shrink-0 ${TONE_COLOURS[line.tone]}`}>{line.label}</span>
+            <span aria-hidden="true" className="min-w-4 flex-1 -translate-y-1 border-b border-dotted border-white/15" />
+            <span
+              className={`max-w-[60%] truncate text-right ${
+                line.verdict ? VERDICT_COLOURS[line.verdict] : "text-slate"
+              }`}
+              title={line.detail}
+            >
+              {line.detail}
+            </span>
+          </li>
         ))}
         <li className="pt-1">
           {running ? (
