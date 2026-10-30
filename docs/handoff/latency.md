@@ -108,8 +108,9 @@ images). Everything ships before the launch; code freeze **Monday 2 November 18:
 This session stays on the critical path; November's budget and parallel search come first and
 are must-ship.
 
-On this Mac the session starts fresh: `dev/new-session.sh latency` makes `../cqa-latency` from
-`main` (the Windows worktree's work is already on `main`).
+On Windows, the existing worktree `C:\Users\vedan\cqa-latency` carries on: with a clean
+`git status`, run `git rebase main` there after pulling `main` (its 2026-10-28 work is already
+on `main`). On a machine without it, `dev/new-session.sh latency` makes a fresh one.
 
 ### Added to "Next"
 
