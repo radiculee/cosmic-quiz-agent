@@ -3,8 +3,8 @@
 Notes for the latency session (`docs/SESSIONS.md`). They replace `docs/NEXT_SESSION.md` for
 this session. Update them before finishing, and commit them on `session/latency`.
 
-Last update: 2026-10-30. November's budget is built and checked, not committed. Parallel search
-is next.
+Last update: 2026-10-30. November's budget is committed and ready for review. Parallel search is
+in progress.
 
 ## Current goal
 
@@ -39,52 +39,45 @@ Decisions in `docs/SESSIONS.md`.
   `docs/PLAN.md`.
 - **Decided, not yet built:**
   - November: option A. Launch days 14 searches a day for everyone, 5 a visitor, $3.25 a day;
-    $20 for live research in November, ending on 1 December; Console at $27 for the month.
+    $20 for live research in November, ending on 1 December; Console at $32 for the month (changed 2026-10-30).
   - Parallel search: reserve every run at the start ($0.17 each, $1.02 a search), the usual
     daily cap $1.55, partial fit in plan order, questions played easiest first, a tagged agent
     log, one log line for every 429 (Vedant agreed to this in place of a count per run).
 
 ## Done
 
-- 2026-10-28 steps 1 and 2 (rebase, the explore text): on `main`.
-- 2026-10-30: `session/latency` starts at `main` (`200185a`); nothing to rebase.
-- 2026-10-30: November's budget (step 3) is built. It is not committed yet.
-- `agent/limits.py`: the November window ($20 a month, 1 to 30 November UTC).
-- `agent/limits.py`: launch week 5 a visitor, 14 searches, $3.25 a day.
-- `agent/limits.py`: review finding 3 fixed (only `user_day` is formatted).
-- `agent/ondemand.py`: review finding 2, a comment on `_Search.limits`.
-- Tests: 5 new, 2 changed (finding 4 fixed).
-- `README.md`, `CHANGELOG.md`, `docs/PLAN.md` updated.
-- Drafts for `CLAUDE.md` and `docs/DESIGN.md` are below. They are not applied.
-- Checks: `pytest`, `ruff check .`, `ruff format --check .`, `mypy --strict` all pass.
-- Not run yet: `pnpm typecheck`, `pnpm test`, `pnpm build` (no frontend change).
-- Found: $3.25 a day for 7 days is $22.75, over $20. At a typical $0.17 a search the week is $16.66.
-- Found: `agent/stats.py` shows the usual $4 as the live month cap; in November it should show $20.
+- `fef385f`: handoff state recorded.
+- `afcfe33`: November's $20 month cap; launch week 5 a visitor, 14 searches, $3.25 a day; review findings 2, 3, 4.
+- `37a6696`: Mission Control reads the live month cap through `limits_at`; November shows $20.
+- `48c49c5`: README, CHANGELOG, PLAN.md and SESSIONS.md (row, decision) record November's budget.
+- November's budget is ready for main's review: `git diff main...session/latency`.
+- Vedant decided (2026-10-30, via main): Console $32 in November; the fill counts against the Console only.
+- Accepted: the worst case ($22.75 in the launch week) pauses live search late in the week.
+- Checks pass: 366 Python tests, 149 TypeScript tests, ruff, ruff format, mypy, typecheck, build.
 
 ## Next
 
-1. Commit November's budget (two commits: code and tests, then records), on Vedant's word.
-2. Tell Vedant it is ready for main's review. Deploy by Saturday 31 October.
-3. Parallel search: migration 010 (`begin_on_demand_search`), as explained to Vedant on 2026-10-30.
-4. Parallel search: `agent/store.py`, `agent/limits.py` ($1.55 usual daily cap), `agent/ondemand.py` (a thread per item).
-5. 429 logging: a response hook on the Anthropic client, built in `api/research.py`, so `agent/llm.py` is not edited.
-6. Progress events: `estimate_seconds` per planned item and a `progress` event (stage, status line), in `src/types.ts` and `src/search.ts`.
-7. `src/components/AgentLog.tsx`: tagged lines, and an `open` prop for "Show details".
-8. Tests, every check, the headless drive, then 3 real searches (about $0.17 each, asked one by one).
-9. Then: the deploy hook, the 30-topic fill, per-account limits, folding 011 and 012, docs.
+1. Explain migration 010 to Vedant (now with the medians function), then write it.
+2. Parallel search: `agent/store.py`, `agent/limits.py` ($1.55 usual daily cap), `agent/ondemand.py` (a thread per item).
+3. 429 logging: a response hook on the Anthropic client, built in `api/research.py`.
+4. Progress events: `estimate_seconds` per planned item, a `progress` event, in `src/types.ts` and `src/search.ts`.
+5. `src/components/AgentLog.tsx`: tagged lines and an `open` prop.
+6. Tests, every check, the headless drive, then 3 real searches (asked one by one).
+7. `docs/DEVELOPMENT.md` for parallel search (approved).
+8. Deploy hook: once per Curator run that published anything, with its `curator.yml` env line (approved).
+9. The 30-topic fill: list the topics for Vedant first.
+10. Per-account limits, folding 011 and 012, other sessions' changelog text.
 
 ## Blockers
 
-- Commit: waits for Vedant's word.
-- Fill budget: $5 does not fit the $27 Console. Waits for Vedant (recommended: $32).
-- Progress estimates: source waits for Vedant (recommended: a SQL function in 010).
-- Deploy hook trigger: waits for Vedant (recommended: once per run that published anything).
-- `.github/workflows/curator.yml`, `docs/DEVELOPMENT.md`, `agent/stats.py`: not owned. Waits for Vedant.
-- `CLAUDE.md`, `docs/DESIGN.md` drafts: wait for Vedant's approval.
+- Main's review of November's budget (not blocking parallel search).
+- Migration 010: Vedant hears the explanation before it is written.
 - Per-account limits: wait for data's `agent/auth.py` and `src/session.ts` on `main`.
 - Migrations 011 and 012: wait for data and media.
-- Vedant: Console to $27 (or $32) before 3 November; back to $10 on 1 December.
+- `CLAUDE.md` and `docs/DESIGN.md` drafts: wait for Vedant's approval.
+- Vedant: Console to $32 before 3 November; back to $10 on 1 December.
 - Vedant: check the Anthropic rate-limit tier before the go/no-go.
+- Mission Control still shows the $10 Anthropic limit in November (`agent/config.py`, not owned). Not fixed; asked.
 - October's Anthropic budget is nearly used. Paid work waits for 1 November 00:00 UTC, except small runs.
 
 ## Rules to keep in mind
@@ -106,9 +99,10 @@ Decisions in `docs/SESSIONS.md`.
   uncommitted work marked resolved.
 - `docs/handoff/latency.md`.
 - Outside git: `TYPESAFE_API_KEY` in the three local `.env` files.
-- 2026-10-30, not committed: `agent/limits.py`, `agent/ondemand.py`, `tests/test_quota.py`,
-  `tests/test_ondemand.py`, `README.md`, `CHANGELOG.md`, `docs/PLAN.md`, `docs/SESSIONS.md`.
-- 2026-10-30, committed: `docs/handoff/latency.md`.
+- 2026-10-30, committed: `agent/limits.py`, `agent/ondemand.py`, `tests/test_quota.py`,
+  `tests/test_ondemand.py` (`afcfe33`); `agent/stats.py`, `tests/test_stats.py` (`37a6696`);
+  `README.md`, `CHANGELOG.md`, `docs/PLAN.md`, `docs/SESSIONS.md` (`48c49c5`);
+  `docs/handoff/latency.md`.
 
 ## Pre-launch overhaul additions (brief from main, 2026-10-30)
 
@@ -159,13 +153,14 @@ on `main`). On a machine without it, `dev/new-session.sh latency` makes a fresh 
 `CLAUDE.md`, hard rule 1, after "(Changed 2026-10-01; ... See `docs/PLAN.md`.)":
 
 > Dated exceptions, decided by Vedant: October 2026's limit was raised by about $2 on 2026-10-28,
-> when the bank fill met it; November 2026's is $27 ($20 for the launch month's live research,
-> about $5 for the daily Curator, $2 spare), back to $10 on 1 December. Both are in
+> when the bank fill met it; November 2026's is $32 ($20 for the launch month's live research,
+> about $5 for the daily Curator, $5 for the 30-topic Curator fill, $2 spare), back to $10 on
+> 1 December. Both are in
 > `docs/PLAN.md`, "The launch week's code review and November's budget".
 
 `docs/DESIGN.md`, decision 8, the cost line, after "(capped at $10 a month)":
 
-> (dated exceptions: October 2026 about $12, November 2026 $27 for the launch; decided by
+> (dated exceptions: October 2026 about $12, November 2026 $32 for the launch; decided by
 > Vedant on 2026-10-28)
 
 `docs/DESIGN.md`, decision 9, the launch sentence, replacing "5 searches a visitor and 20
