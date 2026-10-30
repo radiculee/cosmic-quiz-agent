@@ -8,12 +8,36 @@ export type Verdict = (typeof VERDICTS)[number];
 /** "review" items come only from the player's own live run and are labelled as not verified. */
 export type ShownStatus = "published" | "review";
 
-/** A topic in the bank and the difficulties with at least one published item, per mode. */
+/** A topic's picture, with the credit its licence requires. `src` and `preview` are addresses on
+ * this site (`/media/...`). */
+export interface TopicImage {
+  src: string;
+  width: number;
+  height: number;
+  preview?: string;
+  credit: string;
+  licence: string;
+  licence_url?: string;
+  page_url: string;
+  source: "wikipedia" | "nasa";
+}
+
+/** What a topic card shows where no picture fits: a sentence from its explanation, and a
+ * category for the card's art. */
+export interface TopicFact {
+  category: string;
+  text: string;
+}
+
+/** A topic in the bank and the difficulties with at least one published item, per mode. Either
+ * `image` or `fact` is set once the Curator's image fill has run for it; see `topicVisual`. */
 export interface BankTopic {
   name: string;
   kind: "evergreen" | "news" | "custom";
   learn: Difficulty[];
   quiz: Difficulty[];
+  image?: TopicImage;
+  fact?: TopicFact;
 }
 
 /** A page the agent read in its run, with the passage it quoted. */

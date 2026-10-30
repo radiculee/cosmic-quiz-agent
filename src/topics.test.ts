@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  FACT_CATEGORIES,
   filterTopics,
   findTopic,
   randomTopic,
@@ -8,8 +9,9 @@ import {
   suggest,
   suggestAny,
   topicStatus,
+  topicVisual,
 } from "./topics";
-import type { BankTopic } from "./types";
+import type { BankTopic, TopicImage } from "./types";
 
 const TOPICS: BankTopic[] = [
   { name: "Quasars", kind: "evergreen", learn: ["easy", "medium", "hard"], quiz: ["hard"] },
@@ -130,5 +132,69 @@ describe("searchStatus", () => {
       kind: "partial",
       missing: 1,
     });
+  });
+});
+
+describe("topicVisual", () => {
+  const IMAGE: TopicImage = {
+    src: "/media/quasars-0123456789-card.webp",
+    width: 640,
+    height: 360,
+    preview: "/media/quasars-abcdef0123-preview.webp",
+    credit: "ESO, CC BY 4.0, via Wikimedia Commons",
+    licence: "CC BY 4.0",
+    licence_url: "https://creativecommons.org/licenses/by/4.0",
+    page_url: "https://commons.wikimedia.org/wiki/File:Quasar.jpg",
+    source: "wikipedia",
+  };
+  const base: BankTopic = { name: "Quasars", kind: "evergreen", learn: ["easy"], quiz: ["hard"] };
+
+  it("draws the picture when the topic has a complete one", () => {
+    expect(topicVisual({ ...base, image: IMAGE })).toEqual({ kind: "image", image: IMAGE });
+  });
+
+  it("draws the fact, with its category, when there is no picture", () => {
+    const fact = { category: "galaxy", text: "Quasars outshine whole galaxies." };
+
+    expect(topicVisual({ ...base, fact })).toEqual({ kind: "fact", fact, category: "galaxy" });
+  });
+
+  it("falls back to the general category for one it does not know", () => {
+    const fact = { category: "comets-and-friends", text: "A fact." };
+
+    const visual = topicVisual({ ...base, fact });
+
+    expect(visual.kind === "fact" && visual.category).toBe("space");
+    expect(FACT_CATEGORIES).toContain("space");
+  });
+
+  it("draws nothing for a topic the image fill has not reached, as an older API sends it", () => {
+    expect(topicVisual(base)).toEqual({ kind: "none" });
+  });
+
+  it("prefers the picture when both are present", () => {
+    const fact = { category: "galaxy", text: "A fact." };
+
+    expect(topicVisual({ ...base, image: IMAGE, fact }).kind).toBe("image");
+  });
+
+  it("refuses a picture that is not served from this site or is incomplete", () => {
+    const elsewhere = { ...IMAGE, src: "https://upload.wikimedia.org/x.jpg" };
+    const sneaky = { ...IMAGE, src: "/media/../api/x" };
+    const previewElsewhere = { ...IMAGE, preview: "https://example.com/p.webp" };
+    const uncredited = { ...IMAGE, credit: "" };
+    const empty = { ...IMAGE, width: 0 };
+
+    for (const image of [elsewhere, sneaky, previewElsewhere, uncredited, empty]) {
+      expect(topicVisual({ ...base, image }).kind).toBe("none");
+    }
+  });
+
+  it("falls back to the fact when the picture is malformed", () => {
+    const fact = { category: "galaxy", text: "A fact." };
+
+    const visual = topicVisual({ ...base, image: { ...IMAGE, credit: "" }, fact });
+
+    expect(visual.kind).toBe("fact");
   });
 });

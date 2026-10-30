@@ -1,4 +1,11 @@
-import { type BankTopic, DIFFICULTIES, type Difficulty, type Mode } from "./types";
+import {
+  type BankTopic,
+  DIFFICULTIES,
+  type Difficulty,
+  type Mode,
+  type TopicFact,
+  type TopicImage,
+} from "./types";
 
 export const MAX_SUGGESTIONS = 8;
 
@@ -130,4 +137,77 @@ export function searchStatus(topics: readonly BankTopic[], query: string): Searc
     0,
   );
   return missing === 0 ? { kind: "complete", topic } : { kind: "partial", topic, missing };
+}
+
+/** The categories a fact card can have, as the Curator's image fill assigns them
+ * (curator/images.py CATEGORIES). "space" is for a topic none of them fits. */
+export const FACT_CATEGORIES = [
+  "black-hole",
+  "galaxy",
+  "cosmology",
+  "particle",
+  "mission",
+  "star",
+  "planet",
+  "small-body",
+  "space",
+] as const;
+export type FactCategory = (typeof FACT_CATEGORIES)[number];
+
+/** Where a topic's pictures live on this site. Anything else is refused, so a bad row can never
+ * make a visitor's browser contact another host. */
+const MEDIA_PREFIX = "/media/";
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function isString(value: unknown): value is string {
+  return typeof value === "string" && value.length > 0;
+}
+
+function isLocalMedia(value: unknown): value is string {
+  return isString(value) && value.startsWith(MEDIA_PREFIX) && !value.includes("..");
+}
+
+function isTopicImage(value: unknown): value is TopicImage {
+  return (
+    isRecord(value) &&
+    isLocalMedia(value.src) &&
+    (value.preview === undefined || isLocalMedia(value.preview)) &&
+    typeof value.width === "number" &&
+    typeof value.height === "number" &&
+    value.width > 0 &&
+    value.height > 0 &&
+    isString(value.credit) &&
+    isString(value.licence) &&
+    isString(value.page_url) &&
+    (value.source === "wikipedia" || value.source === "nasa")
+  );
+}
+
+function isTopicFact(value: unknown): value is TopicFact {
+  return isRecord(value) && isString(value.category) && isString(value.text);
+}
+
+export type TopicVisual =
+  | { kind: "image"; image: TopicImage }
+  | { kind: "fact"; fact: TopicFact; category: FactCategory }
+  | { kind: "none" };
+
+/**
+ * What a topic card draws: the picture if the topic has a complete one, else its fact, else
+ * nothing (the Curator's image fill has not reached it, or the bank has no pictures yet).
+ * `/api/topics` is checked only for its older fields (src/api.ts), so the new ones are checked
+ * here; a malformed picture counts as none rather than breaking the card.
+ */
+export function topicVisual(topic: BankTopic): TopicVisual {
+  if (isTopicImage(topic.image)) {
+    return { kind: "image", image: topic.image };
+  }
+  if (isTopicFact(topic.fact)) {
+    const category = FACT_CATEGORIES.find((known) => known === topic.fact?.category) ?? "space";
+    return { kind: "fact", fact: topic.fact, category };
+  }
+  return { kind: "none" };
 }

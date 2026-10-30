@@ -24,8 +24,36 @@ from agent.store import TopicKind, domain
 DIFFICULTY_ORDER: tuple[Difficulty, ...] = ("easy", "medium", "hard")
 
 
+class TopicImage(BaseModel):
+    """A topic's picture, with the credit its licence requires (migration 012). `src` and
+    `preview` are addresses on this site (`/media/...`), never on Wikimedia, NASA or Supabase."""
+
+    model_config = ConfigDict(frozen=True)
+
+    src: str
+    width: int
+    height: int
+    preview: str | None = None
+    credit: str
+    licence: str
+    licence_url: str | None = None
+    page_url: str
+    source: Literal["wikipedia", "nasa"]
+
+
+class TopicFact(BaseModel):
+    """What a topic card shows where no picture fits: one sentence from the topic's published
+    explanation, and a category for the card's art."""
+
+    model_config = ConfigDict(frozen=True)
+
+    category: str
+    text: str
+
+
 class BankTopic(BaseModel):
-    """A topic and the difficulties that have at least one published item, per mode."""
+    """A topic and the difficulties that have at least one published item, per mode. Either
+    `image` or `fact` is set once `python -m curator.images` has run for it."""
 
     model_config = ConfigDict(frozen=True)
 
@@ -33,6 +61,8 @@ class BankTopic(BaseModel):
     kind: TopicKind
     learn: list[Difficulty]
     quiz: list[Difficulty]
+    image: TopicImage | None = None
+    fact: TopicFact | None = None
 
     @property
     def complete(self) -> bool:
