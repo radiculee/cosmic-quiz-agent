@@ -66,6 +66,8 @@ and ask Vedant.
 - latency: call `authHeader()` from `src/api.ts`; use `agent/auth.py` in `api/research.py` and
   `api/quota.py` to key limits by account (`account_visitor(user_id)` gives a salted key for the
   existing visitor columns, so no schema change).
+- latency: player rows reference `items(id)` (migration 011), so the Curator must retire items,
+  never delete them.
 - Vedant (unowned files): `dev/api_server.py` needs `account` in its import and `ROUTES`, so the
   local server serves `/api/account`; `package.json` and `pnpm-lock.yaml` gain
   `@supabase/auth-js` (approved 2026-10-30, pinned to an exact version).
@@ -179,6 +181,8 @@ The checks above pass and main's review has no open findings.
   both `{{ .ConfirmationURL }}` and `{{ .Token }}`; site URL `https://curiosity.vedantgaikwad.ie`;
   redirect URLs for localhost, `curiosity.` and the preview domain.
 - A Resend account with SPF and DKIM on vedantgaikwad.ie.
+- Keep "Anonymous sign-ins" off in Supabase Auth. Anonymous users get the `authenticated` role
+  and would pass migration 011's policies.
 - Pass on the requests above: seo (`connect-src`), ui (route and header slot), latency
   (`authHeader()`, `agent/auth.py` in the limits); the `dev/api_server.py` line and adding
   `@supabase/auth-js` to `package.json` (unowned files).

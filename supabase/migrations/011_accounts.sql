@@ -101,6 +101,7 @@ create table if not exists public.player_searches (
 
 -- The totals and lists of a profile saved before accounts (src/profile.ts version 2), which has
 -- no history to replay. The replay starts from the sum of an account's baselines.
+-- The browser reports these totals, so a future leaderboard must ignore baselines too.
 create table if not exists public.player_baselines (
     user_id uuid not null default auth.uid() references auth.users (id) on delete cascade,
     guest_id uuid not null,
