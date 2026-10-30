@@ -15,6 +15,8 @@ import threading
 from collections.abc import Generator
 from typing import Self
 
+import anthropic
+import httpx2
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 from agent.bank import BankReader, LiveResults
@@ -65,6 +67,11 @@ REQUIRED_ENV = (
     "IP_HASH_SALT",
 )
 
+# The same as AnthropicProvider's own client (agent/llm.py), which this replaces only to add the
+# rate-limit log line.
+ANTHROPIC_TIMEOUT_SECONDS = 60.0
+ANTHROPIC_MAX_RETRIES = 3
+
 _services: Services | None = None
 _services_lock = threading.Lock()
 
@@ -83,7 +90,7 @@ def services() -> Services:
             if missing:
                 raise NotConfiguredError(f"missing {', '.join(missing)}")
             settings = load_settings()
-            llm = AnthropicProvider(settings.model)
+            llm = AnthropicProvider(settings.model, client=anthropic_client())
             _services = Services(
                 judge=JevTopicJudge(
                     settings.jev_model, settings.jev_timeout_seconds, settings.jev_input_per_mtok
@@ -99,6 +106,33 @@ def services() -> Services:
                 sign=sign,
             )
         return _services
+
+
+def anthropic_client() -> anthropic.Anthropic:
+    """The Anthropic client live searches share, logging every 429 it meets."""
+    return anthropic.Anthropic(
+        timeout=ANTHROPIC_TIMEOUT_SECONDS,
+        max_retries=ANTHROPIC_MAX_RETRIES,
+        http_client=anthropic.DefaultHttpxClient(event_hooks={"response": [log_rate_limit]}),
+    )
+
+
+def log_rate_limit(response: httpx2.Response) -> None:
+    """One log line for every 429 from Anthropic, retries included (decided 2026-10-28), so the
+    launch shows whether a search's runs at once meet the account's rate limits. The thread's
+    name says which search and item met it; the SDK then waits and retries."""
+    if response.status_code != 429:
+        return
+    headers = response.headers
+    print(
+        f"anthropic 429: thread={threading.current_thread().name} "
+        f"path={response.request.url.path} "
+        f"retry_after={headers.get('retry-after', '-')} "
+        f"requests_left={headers.get('anthropic-ratelimit-requests-remaining', '-')} "
+        f"input_tokens_left={headers.get('anthropic-ratelimit-input-tokens-remaining', '-')} "
+        f"output_tokens_left={headers.get('anthropic-ratelimit-output-tokens-remaining', '-')}",
+        file=sys.stderr,
+    )
 
 
 def handle(request: ApiRequest) -> ApiResponse | StreamResponse:

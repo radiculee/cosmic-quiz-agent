@@ -9,11 +9,13 @@ from __future__ import annotations
 
 import functools
 import json
+import threading
 from collections.abc import Callable, Generator, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
 
+import anthropic
 import httpx2
 import pytest
 
@@ -933,3 +935,58 @@ def test_the_endpoint_answers_503_when_live_research_is_not_configured(
 
     assert isinstance(response, ApiResponse) and response.status == 503
     assert research_api._services is None  # nothing half-built is kept
+
+
+def test_the_shared_anthropic_client_logs_rate_limits() -> None:
+    client = research_api.anthropic_client()
+    try:
+        assert client.max_retries == research_api.ANTHROPIC_MAX_RETRIES
+        assert client._client.event_hooks["response"] == [research_api.log_rate_limit]
+    finally:
+        client.close()
+
+
+def test_every_429_and_its_retry_get_one_log_line_naming_the_thread(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    limited = httpx2.Response(
+        429,
+        headers={
+            "retry-after-ms": "1",
+            "retry-after": "1",
+            "anthropic-ratelimit-requests-remaining": "0",
+        },
+        json={"type": "error", "error": {"type": "rate_limit_error", "message": "slow down"}},
+    )
+    http = anthropic.DefaultHttpxClient(
+        transport=httpx2.MockTransport(lambda _: limited),
+        event_hooks={"response": [research_api.log_rate_limit]},
+    )
+    client = anthropic.Anthropic(api_key="test", max_retries=1, http_client=http)
+
+    def call() -> None:
+        with pytest.raises(anthropic.RateLimitError):
+            client.messages.create(
+                model="claude-haiku-4-5",
+                max_tokens=1,
+                messages=[{"role": "user", "content": "hi"}],
+            )
+
+    worker = threading.Thread(target=call, name="live-search-7-quiz-easy")
+    worker.start()
+    worker.join()
+    client.close()
+
+    lines = [line for line in capsys.readouterr().err.splitlines() if "anthropic 429" in line]
+    assert len(lines) == 2  # the first call and its one retry
+    assert all("thread=live-search-7-quiz-easy" in line for line in lines)
+    assert "path=/v1/messages" in lines[0] and "requests_left=0" in lines[0]
+
+
+def test_other_responses_are_not_logged(capsys: pytest.CaptureFixture[str]) -> None:
+    request = httpx2.Request("POST", "https://api.anthropic.com/v1/messages")
+
+    research_api.log_rate_limit(httpx2.Response(200, request=request))
+    research_api.log_rate_limit(httpx2.Response(529, request=request))
+
+    assert capsys.readouterr().err == ""
