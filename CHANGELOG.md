@@ -14,8 +14,9 @@ release. Everything before that, session by session with its decisions, checks a
   limits come back after 9 November, and the $4 month on 1 December, with no deploy. The
   Anthropic Console limit is $32 for November ($20 here, about $5 for the daily Curator, $5 to
   fill the bank with 30 likely topics, $2 spare) and goes back to $10 on 1 December. Mission
-  Control shows the live-research cap in force, so November shows $20. Also from the launch code review: a refusal message
-  can no longer fail on a stray brace.
+  Control shows the caps in force, so November shows $20 for live research and $32 for the
+  Anthropic limit. Also from the launch code review: a refusal message can no longer fail on a
+  stray brace.
 
 ## 2026-10-28
 

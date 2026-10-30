@@ -14,8 +14,8 @@ An astronomy quiz written by an AI agent that checks every answer against the pa
 - **It runs on its own.** The model chooses its own tools in a hand-rolled loop, with no agent
   framework, and a scheduled job grows the question bank every day with no one pressing a button.
 - **It is live, at a capped cost.** A visitor can watch it research a new topic, at about $0.17
-  a search, under a $10 a month spend cap ($32 for November 2026, the launch month). Every model call's tokens and cost are logged, and the
-  site shows them.
+  a search, under a $10 a month spend cap ($32 for November 2026, the launch month). Every model
+  call's tokens and cost are logged, and the site shows them.
 
 **Stack:** Python 3.12 with the Anthropic SDK and Pydantic; Claude Haiku 4.5; TypeSafe's Jev as
 a second-opinion model; React, TypeScript, Tailwind CSS and Vite; Supabase Postgres; Vercel;

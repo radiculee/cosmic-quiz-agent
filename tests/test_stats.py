@@ -6,13 +6,18 @@ from __future__ import annotations
 import json
 from collections.abc import Callable
 from copy import deepcopy
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 import httpx2
 import pytest
 
-from agent.config import ANTHROPIC_MONTHLY_LIMIT_USD
+from agent.config import (
+    ANTHROPIC_MONTHLY_LIMIT_USD,
+    ANTHROPIC_NOVEMBER_2026_LIMIT_USD,
+    anthropic_monthly_limit_at,
+)
 from agent.limits import LIMITS, NOVEMBER_LIMITS
 from agent.llm import Usage
 from agent.rest import RestClient, StoreError
@@ -271,14 +276,25 @@ def test_the_reader_takes_a_reply_with_fields_added_later() -> None:
     assert "topic" not in body["stats"]["filters"]
 
 
-def test_the_live_month_cap_is_the_one_in_force_when_the_figures_were_made() -> None:
-    def cap_at(when: str) -> float:
+def test_the_caps_shown_are_the_ones_in_force_when_the_figures_were_made() -> None:
+    def caps_at(when: str) -> tuple[float, float]:
         stats = AgentStats.model_validate({**SAMPLE, "generated_at": when})
-        return stats_reply(stats).caps.live_month_usd
+        caps = stats_reply(stats).caps
+        return caps.anthropic_month_usd, caps.live_month_usd
 
-    assert cap_at("2026-10-31T23:59:59+00:00") == LIMITS.usd_per_month
-    assert cap_at("2026-11-20T12:00:00+00:00") == NOVEMBER_LIMITS.usd_per_month
-    assert cap_at("2026-12-01T00:00:00+00:00") == LIMITS.usd_per_month
+    usual = (ANTHROPIC_MONTHLY_LIMIT_USD, LIMITS.usd_per_month)
+    november = (ANTHROPIC_NOVEMBER_2026_LIMIT_USD, NOVEMBER_LIMITS.usd_per_month)
+    assert caps_at("2026-10-31T23:59:59+00:00") == usual
+    assert caps_at("2026-11-01T00:00:00+00:00") == november
+    assert caps_at("2026-11-30T23:59:59+00:00") == november
+    assert caps_at("2026-12-01T00:00:00+00:00") == usual
+
+
+def test_the_anthropic_limit_is_raised_for_november_2026_only() -> None:
+    assert anthropic_monthly_limit_at(datetime(2026, 10, 31, 23, 59, 59, tzinfo=UTC)) == 10.0
+    assert anthropic_monthly_limit_at(datetime(2026, 11, 1, tzinfo=UTC)) == 32.0
+    assert anthropic_monthly_limit_at(datetime(2026, 11, 30, 23, 59, 59, tzinfo=UTC)) == 32.0
+    assert anthropic_monthly_limit_at(datetime(2026, 12, 1, tzinfo=UTC)) == 10.0
 
 
 def test_caching_savings_price_tokens_with_and_without_the_cache() -> None:

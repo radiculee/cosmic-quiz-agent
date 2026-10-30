@@ -7,10 +7,13 @@ budgets and the domain allow-list are reviewed in code so changes show up in a d
 from __future__ import annotations
 
 import os
+from datetime import datetime
 from typing import Literal
 
 from dotenv import load_dotenv
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from agent.limits import NOVEMBER_ENDS, NOVEMBER_STARTS
 
 
 class ModelPrice(BaseModel):
@@ -45,6 +48,19 @@ DEFAULT_MODEL = "claude-haiku-4-5"
 # The monthly spend limit set on the Anthropic Console workspace (CLAUDE.md hard rule 1).
 # Anthropic enforces it; it is kept here only so the analytics page can show spend against it.
 ANTHROPIC_MONTHLY_LIMIT_USD = 10.0
+# November 2026, the launch month (decided by Vedant on 2026-10-30): $32, that is $20 for live
+# research (agent/limits.py), about $5 for the daily Curator, $5 for the 30-topic fill and $2
+# spare. Vedant sets it on the Console and lowers it to $10 again on 1 December.
+ANTHROPIC_NOVEMBER_2026_LIMIT_USD = 32.0
+
+
+def anthropic_monthly_limit_at(now: datetime) -> float:
+    """The Console's monthly limit at `now`: November 2026's, or the usual one. The same
+    window as November's live-research cap (`agent/limits.limits_at`), so it ends by itself."""
+    if NOVEMBER_STARTS <= now < NOVEMBER_ENDS:
+        return ANTHROPIC_NOVEMBER_2026_LIMIT_USD
+    return ANTHROPIC_MONTHLY_LIMIT_USD
+
 
 # Versions of the verdict definitions sent to Jev (the wording is in agent/verifiers/jev.py).
 JevCriteria = Literal["generic-1", "astro-1"]

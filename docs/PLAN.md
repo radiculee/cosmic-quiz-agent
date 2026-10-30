@@ -1784,8 +1784,9 @@ launch's last day; at the typical $0.17 a search the week is $16.66. Accepted by
 2026-10-30: the $20 month cap holds, so the worst case pauses live search late in the launch week.
 
 Also found: Mission Control showed the usual `LIMITS.usd_per_month` ($4) as the live cap, so in
-November it would have shown $4 where $20 applies; fixed above. It still shows the $10 Anthropic
-limit (`ANTHROPIC_MONTHLY_LIMIT_USD` in `agent/config.py`) in November, where the Console is $32.
+November it would have shown $4 where $20 applies; fixed above. Its Anthropic limit is read by
+date too (`anthropic_monthly_limit_at` in `agent/config.py`, approved 2026-10-30): $32 in
+November 2026, $10 otherwise.
 
 ### Universal topics (2026-10-28)
 

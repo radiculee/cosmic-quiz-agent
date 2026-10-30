@@ -17,7 +17,7 @@ from typing import Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
 
-from agent.config import ANTHROPIC_MONTHLY_LIMIT_USD, PRICES
+from agent.config import PRICES, anthropic_monthly_limit_at
 from agent.limits import limits_at
 from agent.llm import Usage
 from agent.rest import RETRIES, RestClient, StoreError, parse
@@ -290,9 +290,9 @@ def stats_reply(stats: AgentStats) -> StatsReply:
     return StatsReply(
         stats=stats,
         caching=caching_savings(stats.tokens),
-        # The live cap in force when the figures were made, so November 2026 shows its own.
+        # The caps in force when the figures were made, so November 2026 shows its own.
         caps=Caps(
-            anthropic_month_usd=ANTHROPIC_MONTHLY_LIMIT_USD,
+            anthropic_month_usd=anthropic_monthly_limit_at(stats.generated_at),
             live_month_usd=limits_at(stats.generated_at).usd_per_month,
         ),
     )
