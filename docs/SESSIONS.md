@@ -229,6 +229,14 @@ entry; record a reversal as a new one.
   the last 30 days of runs). The deploy hook fires once per Curator run that published anything.
   latency may edit `.github/workflows/curator.yml` (one env line), `agent/stats.py` (the cap
   line) and `docs/DEVELOPMENT.md` (parallel search).
+- 2026-10-30, latency: Migration 010 written on Vedant's go, with main's notes: a plan that is
+  not an array, is empty or is longer than a search raises (a bug, not a limit), so the "search"
+  limit name is gone; items are read `with ordinality` and ids return in plan order; a stale
+  reservation (a run killed by a crash or the 300 s timeout) keeps holding its money, now up to
+  $1.02 a search, kept as the safe side of hard rule 1, with a read-only query in
+  `docs/PLAN.md`; Surprise me's pick before the reservation can cost a refused visitor about
+  $0.003, accepted. Estimates: `percentile_cont(0.5)`, `llm_error` left out, 5 runs minimum, 17 s
+  fallback. Threads named `live-search-<id>-<key>`.
 
 - 2026-10-30, data: Accounts, how they are built (Vedant, each the recommendation):
   - The browser signs in with `@supabase/auth-js` (MIT, free, 24 KB gzipped), loaded only when

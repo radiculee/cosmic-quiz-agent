@@ -2006,6 +2006,50 @@ Vedant:
 - [ ] Paste the migration into the Supabase SQL editor when it is ready.
 - [ ] The go/no-go on Sunday 1 November.
 
+Built on 2026-10-30 (the latency session; Vedant gave the go for migration 010 after main
+reviewed its explanation, with main's four notes):
+
+- [x] `supabase/migrations/010_parallel_searches.sql`, folded into `supabase/schema.sql`:
+      `begin_on_demand_search` (one call reserves a search's runs in plan order, read `with
+      ordinality`, while the caps fit; ids in plan order; it raises on a plan that is not an
+      array, is empty or is longer than a search, all bugs in the caller) and
+      `live_run_estimates` (the median of `seconds + greatest(verifier_seconds, jev_seconds)`
+      per mode and level over 30 days, `llm_error` left out). `begin_on_demand_run` stays until
+      after the launch. Both parse with pglast; there is no local Postgres, so
+      `supabase/checks/010_parallel_searches_check.sql` checks them on the live bank after the
+      paste (a partial fit of 3 items, plan order, the visitor limit, both bad calls) and undoes
+      its own rows by ending in an error.
+- [x] `agent/store.py`: `begin_on_demand_search` (sent once) and `live_run_estimates`.
+- [x] `agent/limits.py`: the usual daily cap $1.55; `SearchSlots` in place of `RunSlot`; the
+      `"search"` limit name is gone.
+- [x] `agent/ondemand.py`: every run reserved at the start; one thread per item, named
+      `live-search-<id>-<key>`; the items the caps leave out are reported as not started;
+      `RUN_START_SECONDS`, `VERIFY_SECONDS`, `run_budget`, `_later_slot`, `_NotStarted` and the
+      "Time" line removed. `RunTimes` reads the estimates at most once an hour per server (17 s
+      for a level with fewer than 5 runs, or when the read fails), sent as `estimate_seconds` on
+      each live item of the plan.
+- [x] `api/research.py`: the 429 hook (`a8c5947`, on `main`) and `RunTimes`.
+- [x] Tests: the reservation in plan order and its partial fit, a cap that fits nothing, every
+      run going at once (each waits until all six are running), runs finishing out of order,
+      a run failing while the others finish, every slot settled when the player leaves, the
+      threads' names, the estimates' cache, and a whole search through the real loop with one
+      scripted model per item.
+
+Notes from main's review of the explanation (2026-10-30):
+
+- Review finding 2 of 2026-10-22 no longer applies: every run is reserved when the search starts,
+  against that day's spend, so no later run is checked against the next day's.
+- A stale reservation now holds more: a run killed by a hard crash or Vercel's 300 s timeout keeps
+  its `reserved_usd` in the day's and the month's sums, which stays on the safe side of hard
+  rule 1, but one killed search now holds up to $1.02, not $0.17. Kept. To list them (read-only):
+  `select id, topic, mode, difficulty, started_at, reserved_usd from public.on_demand_runs where
+  finished_at is null and started_at < now() - interval '10 minutes' order by started_at;`
+- Surprise me reads the limits, then makes the paid pick, then reserves. Two visitors at the last
+  place under a cap can both pay for a pick and then one is refused: about $0.003. Accepted.
+- The Haiku verifier runs on a thread pool of its own (`agent/verifiers/__init__.py`, which no
+  session owns), so a 429 on its call names a pool thread, not the item. One argument fixes it
+  (`thread_name_prefix` from the calling thread's name); asked of main.
+
 Prompt for that session:
 
 > Read CLAUDE.md, docs/SESSIONS.md, docs/handoff/latency.md, docs/DESIGN.md and docs/PLAN.md.
