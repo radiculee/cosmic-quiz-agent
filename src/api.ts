@@ -17,6 +17,7 @@ import {
   type ShownStatus,
   type Source,
   type SourceCheck,
+  STAGES,
   type StatsReply,
   VERDICTS,
 } from "./types";
@@ -177,6 +178,13 @@ export function isResearchEvent(value: unknown): value is ResearchEvent {
         TONES.includes(value.tone) &&
         (value.verdict === null || (VERDICTS as readonly unknown[]).includes(value.verdict)) &&
         (value.confidence === null || isNumber(value.confidence)) &&
+        isNumber(value.seconds)
+      );
+    case "progress":
+      return (
+        isItemKey(value.key) &&
+        (STAGES as readonly unknown[]).includes(value.stage) &&
+        isString(value.status) &&
         isNumber(value.seconds)
       );
     case "rejected":

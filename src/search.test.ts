@@ -11,6 +11,7 @@ import {
   measured,
   missed,
   nextOpen,
+  progressed,
   questionSlots,
   resolved,
   started,
@@ -114,6 +115,39 @@ describe("a search's slots", () => {
       "ready",
       "missed",
     ]);
+  });
+
+  it("follow a run's progress, keeping when its work began", () => {
+    let search = fromPlan(1, "Pulsars", PLAN);
+    search = progressed(search, "quiz-hard", "search", "Choosing where to look", 1.2);
+    search = started(search, "quiz-hard"); // a log line keeps the progress
+    search = progressed(search, "quiz-hard", "read", "Reading nasa.gov", 6.5);
+
+    expect(questionSlots(search)[2]?.state).toEqual({
+      kind: "researching",
+      progress: { stage: "read", status: "Reading nasa.gov", startedAt: 1.2, at: 6.5 },
+    });
+
+    // A run that started before its first progress (a log line came first) begins there.
+    search = started(search, "quiz-medium");
+    search = progressed(search, "quiz-medium", "search", "Choosing where to look", 2.0);
+    expect(questionSlots(search)[1]?.state).toEqual({
+      kind: "researching",
+      progress: { stage: "search", status: "Choosing where to look", startedAt: 2.0, at: 2.0 },
+    });
+  });
+
+  it("never let late progress undo an item, or touch a bank item", () => {
+    let search = fromPlan(1, "Pulsars", PLAN);
+    search = resolved(search, "learn-medium", EXPLANATION);
+    search = missed(search, "quiz-medium", "Not backed by its sources.");
+    const before = search;
+
+    search = progressed(search, "learn-medium", "verify", "Checking the explanation", 30);
+    search = progressed(search, "quiz-medium", "verify", "Checking the question", 30);
+    search = progressed(search, "quiz-easy", "read", "Reading nasa.gov", 30);
+
+    expect(search.slots).toEqual(before.slots);
   });
 
   it("ignore events about items the plan does not have", () => {

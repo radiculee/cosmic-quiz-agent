@@ -32,7 +32,9 @@ topic once it has every level. `research` yields events while it works:
 6. Each run that produced a record also sends what it measured (`agent/run_stats.py`), for the
    analytics panel: numbers only, so nothing in it can give a quiz answer away.
 
-Every event after the plan that concerns one item names it (`key`, such as "quiz-easy").
+Every event after the plan that concerns one item names it (`key`, such as "quiz-easy"). Beside
+the log lines, each live run sends its progress (`ProgressEvent`): the stage of its work and a
+status line that names it, for the page's progress rows.
 
 From step 4 the work runs on its own thread, started before anything more is streamed: a run
 that has started is paid for, so it is always finished, stored and settled, and the search's
@@ -72,6 +74,7 @@ from agent.store import (
     TopicRef,
     build_payload,
 )
+from agent.tools.feeds import FEEDS
 from agent.topic_check import TopicCheckError, TopicJudge
 from agent.topic_pick import TopicPick
 from agent.verifiers import JevClient
@@ -94,6 +97,8 @@ Tone = Literal["info", "ok", "warn"]
 FallbackReason = Literal["limit", "unavailable"]
 MissedReason = Literal["discarded", "failed", "skipped"]
 ItemSource = Literal["live", "bank"]
+# The stages of a live run's work, in order, for the page's progress rows.
+Stage = Literal["search", "read", "write", "verify"]
 
 NOUNS: dict[Mode, str] = {"learn": "explanation", "quiz": "question"}
 
@@ -143,6 +148,23 @@ class LogEvent(BaseModel):
     # Jev's verdict on a claim, when the line is a claim check (hidden for quiz options).
     verdict: JevVerdict | None = None
     confidence: float | None = None
+    seconds: float = 0.0
+
+
+class ProgressEvent(BaseModel):
+    """Where a live item's run stands, for the page's progress rows: the stage of its work and a
+    status line that names the real work ("Reading nasa.gov"). Sent as each step ends, so it
+    says what the run does next: after a page is fetched, the model's next call reads it. The
+    call that writes the answer cannot be told from one that reads until it returns, so "write"
+    comes when the answer arrives and its quotes and numbers are checked, and "verify" follows
+    at once. The run's end is its `result` or `missed` event."""
+
+    model_config = ConfigDict(frozen=True)
+
+    type: Literal["progress"] = "progress"
+    key: str
+    stage: Stage
+    status: str
     seconds: float = 0.0
 
 
@@ -201,7 +223,14 @@ class StatsEvent(BaseModel):
 
 
 ResearchEvent = (
-    PlanEvent | LogEvent | RejectedEvent | FallbackEvent | ResultEvent | MissedEvent | StatsEvent
+    PlanEvent
+    | LogEvent
+    | ProgressEvent
+    | RejectedEvent
+    | FallbackEvent
+    | ResultEvent
+    | MissedEvent
+    | StatsEvent
 )
 
 
@@ -307,6 +336,13 @@ class _Clock:
                 "seconds": round(self.elapsed(), 1),
                 **extra,
             }
+        )
+
+    def progress(self, stage: Stage, status: str) -> ProgressEvent:
+        if self.key is None:
+            raise ValueError("progress is about an item: use for_item")
+        return ProgressEvent(
+            key=self.key, stage=stage, status=status, seconds=round(self.elapsed(), 1)
         )
 
 
@@ -596,6 +632,7 @@ def _run_item(
     run_id: int | None = None
     try:
         emit(clock.log("Budget", f"up to ${spent:.2f} reserved for {planned.label}", "ok"))
+        emit(clock.progress("search", "Choosing where to look"))
         record = _produce(search.topic, planned, services, clock, emit)
         spent = record.anthropic_cost_usd
         status = record.status
@@ -678,6 +715,9 @@ def _produce(
 
     def on_step(step: Step) -> None:
         emit(step_event(step, clock, answer_word))
+        progress = step_progress(step, clock, answer_word)
+        if progress is not None:
+            emit(progress)
 
     # The first model call usually takes about 2 seconds but now and then 20, so say it started.
     emit(clock.log("Agent", f"researching with {settings.model}"))
@@ -699,6 +739,14 @@ def _produce(
     elif result.answer is None:
         emit(clock.log("Agent", f"no answer: {result.detail}"[:160], "warn"))
 
+    if result.answer is not None:
+        pages = len(result.cited_pages)
+        emit(
+            clock.progress(
+                "verify",
+                f"Checking the {answer_word} against {pages} page{'' if pages == 1 else 's'}",
+            )
+        )
     record = verify_and_decide(result, services.llm, services.jev, settings)
     verification = record.verification
     if verification is not None:
@@ -774,6 +822,42 @@ def step_event(step: Step, clock: _Clock, answer_word: str) -> LogEvent:
     if called == "no tool calls":
         return clock.log("Agent", "thinking")
     return clock.log("Agent", f"next: {called}")
+
+
+# What the model does with each research tool's result, for the progress status line.
+_SEARCHES: dict[str, str] = {
+    "search_wikipedia": "Wikipedia",
+    "search_arxiv": "arXiv",
+    "search_nasa_images": "NASA images",
+}
+
+
+def step_progress(step: Step, clock: _Clock, answer_word: str) -> ProgressEvent | None:
+    """The run's progress after one of its steps, or None when the step changes nothing a
+    player would see (a model call that asks for tools, or a tool that failed)."""
+    if step.kind == "tool" and step.tool and not step.is_error:
+        arguments = step.arguments or {}
+        if step.tool in _SEARCHES:
+            query = arguments.get("query")
+            about = f' for "{query[:60]}"' if isinstance(query, str) and query else ""
+            where = _SEARCHES[step.tool]
+            return clock.progress("search", f"Looking through {where} results{about}")
+        if step.tool == "fetch_page":
+            url = arguments.get("url")
+            host = urlsplit(url).netloc.removeprefix("www.") if isinstance(url, str) else ""
+            return clock.progress("read", f"Reading {host}" if host else "Reading a page")
+        if step.tool == "fetch_feed":
+            feed = arguments.get("feed")
+            label = FEEDS[feed][0] if isinstance(feed, str) and feed in FEEDS else "a news feed"
+            return clock.progress("read", f"Reading {label}")
+        if step.tool == "nasa_apod":
+            return clock.progress("read", "Reading NASA's Astronomy Picture of the Day")
+        return clock.progress("read", "Reading its sources")
+    if step.kind == "model" and step.summary.startswith("submit_"):
+        return clock.progress(
+            "write", f"Checking the {answer_word}'s quotes and numbers against its pages"
+        )
+    return None
 
 
 def tool_detail(arguments: dict[str, object]) -> str:

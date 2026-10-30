@@ -108,6 +108,10 @@ export interface PlannedItem {
 
 export type Tone = "info" | "ok" | "warn";
 
+/** The stages of a live run's work, in order (agent/ondemand.py `Stage`). */
+export const STAGES = ["search", "read", "write", "verify"] as const;
+export type Stage = (typeof STAGES)[number];
+
 // --- Mission Control (Session 9) ----------------------------------------------------------
 
 export const OUTCOMES = [
@@ -331,6 +335,13 @@ export type ResearchEvent =
       confidence: number | null;
       seconds: number;
     }
+  /**
+   * Where a live item's run stands, for the progress rows: the stage of its work and a status
+   * line naming the real work ("Reading nasa.gov"). Sent as each step ends, so it says what the
+   * run does next. "write" comes when the answer arrives, just before "verify". The run's end
+   * is its "result" or "missed" event.
+   */
+  | { type: "progress"; key: ItemKey; stage: Stage; status: string; seconds: number }
   | { type: "rejected"; message: string }
   | { type: "fallback"; reason: "limit" | "unavailable"; message: string }
   | { type: "result"; key: ItemKey; item: Item; reveal_token: string | null }

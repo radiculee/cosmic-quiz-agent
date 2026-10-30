@@ -40,6 +40,7 @@ from agent.ondemand import (
     MissedEvent,
     PlanEvent,
     PlannedItem,
+    ProgressEvent,
     RejectedEvent,
     ResearchEvent,
     ResultEvent,
@@ -50,6 +51,7 @@ from agent.ondemand import (
     research,
     run_budget,
     step_event,
+    step_progress,
     tool_detail,
 )
 from agent.rest import StoreError
@@ -150,6 +152,59 @@ def test_tool_steps_show_the_url_or_the_query() -> None:
         index=0, kind="model", summary="search_wikipedia, fetch_page (stop: tool_use)", seconds=1
     )
     assert step_event(plan, clock, "question").detail == "next: search_wikipedia, fetch_page"
+
+
+def test_progress_names_the_real_work_after_each_step() -> None:
+    clock = ondemand._Clock().for_item("learn-hard")
+
+    def after(step: Step) -> tuple[str, str] | None:
+        progress = step_progress(step, clock, "explanation")
+        return None if progress is None else (progress.stage, progress.status)
+
+    def tool(name: str, arguments: dict[str, object], is_error: bool = False) -> Step:
+        return Step(
+            index=1,
+            kind="tool",
+            summary=f"{name}(...)",
+            seconds=0.4,
+            tool=name,
+            arguments=arguments,
+            is_error=is_error,
+        )
+
+    assert after(tool("search_wikipedia", {"query": "magnetar"})) == (
+        "search",
+        'Looking through Wikipedia results for "magnetar"',
+    )
+    assert after(tool("search_arxiv", {"query": "x" * 200})) == (
+        "search",
+        f'Looking through arXiv results for "{"x" * 60}"',
+    )
+    assert after(tool("fetch_page", {"url": "https://www.nasa.gov/missions/x"})) == (
+        "read",
+        "Reading nasa.gov",
+    )
+    assert after(tool("fetch_feed", {"feed": "esa_webb"})) == ("read", "Reading ESA/Webb news")
+    assert after(tool("nasa_apod", {"date": "2026-10-01"})) == (
+        "read",
+        "Reading NASA's Astronomy Picture of the Day",
+    )
+    # A failed tool, or a model call that only asks for tools, changes nothing shown.
+    assert after(tool("fetch_page", {"url": "https://esa.int/x"}, is_error=True)) is None
+    asking = Step(index=0, kind="model", summary="fetch_page (stop: tool_use)", seconds=2.0)
+    assert after(asking) is None
+    submit = Step(index=2, kind="model", summary="submit_answer (stop: tool_use)", seconds=6.0)
+    assert after(submit) == (
+        "write",
+        "Checking the explanation's quotes and numbers against its pages",
+    )
+    progress = step_progress(submit, clock, "explanation")
+    assert progress is not None and progress.key == "learn-hard"
+
+
+def test_progress_is_always_about_an_item() -> None:
+    with pytest.raises(ValueError):
+        ondemand._Clock().progress("search", "Choosing where to look")
 
 
 # --- The plan ----------------------------------------------------------------------------------
@@ -879,6 +934,23 @@ def test_a_whole_search_through_the_real_loop_and_verifiers(
     assert all(p.item is not None and p.item.status == "published" for p in store.payloads)
     fetched = [line.detail for line in of_type(events, LogEvent) if line.label == "fetch_page"]
     assert fetched == ["en.wikipedia.org/wiki/Neutron_star"] * 6
+    # Every run moves through every stage in order, each named by its real work, before its item.
+    for key in EVERY_ITEM:
+        noun = "question" if key.startswith("quiz") else "explanation"
+        progress = [event for event in of_type(events, ProgressEvent) if event.key == key]
+        assert [(event.stage, event.status) for event in progress] == [
+            ("search", "Choosing where to look"),
+            ("read", "Reading en.wikipedia.org"),
+            ("write", f"Checking the {noun}'s quotes and numbers against its pages"),
+            ("verify", f"Checking the {noun} against 1 page"),
+        ]
+        last = max(index for index, event in enumerate(events) if event in progress)
+        result = next(
+            index
+            for index, event in enumerate(events)
+            if isinstance(event, ResultEvent) and event.key == key
+        )
+        assert last < result
 
 
 # --- The endpoint ------------------------------------------------------------------------------

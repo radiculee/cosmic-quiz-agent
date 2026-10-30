@@ -73,6 +73,21 @@ describe("research events", () => {
     expect(isResearchEvent({ type: "fallback", reason: "limit", message: "m" })).toBe(true);
     expect(isResearchEvent({ type: "fallback", reason: "in_bank", message: "m" })).toBe(false);
   });
+
+  it("accepts a run's progress at a known stage and refuses anything else", () => {
+    const progress = {
+      type: "progress",
+      key: "learn-hard",
+      stage: "read",
+      status: "Reading nasa.gov",
+      seconds: 4.2,
+    };
+    expect(isResearchEvent(progress)).toBe(true);
+    expect(isResearchEvent({ ...progress, stage: "thinking" })).toBe(false);
+    expect(isResearchEvent({ ...progress, key: null })).toBe(false);
+    expect(isResearchEvent({ ...progress, status: 3 })).toBe(false);
+    expect(isResearchEvent({ ...progress, seconds: "4.2" })).toBe(false);
+  });
 });
 
 describe("a run's figures", () => {

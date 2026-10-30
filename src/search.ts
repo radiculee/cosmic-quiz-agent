@@ -5,18 +5,29 @@
  * question has been answered (decided 2026-10-10), so they can never give an answer away. Pure
  * functions over plain data, so the page's rules are tested without a browser.
  */
-import type { Item, ItemKey, PlannedItem, RunStats } from "./types";
+import type { Item, ItemKey, PlannedItem, RunStats, Stage } from "./types";
 
 export type SlotState =
   /** Made live; its run has not started yet. */
   | { kind: "waiting" }
-  /** Made live; its run is going. */
-  | { kind: "researching" }
+  /** Made live; its run is going, with its latest progress once any has come. */
+  | { kind: "researching"; progress?: RunProgress }
   /** Already in the bank; being loaded, free. */
   | { kind: "loading" }
   | { kind: "ready"; item: Item; revealToken?: string | undefined }
   /** Discarded by the checks, failed, not started, or not loaded. */
   | { kind: "missed"; message: string };
+
+/** A live run's progress, as the progress rows show it (agent/ondemand.py `ProgressEvent`). */
+export interface RunProgress {
+  stage: Stage;
+  /** The real work, such as "Reading nasa.gov". */
+  status: string;
+  /** Seconds into the search when the run's first progress came: when its work began. */
+  startedAt: number;
+  /** Seconds into the search at its latest progress. */
+  at: number;
+}
 
 export interface Slot extends PlannedItem {
   state: SlotState;
@@ -75,6 +86,27 @@ export function started(search: Search, key: ItemKey): Search {
   return update(search, key, (slot) =>
     slot.state.kind === "waiting" ? { kind: "researching" } : slot.state,
   );
+}
+
+/** A run's progress arrived. It moves only a run that is still going: a late one never undoes a
+ * ready or left-out item, and a bank item has no run. */
+export function progressed(
+  search: Search,
+  key: ItemKey,
+  stage: Stage,
+  status: string,
+  seconds: number,
+): Search {
+  return update(search, key, (slot) => {
+    if (slot.state.kind === "waiting") {
+      return { kind: "researching", progress: { stage, status, startedAt: seconds, at: seconds } };
+    }
+    if (slot.state.kind !== "researching") {
+      return slot.state;
+    }
+    const startedAt = slot.state.progress?.startedAt ?? seconds;
+    return { kind: "researching", progress: { stage, status, startedAt, at: seconds } };
+  });
 }
 
 /** The item arrived: a live result, or a bank item loaded. */
