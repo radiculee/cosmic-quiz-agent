@@ -17,7 +17,7 @@ A new session: `dev/new-session.sh <name>` (Git Bash) or `dev/new-session.ps1 <n
 | latency | `session/latency` | `../cqa-latency` | The live-search backend, the bank schema and the shared docs: see "latency owns" | Active: November's budget committed, ready for review; parallel search in progress (`docs/handoff/latency.md`) | 2026-10-30 |
 | explore | `session/explore` (landed on `main`) | `../cqa-explore` | The Explore page's frontend: see "explore owns" | Done: universal topics and Surprise me are on `main`; follow-ups in `docs/handoff/explore.md`. Its files pass to ui and media (2026-10-30) | 2026-10-30 |
 | main | `main` | the main folder | Coordination only, no code: this file, `docs/handoff/*.md` briefs, reviews | Active: the pre-launch overhaul (`docs/handoff/main.md`) | 2026-10-30 |
-| data | `session/data` | `../cqa-data` | Accounts: see "data owns" | Active: plan agreed, migration 011 next (`docs/handoff/data.md`) | 2026-10-30 |
+| data | `session/data` | `../cqa-data` | Accounts: see "data owns" | Active: migration 011 written; `agent/auth.py` next (`docs/handoff/data.md`) | 2026-10-30 |
 | ui | `session/ui` | `../cqa-ui` | Header, cards, progress rows, ranks: see "ui owns" | Briefed, not started (`docs/handoff/ui.md`) | 2026-10-30 |
 | seo | `session/seo` | `../cqa-seo` | The rename, metadata, prerendering, redirects: see "seo owns" | Briefed, not started (`docs/handoff/seo.md`) | 2026-10-30 |
 | media | `session/media` | `../cqa-media` | Topic images: see "media owns" | Briefed, not started (`docs/handoff/media.md`) | 2026-10-30 |
@@ -246,6 +246,23 @@ entry; record a reversal as a new one.
     changes nothing. Migration 011 therefore holds `player_answers`, `player_reads`,
     `player_runs`, `player_searches` and `player_baselines`, in place of the brief's `profiles`,
     `answers`, `learned` and `seen` (seen and played topics come out of the replay).
+
+- 2026-10-30, data: Migration 011 approved by Vedant with eight changes:
+  - The browser makes a new guest id after each successful merge (a test covers sign in, sign
+    out, play as a guest, sign in again).
+  - All privileges on the five tables are revoked from `anon` and `authenticated`; only select
+    and insert are granted to `authenticated`. RLS stays on with its two policies a table.
+  - The row caps are listed in the migration and refused with SQLSTATE `CQ001`; the browser
+    drops such a row, logs it once and does not retry. Other errors keep the retry.
+  - `correct` and `points` stay, but a future leaderboard re-scores on the server from
+    `item_id` and `choice`. `item_id` is the source of truth for the topic; `topic` is a
+    snapshot.
+  - The per-account limit key in `on_demand_runs` is a salted hash of the user id, never the
+    id. Those rows stay after an account is deleted, and the privacy page says so.
+  - No delete policy: `api/account.py` deletes with the secret key after `agent/auth.py` checks
+    the token, and the account page asks the player to confirm.
+  - Rows are kept until the player deletes the account. A purge of inactive accounts is a
+    follow-up after the launch.
 
 ---
 

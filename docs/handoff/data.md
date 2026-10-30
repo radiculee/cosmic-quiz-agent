@@ -3,7 +3,7 @@
 Notes for the data session (`docs/SESSIONS.md`). They replace `docs/NEXT_SESSION.md` for this
 session. Update them before finishing, and commit them on `session/data`.
 
-Last update: 2026-10-30 (data: plan agreed with Vedant; nothing built yet)
+Last update: 2026-10-30 (data: migration 011 written, not yet run on the live database)
 
 ## Current goal
 
@@ -118,22 +118,80 @@ The checks above pass and main's review has no open findings.
 
 ## Done
 
-- 2026-10-30: plan agreed with Vedant (four choices, all the recommendation; `docs/SESSIONS.md`,
-  Decisions, 2026-10-30, data). Row claimed.
+- Plan agreed with Vedant: four choices, each the recommendation (`docs/SESSIONS.md`, Decisions,
+  2026-10-30, data). Row claimed. Committed `599a4e8`.
+- `supabase/migrations/011_accounts.sql` written, with Vedant's eight changes of 2026-10-30
+  (Decisions, second data entry):
+  - Five tables: `player_answers`, `player_reads`, `player_runs`, `player_searches`,
+    `player_baselines`. Event ids are browser UUIDs; baselines are keyed on
+    `(user_id, guest_id)`.
+  - Every row references `auth.users(id) on delete cascade`; `item_id` references
+    `public.items(id)` (items are never deleted).
+  - RLS on; per table, two policies (select own, insert own). All privileges revoked from `anon`
+    and `authenticated`, then only select and insert granted to `authenticated`. No update, no
+    delete.
+  - `check_player_row()` before each insert: server `created_at`, a future `at` clamped to now,
+    and the row caps (2,000 answers, 500 reads, 200 runs, 50 searches a day from midnight UTC;
+    20 baselines in all), refused with SQLSTATE `CQ001`. The caps are listed in the header.
+  - The comment that a future leaderboard must re-score from `item_id` and `choice`, never from
+    `correct` or `points`; `topic` is a snapshot, `item_id` the source of truth.
 
-## Next
+## In progress
 
-1. Explain migration 011's SQL to Vedant, then write `supabase/migrations/011_accounts.sql`.
-2. `agent/auth.py` and `tests/test_auth.py`.
-3. `src/session.ts`, `src/useSession.ts`, the flag, `SignInButton.tsx`.
-4. Profile v3 (guest id, event log, v2 carried over as a baseline), the replay, the merge and
-   the outbox in `src/profile.ts` and `src/useProfile.ts`, with tests.
-5. `AccountPage.tsx` (export, delete, sign out) and `api/account.py` (delete).
-6. `PrivacyPage.tsx`, only after seo's brand pass is on `main` and this branch is rebased.
-7. This handoff; text for `CHANGELOG.md` and `README.md` for latency.
+- Nothing. Migration 011 is written and committed; it waits for latency's 010 and for Vedant to
+  run it.
 
-## Blockers
+## Left
 
-## Files touched
+1. `agent/auth.py` and `tests/test_auth.py`: check a token with `/auth/v1/user`; also
+   `account_visitor(user_id)`, a salted hash of the user id (never the raw id) for
+   `on_demand_runs.user_hash`.
+2. `src/session.ts`, `src/useSession.ts`, the `VITE_ACCOUNTS` flag, `SignInButton.tsx`. The email
+   carries a link and a 6-digit code.
+3. `src/profile.ts`, `src/useProfile.ts`: profile v3 (guest id, event log, v2 carried over as a
+   baseline), the replay, the merge, the outbox. Required by Vedant:
+   - A new `guest_id` after each successful merge, with a test: sign in, sign out, play as a
+     guest, sign in again; the second guest's progress is added.
+   - An insert refused with `CQ001` is final: drop the row, log it once, no retry. Other errors
+     keep the retry.
+   - Tests: union, append, idempotent, points recalculated, v2 carried over.
+4. `AccountPage.tsx`: export (JSON), delete (the player confirms first), sign out.
+   `api/account.py`: delete with the secret key only, after `agent/auth.py` checks the token.
+5. `PrivacyPage.tsx`, only after seo's brand pass is on `main` and this branch is rebased. It
+   must say: rows are kept until the player deletes the account; the per-account limit key is a
+   salted hash of the user id, those limit rows stay after deletion and the hash is cleared
+   after a day; the Supabase session is kept in local storage.
+6. Text for `CHANGELOG.md` and `README.md`, for latency to fold in.
+7. Follow-up after the launch (not now, Vedant 2026-10-30): a purge of long-inactive accounts,
+   in the daily upkeep (latency's).
 
-- `docs/SESSIONS.md` (my row; a Decisions entry), `docs/handoff/data.md`
+## Blocked on
+
+- Nothing for steps 1 to 4. Step 5 waits for seo's brand pass on `main`.
+
+## Needs from Vedant
+
+- Run `supabase/migrations/011_accounts.sql` in the Supabase SQL editor after latency's 010. It
+  has not been run against Postgres yet (no local Postgres on this machine), so a syntax error
+  would show there first.
+- A Google Cloud OAuth client (web app), with Supabase's callback URL as its redirect.
+- In Supabase: Google and email providers on; custom SMTP with Resend; the email template with
+  both `{{ .ConfirmationURL }}` and `{{ .Token }}`; site URL `https://curiosity.vedantgaikwad.ie`;
+  redirect URLs for localhost, `curiosity.` and the preview domain.
+- A Resend account with SPF and DKIM on vedantgaikwad.ie.
+- Pass on the requests above: seo (`connect-src`), ui (route and header slot), latency
+  (`authHeader()`, `agent/auth.py` in the limits); the `dev/api_server.py` line and adding
+  `@supabase/auth-js` to `package.json` (unowned files).
+
+## Files changed
+
+- `supabase/migrations/011_accounts.sql` (new)
+- `docs/SESSIONS.md` (my row; two Decisions entries)
+- `docs/handoff/data.md`
+
+## Checks run
+
+On `session/data`, 2026-10-30, all passing: `pytest` (361 passed), `ruff check`,
+`ruff format --check`, `mypy --strict` (82 files), `pnpm typecheck`, `pnpm test` (149 tests in
+13 files), `pnpm build`. None of them run SQL, so they do not test migration 011; it was
+checked by reading it, and for balanced brackets and plain ASCII.
