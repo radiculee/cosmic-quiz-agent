@@ -3,7 +3,7 @@
 Notes for the seo session (`docs/SESSIONS.md`). They replace `docs/NEXT_SESSION.md` for this
 session. Update them before finishing, and commit them on `session/seo`.
 
-Last update: 2026-10-30 (brief written by main)
+Last update: 2026-10-30 (step 1 done)
 
 ## Current goal
 
@@ -95,14 +95,32 @@ Vercel Hobby allows 100 deploys a day; the Curator's hook adds at most a few.
   the Rich Results Test passes; a pasted link shows the right preview in a chat app; no CSP
   violations in the console.
 
-### Done when
+### Done
 
-The checks above pass and main's review has no open findings.
-
-## Done
+- Step 1, the brand pass: `8cb0d15` on `session/seo`.
+- `src/brand.ts` holds the name, title, description, tagline, astronomy line and origin.
+- The "Cosmic Quiz" strings in `src/` now import from it.
+- The README is renamed to Curiosity.
+- Storage keys keep their values, so saved progress survives.
+- Safe to deploy at any time. `index.html` and `vercel.json` are unchanged.
 
 ## Next
 
+1. Step 2: `index.html` metadata, favicon set, manifest, `robots.txt`, redirects, 404 close-match.
+2. Update only the link-preview and old-address tests in `tests/test_packaging.py`. Assert the `/:path(.*)` source for every redirect.
+3. Add the small `vite.config.ts` plugin that fills `index.html` from `src/brand.ts`. Touch nothing else there.
+4. Step 3: prerender, sitemap and per-topic previews. Needs Vedant's approval for the `package.json` build change.
+5. The title Vedant picks on Monday, into `src/brand.ts`.
+
 ## Blockers
 
+- The step 2 redirects and canonical URLs must not be pushed until Vedant confirms `curiosity.vedantgaikwad.ie` serves over HTTPS.
+- The CSP `connect-src` change waits for data to name the Supabase origin.
+- The `/media/*` rewrite waits for media to give the bucket path.
+- Per-topic previews: no `sharp`. Vedant may have media make them with Pillow.
+- The Curator deploy-hook call waits for latency. Vedant makes the hook URL.
+
 ## Files touched
+
+- `src/brand.ts` (new), `src/router.ts`, `src/components/SiteHeader.tsx`, `src/pages/HomePage.tsx`, `src/pages/PrivacyPage.tsx`, `src/pages/StatsPanel.tsx`, `README.md`: committed in `8cb0d15`.
+- `docs/handoff/seo.md`: this update.
