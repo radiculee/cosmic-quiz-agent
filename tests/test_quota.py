@@ -14,6 +14,9 @@ from agent.limits import (
     LAUNCH_LIMITS,
     LAUNCH_STARTS,
     LIMITS,
+    NOVEMBER_ENDS,
+    NOVEMBER_LIMITS,
+    NOVEMBER_STARTS,
     LimitSettings,
     OnDemandUsage,
     day_start,
@@ -76,23 +79,52 @@ def test_global_caps_close_exactly_where_the_database_refuses_a_search() -> None
 def test_the_launch_week_runs_from_3_to_9_november_utc_and_ends_by_itself() -> None:
     assert datetime(2026, 11, 3, tzinfo=UTC) == LAUNCH_STARTS
     assert datetime(2026, 11, 10, tzinfo=UTC) == LAUNCH_ENDS
-    assert limits_at(datetime(2026, 11, 2, 23, 59, 59, tzinfo=UTC)) == LIMITS
+    assert limits_at(datetime(2026, 11, 2, 23, 59, 59, tzinfo=UTC)) == NOVEMBER_LIMITS
     assert limits_at(LAUNCH_STARTS) == LAUNCH_LIMITS
     assert limits_at(datetime(2026, 11, 9, 23, 59, 59, tzinfo=UTC)) == LAUNCH_LIMITS
-    assert limits_at(LAUNCH_ENDS) == LIMITS
+    assert limits_at(LAUNCH_ENDS) == NOVEMBER_LIMITS
+
+
+def test_november_has_its_own_month_cap_for_the_calendar_month_and_ends_by_itself() -> None:
+    assert datetime(2026, 11, 1, tzinfo=UTC) == NOVEMBER_STARTS
+    assert datetime(2026, 12, 1, tzinfo=UTC) == NOVEMBER_ENDS
+    assert limits_at(datetime(2026, 10, 31, 23, 59, 59, tzinfo=UTC)) == LIMITS
+    assert limits_at(NOVEMBER_STARTS) == NOVEMBER_LIMITS
+    # After the launch week the usual daily numbers return, under November's month cap.
+    assert limits_at(datetime(2026, 11, 20, 12, tzinfo=UTC)) == NOVEMBER_LIMITS
+    assert limits_at(datetime(2026, 11, 30, 23, 59, 59, tzinfo=UTC)) == NOVEMBER_LIMITS
+    # From 1 December the usual $4 again, with no deploy.
+    assert limits_at(NOVEMBER_ENDS) == LIMITS
+    assert limits_at(NOVEMBER_ENDS).usd_per_month == 4.00
     assert limits_at(NOW) == LIMITS
 
 
-def test_the_launch_raises_the_daily_numbers_but_never_the_month() -> None:
-    assert (
-        LAUNCH_LIMITS.user_searches_per_day,
-        LAUNCH_LIMITS.searches_per_day,
-        LAUNCH_LIMITS.usd_per_day,
-    ) == (5, 20, 2.50)
-    # The monthly ceiling keeps the daily Curator's share of the $10 Anthropic limit.
-    unchanged = {"user_searches_per_day", "searches_per_day", "usd_per_day"}
-    assert LAUNCH_LIMITS.model_dump(exclude=unchanged) == LIMITS.model_dump(exclude=unchanged)
-    assert LAUNCH_LIMITS.usd_per_month == 4.00
+def test_november_changes_only_the_month_cap() -> None:
+    assert NOVEMBER_LIMITS.usd_per_month > LIMITS.usd_per_month
+    other = {"usd_per_month"}
+    assert NOVEMBER_LIMITS.model_dump(exclude=other) == LIMITS.model_dump(exclude=other)
+
+
+def test_the_launch_raises_only_the_daily_numbers_under_novembers_month_cap() -> None:
+    raised = ("user_searches_per_day", "searches_per_day", "usd_per_day")
+    for name in raised:
+        assert getattr(LAUNCH_LIMITS, name) > getattr(NOVEMBER_LIMITS, name), name
+    assert LAUNCH_LIMITS.model_dump(exclude=set(raised)) == NOVEMBER_LIMITS.model_dump(
+        exclude=set(raised)
+    )
+
+
+def test_every_search_of_the_launch_week_at_a_typical_cost_fits_novembers_month_cap() -> None:
+    # The decision's sum (2026-10-28): every search allowed on 1 and 2 November and on each
+    # launch day, at about $0.17 a search (six items at a median $0.027 each, plus the
+    # verifier), comes to $18.02. Not a ceiling: a day of unusually costly searches could reach
+    # the $3.25 daily cap, and then the month cap could be met on the launch's last day.
+    typical_search = 0.17
+    launch_days = (LAUNCH_ENDS - LAUNCH_STARTS).days
+    launch = launch_days * LAUNCH_LIMITS.searches_per_day * typical_search
+    before = 2 * NOVEMBER_LIMITS.searches_per_day * typical_search
+
+    assert before + launch <= NOVEMBER_LIMITS.usd_per_month
 
 
 def test_in_the_launch_week_the_quota_offers_five_searches() -> None:

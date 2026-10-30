@@ -52,21 +52,41 @@ class LimitSettings(BaseModel):
 
 LIMITS = LimitSettings()
 
-# The LinkedIn launch (decided 2026-10-21 by Vedant): for the week from the post on Tuesday
-# 3 November 2026, more live searches, so more of the people who see it can try one. The
-# monthly ceiling is unchanged, so the launch can never spend more than a usual month and the
-# daily Curator keeps its share of the $10 Anthropic limit. The window ends by itself: outside
-# it the usual limits apply with no deploy.
+# November 2026 (decided 2026-10-28 by Vedant, docs/PLAN.md "The launch week's code review and
+# November's budget"): $20 for live research for the calendar month, so the LinkedIn launch on
+# 3 November can never use up the month on its second day. Vedant raises the Anthropic Console
+# limit to $32 for November ($20 here, about $5 for the daily Curator, $5 for the 30-topic
+# Curator fill, $2 spare; decided 2026-10-30), a dated exception to the $10 rule, and lowers it
+# again on 1 December. The fill counts against the Console only, not this cap. The window ends
+# by itself.
+NOVEMBER_STARTS = datetime(2026, 11, 1, tzinfo=UTC)
+NOVEMBER_ENDS = datetime(2026, 12, 1, tzinfo=UTC)
+NOVEMBER_LIMITS = LimitSettings(usd_per_month=20.00)
+
+# The LinkedIn launch (decided 2026-10-21 by Vedant; numbers redone on 2026-10-28 for the
+# six-item search): for the week from the post on Tuesday 3 November 2026, more live searches,
+# so more of the people who see it can try one, under November's monthly ceiling. At about $0.17
+# a search, 14 a day for 7 days is $16.66, so at typical use the launch never pauses for want
+# of budget. $3.25 is a ceiling only a day of unusually costly searches reaches.
 LAUNCH_STARTS = datetime(2026, 11, 3, tzinfo=UTC)
 LAUNCH_ENDS = datetime(2026, 11, 10, tzinfo=UTC)
-LAUNCH_LIMITS = LimitSettings(user_searches_per_day=5, searches_per_day=20, usd_per_day=2.50)
+LAUNCH_LIMITS = LimitSettings(
+    user_searches_per_day=5,
+    searches_per_day=14,
+    usd_per_day=3.25,
+    usd_per_month=NOVEMBER_LIMITS.usd_per_month,
+)
 
 
 def limits_at(now: datetime) -> LimitSettings:
-    """The limits in force at `now`: the launch week's (the UTC days 3 to 9 November 2026), or
-    the usual ones. Read for each request, so a long-lived server picks up both ends of the
-    window."""
-    return LAUNCH_LIMITS if LAUNCH_STARTS <= now < LAUNCH_ENDS else LIMITS
+    """The limits in force at `now`: the launch week's (the UTC days 3 to 9 November 2026), the
+    rest of November's, or the usual ones. Read for each request, so a long-lived server picks up
+    every end of both windows with no deploy."""
+    if LAUNCH_STARTS <= now < LAUNCH_ENDS:
+        return LAUNCH_LIMITS
+    if NOVEMBER_STARTS <= now < NOVEMBER_ENDS:
+        return NOVEMBER_LIMITS
+    return LIMITS
 
 
 class RequestCount(BaseModel):
@@ -184,8 +204,11 @@ _LIMIT_MESSAGES: dict[LimitName, str] = {
 
 
 def limit_message(limit: LimitName, limits: LimitSettings) -> str:
-    """What the player is told when `limit` refuses a search, with the number in force."""
-    return _LIMIT_MESSAGES[limit].format(count=limits.user_searches_per_day)
+    """What the player is told when `limit` refuses a search, with the number in force. Only the
+    visitor's own limit names a number, so only its template is formatted: a brace in any other
+    message is shown as written."""
+    message = _LIMIT_MESSAGES[limit]
+    return message.format(count=limits.user_searches_per_day) if limit == "user_day" else message
 
 
 REPORTS_MESSAGE = (

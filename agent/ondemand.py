@@ -276,7 +276,11 @@ class _Search:
     topic: str  # in the bank's spelling when the bank has it
     visitor: str
     live: tuple[PlannedItem, ...]
-    limits: LimitSettings  # in force when the search started
+    # In force when the search started, and kept by every later run, even past midnight UTC.
+    # Deliberate: a search that starts late on 9 November keeps the launch week's daily cap for
+    # its later runs, checked against 10 November's spend, so it can go up to 3 runs (about
+    # $0.51) over that day's usual cap; the monthly cap still holds.
+    limits: LimitSettings
 
 
 class _Clock:

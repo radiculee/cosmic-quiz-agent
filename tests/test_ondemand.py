@@ -17,6 +17,7 @@ from typing import Any
 import httpx2
 import pytest
 
+import agent.limits as limits_module
 import agent.ondemand as ondemand
 from agent.bank import BankTopic, LearnItem, QuizQuestion, ShownStatus, SourceCheck
 from agent.config import Settings
@@ -626,6 +627,16 @@ def test_surprise_me_that_cannot_pick_counts_nothing(failure: str) -> None:
 def test_the_limit_message_names_the_number_in_force() -> None:
     assert "2 live searches today" in limit_message("user_day", LIMITS)
     assert "5 live searches today" in limit_message("user_day", LAUNCH_LIMITS)
+
+
+def test_only_the_visitors_limit_message_is_formatted(monkeypatch: pytest.MonkeyPatch) -> None:
+    # A brace in any other message is shown as written instead of raising when a player is
+    # refused (the 2026-10-22 code review, finding 3).
+    messages = {**limits_module._LIMIT_MESSAGES, "day_usd": "Today's budget {is} used."}
+    monkeypatch.setattr(limits_module, "_LIMIT_MESSAGES", messages)
+
+    assert limit_message("day_usd", LIMITS) == "Today's budget {is} used."
+    assert "2 live searches today" in limit_message("user_day", LIMITS)
 
 
 def test_an_off_topic_search_is_rejected_before_anything_is_reserved() -> None:
