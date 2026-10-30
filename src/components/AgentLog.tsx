@@ -120,7 +120,7 @@ export function AgentLog({
             </span>
             {line.key !== null && (
               <span
-                className="w-16 shrink-0 font-pixel text-[8px] uppercase text-slate"
+                className="w-24 shrink-0 whitespace-nowrap font-pixel text-[8px] uppercase text-slate"
                 title={itemLabel(line.key)}
               >
                 <span aria-hidden="true">{itemTag(line.key)}</span>
