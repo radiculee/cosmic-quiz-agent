@@ -3,8 +3,8 @@
 Notes for the latency session (`docs/SESSIONS.md`). They replace `docs/NEXT_SESSION.md` for
 this session. Update them before finishing, and commit them on `session/latency`.
 
-Last update: 2026-10-30. Parallel search and migration 010 are committed on `session/latency`.
-Main reviews 010's SQL before Vedant pastes it.
+Last update: 2026-10-30. Stopped on main's word after the headless drive, which passed. Parallel
+search is committed; it lands after 010 is pasted and checked and 2 real searches pass.
 
 ## Current goal
 
@@ -46,36 +46,51 @@ Decisions in `docs/SESSIONS.md`.
 
 ## Done
 
-- On `main` (landed at `a8c5947`, not pushed): November's budget (`afcfe33`, `37a6696`, `48c49c5`, `a712d09`) and the 429 hook (`a8c5947`). Main approved each.
-- `f136300`: progress events (stage and status line per live run) in `agent/ondemand.py`, `src/types.ts`, `src/api.ts`, `src/search.ts` (`progressed`).
-- `ac435e0`: `AgentLog.tsx` tags each line (EASY Q, HARD EXPL); `open` prop (default true) for "Show details"; `itemTag` in `src/search.ts`.
-- `537f4ed`: migration 010 (`begin_on_demand_search`, `live_run_estimates`), folded into `supabase/schema.sql`; `supabase/checks/010_parallel_searches_check.sql`.
-- `6cc26b4`: parallel search. One reservation call; a thread per item named `live-search-<id>-<key>`; usual daily cap $1.55; `RunTimes` estimates on the plan.
-- `53fffc3`: the page accepts `estimate_seconds` on planned items.
-- `c1333cf`: `docs/PLAN.md` and `docs/SESSIONS.md` record it, with main's four notes and the stale-reservation query.
-- 010 parses with pglast (scratch venv). Not run on Postgres yet: no local Postgres.
-- Checks pass at `c1333cf`: 379 Python tests, 155 TypeScript tests, ruff, ruff format, mypy, typecheck, build.
+- On `main` (landed at `a8c5947`, not pushed): November's budget (`afcfe33`, `37a6696`, `48c49c5`, `a712d09`) and the 429 hook (`a8c5947`).
+- `f136300`: progress events per live run (stage and status line); `progressed` in `src/search.ts`.
+- `ac435e0`: `AgentLog.tsx` item tags and the `open` prop; `itemTag` in `src/search.ts`.
+- `537f4ed`: migration 010, its fold into `supabase/schema.sql`, and `supabase/checks/010_parallel_searches_check.sql`. Main approved the SQL.
+- `6cc26b4`: parallel search (one reservation call, a named thread per item, $1.55 usual daily cap, `RunTimes`).
+- `53fffc3`: the page accepts `estimate_seconds`.
+- `c1333cf`, `b237318`, `6db69b4`: plan, sessions and handoff records.
+- `14290fc`: a failed run-time read waits 60 s before the next try (main's review). Test added.
+- `170fc92`: the verifiers' pool threads take the run's thread name, so their 429 lines name the item (approved by main).
+- `2106039`: the log's tag column widened to 96 px, no wrap ("MEDIUM EXPL" wrapped at 64 px in the drive).
+- Main approved `a8c5947..6db69b4` for the drive and the real searches.
+- Headless drive against the free stub API (2026-10-30): every check passed, no console errors.
+- Drive, full search: first question at 3.3 s; search ended at 6.4 s. The stub's six runs take 2 to 6 s each, 23.5 s in a row.
+- Drive, full search: questions played EASY, MEDIUM, HARD although the EASY explanation finished first; log lines tagged and interleaved; explanations open on EASY.
+- Drive, phone width 390 px: no sideways scroll.
+- Drive, caps fitting 3 items: the 3 questions made; the explanations say "Not started" with today's budget; ended at 5.8 s.
+- Drive, stream: 6 results, 36 progress events, every stage with real status lines ("Reading science.nasa.gov"), each item on thread `live-search-<id>-<key>`.
+- Dev servers on 5173 and 8787 and the scratch Chrome on 9333 stopped after the drive; all three ports confirmed free.
+- Checks pass at `2106039`: 379 Python tests, 155 TypeScript tests, ruff, ruff format, mypy, typecheck, build.
 
 ## Next
 
-1. Main reviews 010's SQL; then Vedant pastes 010, then runs the check script (expect "CHECK PASSED").
-2. Headless drive against the stub API (ask Vedant before starting dev servers on 5173 and 8787).
-3. 2 real local searches, then 1 live after the deploy (about $0.17 each, asked one by one), timed against about 100 s.
-4. `CHANGELOG.md` entry and the before and after times, once deployed.
+1. Deploy order. `session/latency` lands on `main` only after all of these:
+   a. Vedant pastes migration 010 into the Supabase SQL editor.
+   b. Vedant runs `supabase/checks/010_parallel_searches_check.sql`; it must say "CHECK PASSED".
+   c. The headless drive passes (done 2026-10-30).
+   d. 2 real local searches pass (about $0.17 each, asked one by one).
+   The code calls `begin_on_demand_search` only, so before 010 every live search answers "unavailable".
+2. Real search times: "before" from one read-only query on `on_demand_runs` (last `finished_at` less first `started_at` per search); "after" from the real searches. Not measured yet.
+3. 1 live search after the deploy.
+4. `CHANGELOG.md` entry with the before and after times.
 5. `docs/DEVELOPMENT.md` for parallel search (approved).
-6. Deploy hook: once per Curator run that published anything, with its `curator.yml` env line (approved).
-7. The 30-topic fill: list the topics for Vedant first. On or after 1 November.
-8. Per-account limits (after data lands), fold 011 and 012, other sessions' changelog text.
+6. Deploy hook with its `curator.yml` env line (approved).
+7. The 30-topic fill list for Vedant; on or after 1 November.
+8. Per-account limits (after data lands); fold 011 and 012; other sessions' changelog text.
 
 ## Blockers
 
-- Main's review of 010's SQL, then Vedant's paste.
-- `agent/verifiers/__init__.py` (not owned): the Haiku verifier's pool threads lose the item's name in 429 lines. One argument fixes it. Asked of main.
+- Vedant: paste 010, then the check script.
+- Vedant: approve each real search (paid). Main asked for no real search in this step.
+- `src/pages/ExplorePage.tsx` (ui owns it) still says a search takes "about two to three minutes in all" (line 833). With parallel search it is about 30 s. For ui.
 - Per-account limits: wait for data's `agent/auth.py` and `src/session.ts` on `main`.
 - Migrations 011 and 012: wait for data and media.
 - `CLAUDE.md` and `docs/DESIGN.md` drafts: wait for Vedant's approval.
 - Vedant: Console to $32 before 3 November; rate-limit tier before the go/no-go.
-- Paid searches wait for 1 November 00:00 UTC unless Vedant says otherwise (October's budget is nearly used).
 
 ## Rules to keep in mind
 
@@ -97,12 +112,13 @@ Decisions in `docs/SESSIONS.md`.
 - `docs/handoff/latency.md`.
 - Outside git: `TYPESAFE_API_KEY` in the three local `.env` files.
 - 2026-10-30, committed: November's budget and the 429 hook (on `main`); `agent/ondemand.py`,
-  `agent/store.py`, `agent/limits.py`, `api/research.py`, `api/quota.py`, `src/types.ts`,
-  `src/api.ts`, `src/api.test.ts`, `src/search.ts`, `src/search.test.ts`,
-  `src/components/AgentLog.tsx`, `src/components/AgentLog.test.tsx`, `tests/test_ondemand.py`,
-  `tests/test_quota.py`, `supabase/migrations/010_parallel_searches.sql`, `supabase/schema.sql`,
-  `supabase/checks/010_parallel_searches_check.sql`, `docs/PLAN.md`, `docs/SESSIONS.md`,
-  `docs/handoff/latency.md`.
+  `agent/store.py`, `agent/limits.py`, `agent/verifiers/__init__.py`, `api/research.py`,
+  `api/quota.py`, `src/types.ts`, `src/api.ts`, `src/api.test.ts`, `src/search.ts`,
+  `src/search.test.ts`, `src/components/AgentLog.tsx`, `src/components/AgentLog.test.tsx`,
+  `tests/test_ondemand.py`, `tests/test_quota.py`, `supabase/migrations/010_parallel_searches.sql`,
+  `supabase/schema.sql`, `supabase/checks/010_parallel_searches_check.sql`, `docs/PLAN.md`,
+  `docs/SESSIONS.md`, `docs/handoff/latency.md`.
+- Outside git (scratchpad, not committed): the stub API and drive scripts, and their screenshots.
 
 ## Pre-launch overhaul additions (brief from main, 2026-10-30)
 
