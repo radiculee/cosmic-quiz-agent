@@ -3,7 +3,7 @@
 Notes for the data session (`docs/SESSIONS.md`). They replace `docs/NEXT_SESSION.md` for this
 session. Update them before finishing, and commit them on `session/data`.
 
-Last update: 2026-10-30 (data: migration 011 written, not yet run on the live database)
+Last update: 2026-10-30 (data: stopped at Vedant's request; migration 011 approved by main, not yet run)
 
 ## Current goal
 
@@ -137,11 +137,16 @@ The checks above pass and main's review has no open findings.
     20 baselines in all), refused with SQLSTATE `CQ001`. The caps are listed in the header.
   - The comment that a future leaderboard must re-score from `item_id` and `choice`, never from
     `correct` or `points`; `topic` is a snapshot, `item_id` the source of truth.
+- Main approved migration 011 (`c00ea10`) and asked for three changes, done in `a76477b`:
+  baselines are browser-reported, so a future leaderboard ignores them; keep anonymous
+  sign-ins off (Needs from Vedant); the Curator retires items, never deletes them (Requests,
+  latency).
+- Stopped at Vedant's request (2026-10-30), for main to land the branch. Not rebased.
 
 ## In progress
 
-- Nothing. Migration 011 is written and committed; it waits for latency's 010 and for Vedant to
-  run it.
+- Nothing. `agent/auth.py` was not started, so nothing is left uncommitted. Migration 011 waits
+  for latency's 010 and for Vedant to run it.
 
 ## Left
 
@@ -195,7 +200,7 @@ The checks above pass and main's review has no open findings.
 
 ## Checks run
 
-On `session/data`, 2026-10-30, all passing: `pytest` (361 passed), `ruff check`,
+On `session/data` at `a76477b`, 2026-10-30, all passing: `pytest` (361 passed), `ruff check`,
 `ruff format --check`, `mypy --strict` (82 files), `pnpm typecheck`, `pnpm test` (149 tests in
 13 files), `pnpm build`. None of them run SQL, so they do not test migration 011; it was
 checked by reading it, and for balanced brackets and plain ASCII.
