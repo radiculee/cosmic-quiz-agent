@@ -3,7 +3,7 @@
 Notes for the seo session (`docs/SESSIONS.md`). They replace `docs/NEXT_SESSION.md` for this
 session. Update them before finishing, and commit them on `session/seo`.
 
-Last update: 2026-10-30 (step 1 done)
+Last update: 2026-10-30 (step 2 done)
 
 ## Current goal
 
@@ -97,30 +97,35 @@ Vercel Hobby allows 100 deploys a day; the Curator's hook adds at most a few.
 
 ### Done
 
-- Step 1, the brand pass: `8cb0d15` on `session/seo`.
-- `src/brand.ts` holds the name, title, description, tagline, astronomy line and origin.
-- The "Cosmic Quiz" strings in `src/` now import from it.
-- The README is renamed to Curiosity.
-- Storage keys keep their values, so saved progress survives.
-- Safe to deploy at any time. `index.html` and `vercel.json` are unchanged.
+- Step 1, the brand pass: `8cb0d15`. Main's finding fixed in `0906f49`. Ready to merge.
+- Step 2: `86b984e`. Do not push until Vedant confirms `curiosity.vedantgaikwad.ie` serves over HTTPS.
+- `index.html` takes its name, title and description from `src/brand.ts`, through the `brand-html` plugin in `vite.config.ts`.
+- Eight hosts redirect (301) to `curiosity.`: `cosmic.`, `quiz.`, `astro.`, `cosmik.`, `curiousity.`, `curiosty.`, `cosmicquiz.` and the `.vercel.app` address.
+- Every redirect source is `/:path(.*)`. A test asserts that for each one.
+- Close-match paths: `src/closeMatch.ts`. `/lern` goes to `/learn`. The 404 page suggests near paths and sets `noindex`.
+- Favicon set, web manifest and `robots.txt` added. The icons come from `dev/make_icons.py`. The picture is a placeholder for Vedant to replace.
+- README links moved to `curiosity.`.
+- Rewrote only the link-preview test and the old-address test in `tests/test_packaging.py`.
 
 ## Next
 
-1. Step 2: `index.html` metadata, favicon set, manifest, `robots.txt`, redirects, 404 close-match.
-2. Update only the link-preview and old-address tests in `tests/test_packaging.py`. Assert the `/:path(.*)` source for every redirect.
-3. Add the small `vite.config.ts` plugin that fills `index.html` from `src/brand.ts`. Touch nothing else there.
-4. Step 3: prerender, sitemap and per-topic previews. Needs Vedant's approval for the `package.json` build change.
+1. Step 3: prerender, sitemap, `Sitemap:` line in `robots.txt`, per-topic previews.
+2. JSON-LD (`WebSite` with `SearchAction`) comes with the prerender. An inline `ld+json` block in `index.html` would break the no-inline-script test.
+3. A per-page `canonical` link also comes with the prerender. One static canonical in `index.html` would be wrong for every other path, and the loads-nothing-from-another-site test rejects it.
+4. The `/media/*` rewrite and the CSP `connect-src` change, when data and media name the origin and path.
 5. The title Vedant picks on Monday, into `src/brand.ts`.
 
 ## Blockers
 
-- The step 2 redirects and canonical URLs must not be pushed until Vedant confirms `curiosity.vedantgaikwad.ie` serves over HTTPS.
-- The CSP `connect-src` change waits for data to name the Supabase origin.
-- The `/media/*` rewrite waits for media to give the bucket path.
-- Per-topic previews: no `sharp`. Vedant may have media make them with Pillow.
-- The Curator deploy-hook call waits for latency. Vedant makes the hook URL.
+- Data: the exact Supabase origin for `connect-src`.
+- Media: the Storage bucket path for the `/media/*` rewrite.
+- Latency: the Curator's deploy-hook call.
+- Vedant: approval of the `package.json` build change for prerendering.
+- Vedant: `public/og-v2.jpg`. Until then the preview is `og-v1.jpg`, which still says COSMIC QUIZ in the picture.
+- ui: a topic typo (`/learn/antimater`) renders inside `LearnPage.tsx`, not the 404 page. When the topics have loaded and the slug matches none, ui should render `<NotFoundPage topics={topics} />`. The page then redirects or suggests.
 
 ## Files touched
 
-- `src/brand.ts` (new), `src/router.ts`, `src/components/SiteHeader.tsx`, `src/pages/HomePage.tsx`, `src/pages/PrivacyPage.tsx`, `src/pages/StatsPanel.tsx`, `README.md`: committed in `8cb0d15`.
+- Committed in `86b984e`: `index.html`, `vite.config.ts`, `vercel.json`, `src/brand.ts`, `src/closeMatch.ts`, `src/closeMatch.test.ts`, `src/pages/NotFoundPage.tsx`, `README.md`, `dev/make_icons.py`, `tests/test_packaging.py`, `tests/site_files.py`, `tests/test_seo.py`, `public/robots.txt`, `public/site.webmanifest`, `public/favicon.svg`, `public/favicon.ico`, `public/apple-touch-icon.png`, `public/icon-192.png`, `public/icon-512.png`.
+- Committed earlier: `src/router.ts`, `SiteHeader.tsx`, `HomePage.tsx`, `PrivacyPage.tsx`, `StatsPanel.tsx`.
 - `docs/handoff/seo.md`: this update.
