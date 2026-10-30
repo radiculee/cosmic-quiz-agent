@@ -9,6 +9,7 @@
  */
 import { useEffect, useSyncExternalStore } from "react";
 
+import { pageTitle } from "./brand";
 import type { BankTopic } from "./types";
 
 export type Route =
@@ -229,6 +230,6 @@ export function isPlainLeftClick(event: {
 /** The browser tab's title for a page. */
 export function usePageTitle(title: string | null): void {
   useEffect(() => {
-    document.title = title ? `${title} - Cosmic Quiz` : "Cosmic Quiz";
+    document.title = pageTitle(title);
   }, [title]);
 }

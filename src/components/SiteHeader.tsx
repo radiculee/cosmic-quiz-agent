@@ -1,9 +1,10 @@
+import { NAME } from "../brand";
 import { PATHS } from "../router";
 import { GitHubIcon } from "./GitHubIcon";
 import { Link } from "./Link";
 
 const GITHUB_URL = "https://github.com/radiculee/cosmic-quiz-agent";
-const GITHUB_LABEL = "Cosmic Quiz on GitHub (opens in a new tab)";
+const GITHUB_LABEL = `${NAME} on GitHub (opens in a new tab)`;
 
 /** The slim bar on every page (not sticky). Inner pages link home from the name on the left; the
  * home page has the big title instead. */
@@ -15,7 +16,7 @@ export function SiteHeader({ showHomeLink }: { showHomeLink: boolean }) {
           to={PATHS.home}
           className="on-scene font-heading text-base font-bold uppercase tracking-tight hover:text-teal focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-teal"
         >
-          Cosmic Quiz
+          {NAME}
         </Link>
       ) : (
         <span />

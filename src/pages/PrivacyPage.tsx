@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 
+import { NAME } from "../brand";
 import { usePageTitle } from "../router";
 import { PageHeading } from "./common";
 
@@ -113,7 +114,7 @@ export function PrivacyPage() {
 
         <Section title="Your rights">
           <p>
-            Cosmic Quiz is run by Vedant Gaikwad, in Dublin, Ireland. Under the GDPR you can ask
+            {NAME} is run by Vedant Gaikwad, in Dublin, Ireland. Under the GDPR you can ask
             what is kept about you, and ask for it to be corrected or deleted. As the server keeps
             only visitor codes, finding your records needs the IP address you used and roughly
             when. Send a request through the{" "}

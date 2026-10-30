@@ -1,5 +1,6 @@
 import { type KeyboardEvent, useEffect, useId, useRef, useState } from "react";
 
+import { NAME } from "../brand";
 import { AgentTab } from "../components/stats/AgentTab";
 import { SearchTab } from "../components/stats/SearchTab";
 import type { Search } from "../search";
@@ -116,7 +117,7 @@ export function StatsPanel({
         <div className="mx-auto w-full max-w-3xl px-4 pb-20">
           <div className="flex h-14 items-center justify-between">
             <span className="font-heading text-base font-bold uppercase tracking-tight">
-              Cosmic Quiz
+              {NAME}
             </span>
             <button
               type="button"

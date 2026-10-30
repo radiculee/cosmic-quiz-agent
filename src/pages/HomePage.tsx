@@ -1,5 +1,6 @@
 import type { MouseEvent } from "react";
 
+import { ASTRONOMY_LINE, NAME, TAGLINE } from "../brand";
 import { ModeCard } from "../components/ModeCard";
 import { ProfileStrip } from "../components/ProfileStrip";
 import { quotaShort } from "../quota";
@@ -53,15 +54,17 @@ export function HomePage({
   return (
     <div className="flex flex-col items-center">
       <section
-        aria-label="Cosmic Quiz"
+        aria-label={NAME}
         className="relative flex min-h-[calc(100svh-3.5rem)] w-full flex-col items-center pt-2 pb-24 sm:pt-4"
       >
         <h1 className="on-scene text-center font-heading text-5xl font-bold uppercase tracking-tight sm:text-6xl xl:text-7xl">
-          Cosmic Quiz
+          {NAME}
         </h1>
         <p className="on-scene-muted mt-4 max-w-xl text-center text-base leading-relaxed sm:text-lg">
-          An AI agent reads NASA, ESA and Wikipedia, writes the questions, and checks every answer
-          against the pages it read.
+          {ASTRONOMY_LINE}
+        </p>
+        <p className="on-scene-muted mt-4 max-w-xl text-center text-base leading-relaxed sm:text-lg">
+          {TAGLINE}
         </p>
 
         <nav aria-label="Ways in" className="mt-7 grid w-full grid-cols-1 gap-3 sm:grid-cols-3">

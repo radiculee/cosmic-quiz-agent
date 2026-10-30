@@ -1,10 +1,10 @@
-# Cosmic Quiz
+# Curiosity
 
 [![Checks](https://github.com/radiculee/cosmic-quiz-agent/actions/workflows/checks.yml/badge.svg)](https://github.com/radiculee/cosmic-quiz-agent/actions/workflows/checks.yml)
 
 An astronomy quiz written by an AI agent that checks every answer against the pages it read.
 
-**Live:** [cosmic.vedantgaikwad.ie](https://cosmic.vedantgaikwad.ie)
+**Live:** [curiosity.vedantgaikwad.ie](https://curiosity.vedantgaikwad.ie)
 
 ![COSMIC QUIZ over a white observatory in a pink grass field under a navy sky](public/og-v1.jpg)
 
@@ -149,7 +149,7 @@ only published items, and the git history was scanned for secrets.
 
 No accounts, cookies, ads or tracking: progress stays in your browser. An IP address is never
 stored; it becomes a salted hash, kept for about a day (30 days with a report). The full text is at
-[/privacy](https://cosmic.vedantgaikwad.ie/privacy).
+[/privacy](https://curiosity.vedantgaikwad.ie/privacy).
 
 ## Run it yourself
 
