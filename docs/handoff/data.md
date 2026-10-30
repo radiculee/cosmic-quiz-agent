@@ -3,7 +3,7 @@
 Notes for the data session (`docs/SESSIONS.md`). They replace `docs/NEXT_SESSION.md` for this
 session. Update them before finishing, and commit them on `session/data`.
 
-Last update: 2026-10-30 (brief written by main)
+Last update: 2026-10-30 (data: plan agreed with Vedant; nothing built yet)
 
 ## Current goal
 
@@ -55,12 +55,20 @@ and ask Vedant.
 
 ### Requests to other sessions (fill in as you go)
 
-- seo: CSP `connect-src` must allow the Supabase project URL (state the exact origin), and the
-  OAuth redirect needs no `form-action` change (check and say so).
+- seo (`vercel.json`): add the Supabase project origin to `connect-src`, so the CSP reads
+  `connect-src 'self' https://fbwezifjjmmczevgpfiw.supabase.co`. Nothing else changes:
+  `form-action` stays `'self'`, because sign-in with Google is a top-level navigation
+  (`location.assign`) to Supabase and back, not a form post, and the email code is sent with
+  `fetch`. `api/account.py` is covered by the existing `api/*.py` functions entry.
 - ui: a `/account` route and page slot in `src/App.tsx` and `src/router.ts` (router is seo's; ui
-  wires the page); the `SignInButton` slot in the header.
+  wires the page); the `SignInButton` slot in the header. Both render nothing while the
+  `VITE_ACCOUNTS` flag is off.
 - latency: call `authHeader()` from `src/api.ts`; use `agent/auth.py` in `api/research.py` and
-  `api/quota.py` to key limits by account.
+  `api/quota.py` to key limits by account (`account_visitor(user_id)` gives a salted key for the
+  existing visitor columns, so no schema change).
+- Vedant (unowned files): `dev/api_server.py` needs `account` in its import and `ROUTES`, so the
+  local server serves `/api/account`; `package.json` and `pnpm-lock.yaml` gain
+  `@supabase/auth-js` (approved 2026-10-30, pinned to an exact version).
 
 ### Steps
 
@@ -110,8 +118,22 @@ The checks above pass and main's review has no open findings.
 
 ## Done
 
+- 2026-10-30: plan agreed with Vedant (four choices, all the recommendation; `docs/SESSIONS.md`,
+  Decisions, 2026-10-30, data). Row claimed.
+
 ## Next
+
+1. Explain migration 011's SQL to Vedant, then write `supabase/migrations/011_accounts.sql`.
+2. `agent/auth.py` and `tests/test_auth.py`.
+3. `src/session.ts`, `src/useSession.ts`, the flag, `SignInButton.tsx`.
+4. Profile v3 (guest id, event log, v2 carried over as a baseline), the replay, the merge and
+   the outbox in `src/profile.ts` and `src/useProfile.ts`, with tests.
+5. `AccountPage.tsx` (export, delete, sign out) and `api/account.py` (delete).
+6. `PrivacyPage.tsx`, only after seo's brand pass is on `main` and this branch is rebased.
+7. This handoff; text for `CHANGELOG.md` and `README.md` for latency.
 
 ## Blockers
 
 ## Files touched
+
+- `docs/SESSIONS.md` (my row; a Decisions entry), `docs/handoff/data.md`

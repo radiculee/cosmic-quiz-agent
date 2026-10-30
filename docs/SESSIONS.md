@@ -17,7 +17,7 @@ A new session: `dev/new-session.sh <name>` (Git Bash) or `dev/new-session.ps1 <n
 | latency | `session/latency` | `../cqa-latency` | The live-search backend, the bank schema and the shared docs: see "latency owns" | Active: November's budget committed, ready for review; parallel search in progress (`docs/handoff/latency.md`) | 2026-10-30 |
 | explore | `session/explore` (landed on `main`) | `../cqa-explore` | The Explore page's frontend: see "explore owns" | Done: universal topics and Surprise me are on `main`; follow-ups in `docs/handoff/explore.md`. Its files pass to ui and media (2026-10-30) | 2026-10-30 |
 | main | `main` | the main folder | Coordination only, no code: this file, `docs/handoff/*.md` briefs, reviews | Active: the pre-launch overhaul (`docs/handoff/main.md`) | 2026-10-30 |
-| data | `session/data` | `../cqa-data` | Accounts: see "data owns" | Briefed, not started (`docs/handoff/data.md`) | 2026-10-30 |
+| data | `session/data` | `../cqa-data` | Accounts: see "data owns" | Active: plan agreed, migration 011 next (`docs/handoff/data.md`) | 2026-10-30 |
 | ui | `session/ui` | `../cqa-ui` | Header, cards, progress rows, ranks: see "ui owns" | Briefed, not started (`docs/handoff/ui.md`) | 2026-10-30 |
 | seo | `session/seo` | `../cqa-seo` | The rename, metadata, prerendering, redirects: see "seo owns" | Briefed, not started (`docs/handoff/seo.md`) | 2026-10-30 |
 | media | `session/media` | `../cqa-media` | Topic images: see "media owns" | Briefed, not started (`docs/handoff/media.md`) | 2026-10-30 |
@@ -229,6 +229,23 @@ entry; record a reversal as a new one.
   the last 30 days of runs). The deploy hook fires once per Curator run that published anything.
   latency may edit `.github/workflows/curator.yml` (one env line), `agent/stats.py` (the cap
   line) and `docs/DEVELOPMENT.md` (parallel search).
+
+- 2026-10-30, data: Accounts, how they are built (Vedant, each the recommendation):
+  - The browser signs in with `@supabase/auth-js` (MIT, free, 24 KB gzipped), loaded only when
+    a visitor signs in, returns from a sign-in or already has a session; table reads and writes
+    are plain `fetch` calls to PostgREST. Not `supabase-js` (56 KB gzipped).
+  - `agent/auth.py` checks a token by calling Supabase's `/auth/v1/user` with `httpx2`: no new
+    dependency, and a deleted or signed-out user is refused at once. Not a local JWT check.
+  - On sign-in, the guest profile moves into the account and the browser's guest profile is
+    emptied; after sign-out the browser starts as a fresh guest.
+  - The sign-in email carries both a link and a 6-digit code, so it works from another browser
+    or device.
+  - The account is recalculated by replaying its history through the pure functions in
+    `src/profile.ts`: each guest's earlier totals as a baseline, then every answer, finished run,
+    read and live search in time order. Each event has a client-made UUID, so merging twice
+    changes nothing. Migration 011 therefore holds `player_answers`, `player_reads`,
+    `player_runs`, `player_searches` and `player_baselines`, in place of the brief's `profiles`,
+    `answers`, `learned` and `seen` (seen and played topics come out of the replay).
 
 ---
 
