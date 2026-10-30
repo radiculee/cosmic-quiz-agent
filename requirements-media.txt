@@ -1,0 +1,5 @@
+# Curator-only: the topic-image fill (python -m curator.images) resizes pictures to WebP with
+# Pillow (free, HPND licence). It is not in requirements.txt or pyproject.toml on purpose, so it
+# never reaches the Vercel function bundle; tests/test_packaging.py checks that.
+-r requirements.txt
+pillow==13.0.0

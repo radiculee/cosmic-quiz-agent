@@ -1,0 +1,73 @@
+{
+ "batchcomplete": true,
+ "query": {
+  "normalized": [
+   {
+    "fromencoded": false,
+    "from": "File:OSIRIS_Mars_true_color.jpg",
+    "to": "File:OSIRIS Mars true color.jpg"
+   }
+  ],
+  "pages": [
+   {
+    "pageid": 55384394,
+    "ns": 6,
+    "title": "File:OSIRIS Mars true color.jpg",
+    "imagerepository": "shared",
+    "imageinfo": [
+     {
+      "size": 1276159,
+      "width": 2205,
+      "height": 2205,
+      "thumburl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/0/02/OSIRIS_Mars_true_color.jpg/1280px-OSIRIS_Mars_true_color.jpg?utm_source=en.wikipedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+      "thumbwidth": 1280,
+      "thumbheight": 1280,
+      "url": "https://upload.wikimedia.org/wikipedia/commons/0/02/OSIRIS_Mars_true_color.jpg?utm_source=en.wikipedia.org&utm_campaign=imageinfo&utm_content=original",
+      "descriptionurl": "https://commons.wikimedia.org/wiki/File:OSIRIS_Mars_true_color.jpg",
+      "descriptionshorturl": "https://commons.wikimedia.org/w/index.php?curid=56489423",
+      "extmetadata": {
+       "Artist": {
+        "value": "ESA &amp; MPS for OSIRIS Team MPS/UPD/LAM/IAA/RSSD/INTA/UPM/DASP/IDA, <a rel=\"nofollow\" class=\"external text\" href=\"http://www.esa.int/spaceinvideos/Terms_and_Conditions\">CC BY-SA 3.0 IGO</a>",
+        "source": "commons-desc-page"
+       },
+       "LicenseShortName": {
+        "value": "CC BY-SA 3.0 igo",
+        "source": "commons-desc-page",
+        "hidden": ""
+       },
+       "UsageTerms": {
+        "value": "Creative Commons Attribution-Share Alike 3.0 igo",
+        "source": "commons-desc-page"
+       },
+       "AttributionRequired": {
+        "value": "true",
+        "source": "commons-desc-page",
+        "hidden": ""
+       },
+       "Attribution": {
+        "value": "ESA &amp; MPS for OSIRIS Team MPS/UPD/LAM/IAA/RSSD/INTA/UPM/DASP/IDA, <a rel=\"nofollow\" class=\"external text\" href=\"https://creativecommons.org/licenses/by-sa/3.0/igo/\">CC BY-SA IGO 3.0</a>",
+        "source": "commons-desc-page",
+        "hidden": ""
+       },
+       "LicenseUrl": {
+        "value": "https://creativecommons.org/licenses/by-sa/3.0/igo/deed.en",
+        "source": "commons-desc-page"
+       },
+       "Copyrighted": {
+        "value": "True",
+        "source": "commons-desc-page",
+        "hidden": ""
+       },
+       "Restrictions": {
+        "value": "",
+        "source": "commons-desc-page",
+        "hidden": ""
+       }
+      },
+      "mime": "image/jpeg"
+     }
+    ]
+   }
+  ]
+ }
+}

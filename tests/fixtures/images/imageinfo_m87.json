@@ -1,0 +1,77 @@
+{
+ "query": {
+  "normalized": [
+   {
+    "fromencoded": false,
+    "from": "File:Black_hole_-_Messier_87_crop_max_res.jpg",
+    "to": "File:Black hole - Messier 87 crop max res.jpg"
+   }
+  ],
+  "pages": [
+   {
+    "pageid": 60553053,
+    "ns": 6,
+    "title": "File:Black hole - Messier 87 crop max res.jpg",
+    "imagerepository": "shared",
+    "imageinfo": [
+     {
+      "size": 3239049,
+      "width": 4320,
+      "height": 4320,
+      "thumburl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/4/4f/Black_hole_-_Messier_87_crop_max_res.jpg/1280px-Black_hole_-_Messier_87_crop_max_res.jpg?utm_source=en.wikipedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+      "thumbwidth": 1280,
+      "thumbheight": 1280,
+      "url": "https://upload.wikimedia.org/wikipedia/commons/4/4f/Black_hole_-_Messier_87_crop_max_res.jpg?utm_source=en.wikipedia.org&utm_campaign=imageinfo&utm_content=original",
+      "descriptionurl": "https://commons.wikimedia.org/wiki/File:Black_hole_-_Messier_87_crop_max_res.jpg",
+      "descriptionshorturl": "https://commons.wikimedia.org/w/index.php?curid=77925953",
+      "extmetadata": {
+       "Artist": {
+        "value": "<a href=\"https://en.wikipedia.org/wiki/en:Event_Horizon_Telescope\" class=\"extiw\" title=\"w:en:Event Horizon Telescope\"><span title=\"project to create a global interferometric telescope array\">Event Horizon Telescope</span></a>, uploader cropped and converted TIF to JPG",
+        "source": "commons-desc-page"
+       },
+       "LicenseShortName": {
+        "value": "CC BY 4.0",
+        "source": "commons-desc-page",
+        "hidden": ""
+       },
+       "UsageTerms": {
+        "value": "Creative Commons Attribution 4.0",
+        "source": "commons-desc-page"
+       },
+       "AttributionRequired": {
+        "value": "true",
+        "source": "commons-desc-page",
+        "hidden": ""
+       },
+       "Attribution": {
+        "value": "ESO",
+        "source": "commons-desc-page",
+        "hidden": ""
+       },
+       "LicenseUrl": {
+        "value": "https://creativecommons.org/licenses/by/4.0",
+        "source": "commons-desc-page"
+       },
+       "Copyrighted": {
+        "value": "True",
+        "source": "commons-desc-page",
+        "hidden": ""
+       },
+       "Restrictions": {
+        "value": "",
+        "source": "commons-desc-page",
+        "hidden": ""
+       },
+       "License": {
+        "value": "cc-by-4.0",
+        "source": "commons-templates",
+        "hidden": ""
+       }
+      },
+      "mime": "image/jpeg"
+     }
+    ]
+   }
+  ]
+ }
+}

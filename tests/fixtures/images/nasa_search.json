@@ -1,0 +1,176 @@
+{
+ "collection": {
+  "version": "1.1",
+  "href": "http://images-api.nasa.gov/search?q=pillars%20of%20creation&media_type=image&page_size=3",
+  "items": [
+   {
+    "href": "https://images-assets.nasa.gov/image/GSFC_20171208_Archive_e000732/collection.json",
+    "data": [
+     {
+      "album": [
+       "Test"
+      ],
+      "center": "GSFC",
+      "date_created": "2017-12-08T00:00:00Z",
+      "description": "This video clip shows a visualisation of the three-dimensional structure of the Pillars of Creation within the star formation region Messier 16 (also called the Eagle Nebula). It is based on new observations of the object using the MUSE instrument on ESO\u2019s Very Large Telescope in Chile. The pillars actually consist of several distinct pieces on either side of the star cluster NGC 6611.  Credit: ESO/M. Kornmesser  Read more: <a href=\"http://www.nasa.gov/image-feature/goddard/pillars-of-creation-revealed-in-3-d\" rel=\"nofollow\">www.nasa.gov/image-feature/goddard/pillars-of-creation-re...</a>  <b>",
+      "keywords": [
+       "Pillars of Creation Revealed in 3-D"
+      ],
+      "location": "Greenbelt, MD",
+      "media_type": "image",
+      "nasa_id": "GSFC_20171208_Archive_e000732",
+      "title": "Pillars of Creation Revealed in 3-D"
+     }
+    ],
+    "links": [
+     {
+      "href": "https://images-assets.nasa.gov/image/GSFC_20171208_Archive_e000732/GSFC_20171208_Archive_e000732~thumb.jpg",
+      "rel": "preview",
+      "render": "image",
+      "width": 960,
+      "size": 8800,
+      "height": 540
+     },
+     {
+      "href": "https://images-assets.nasa.gov/image/GSFC_20171208_Archive_e000732/GSFC_20171208_Archive_e000732~orig.jpg",
+      "rel": "canonical",
+      "render": "image"
+     }
+    ]
+   },
+   {
+    "href": "https://images-assets.nasa.gov/image/GSFC_20171208_Archive_e000842/collection.json",
+    "data": [
+     {
+      "album": [
+       "Test"
+      ],
+      "center": "GSFC",
+      "date_created": "2017-12-08T00:00:00Z",
+      "description": "This NASA Hubble Space Telescope image, taken in near-infrared light, transforms the pillars into eerie, wispy silhouettes, which are seen against a background of myriad stars.  The near-infrared light can penetrate much of the gas and dust, revealing stars behind the nebula as well as hidden away inside the pillars. Some of the gas and dust clouds are so dense that even the near-infrared light cannot penetrate them. New stars embedded in the tops of the pillars, however, are apparent as bright sources that are unseen in the visible image.  The ghostly bluish haze around the dense edges of the",
+      "keywords": [
+       "Hubble Goes High Def to Revisit the Iconic 'Pillars of Creation'",
+       "nasa",
+       "creation",
+       "pillars",
+       "hubble",
+       "nasagoddard"
+      ],
+      "location": "Greenbelt, MD",
+      "media_type": "image",
+      "nasa_id": "GSFC_20171208_Archive_e000842",
+      "title": "Hubble Goes High Def to Revisit the Iconic 'Pillars of Creation'"
+     }
+    ],
+    "links": [
+     {
+      "href": "https://images-assets.nasa.gov/image/GSFC_20171208_Archive_e000842/GSFC_20171208_Archive_e000842~medium.jpg",
+      "rel": "alternate",
+      "render": "image",
+      "width": 1280,
+      "size": 509000,
+      "height": 1199
+     },
+     {
+      "href": "https://images-assets.nasa.gov/image/GSFC_20171208_Archive_e000842/GSFC_20171208_Archive_e000842~small.jpg",
+      "rel": "alternate",
+      "render": "image",
+      "width": 640,
+      "size": 150000,
+      "height": 599
+     },
+     {
+      "href": "https://images-assets.nasa.gov/image/GSFC_20171208_Archive_e000842/GSFC_20171208_Archive_e000842~thumb.jpg",
+      "rel": "preview",
+      "render": "image",
+      "width": 640,
+      "size": 150000,
+      "height": 599
+     },
+     {
+      "href": "https://images-assets.nasa.gov/image/GSFC_20171208_Archive_e000842/GSFC_20171208_Archive_e000842~large.jpg",
+      "rel": "alternate",
+      "render": "image",
+      "width": 1920,
+      "size": 963000,
+      "height": 1799
+     },
+     {
+      "href": "https://images-assets.nasa.gov/image/GSFC_20171208_Archive_e000842/GSFC_20171208_Archive_e000842~orig.jpg",
+      "rel": "canonical",
+      "render": "image"
+     }
+    ]
+   },
+   {
+    "href": "https://images-assets.nasa.gov/image/PIA03096/collection.json",
+    "data": [
+     {
+      "center": "JPL",
+      "date_created": "2005-11-09T18:23:54Z",
+      "description": "This majestic false-color image from NASA's Spitzer Space Telescope shows the \"mountains\" where stars are born. Dubbed \"Mountains of Creation\" by Spitzer scientists, these towering pillars of cool gas and dust are illuminated at their tips with light from warm embryonic stars.  The new infrared picture is reminiscent of Hubble's iconic visible-light image of the Eagle Nebula, which also features a star-forming region, or nebula, that is being sculpted into pillars by radiation and winds from hot, massive stars. The pillars in the Spitzer image are part of a region called W5, in the Cassiopeia ",
+      "keywords": [
+       "Spitzer Space Telescope"
+      ],
+      "media_type": "image",
+      "nasa_id": "PIA03096",
+      "secondary_creator": "IRAC Image: NASA/JPL-Caltech/Harvard-Smithsonian CfA/ESA/STScI<br />Visible Light Image: NASA/JPL-Caltech/Harvard-Smithsonian CfA/DSS",
+      "title": "Towering Infernos"
+     }
+    ],
+    "links": [
+     {
+      "href": "https://images-assets.nasa.gov/image/PIA03096/PIA03096~medium.jpg",
+      "rel": "alternate",
+      "render": "image",
+      "width": 1280,
+      "size": 181000,
+      "height": 951
+     },
+     {
+      "href": "https://images-assets.nasa.gov/image/PIA03096/PIA03096~small.jpg",
+      "rel": "alternate",
+      "render": "image",
+      "width": 640,
+      "size": 55000,
+      "height": 475
+     },
+     {
+      "href": "https://images-assets.nasa.gov/image/PIA03096/PIA03096~thumb.jpg",
+      "rel": "preview",
+      "render": "image",
+      "width": 640,
+      "size": 55000,
+      "height": 475
+     },
+     {
+      "href": "https://images-assets.nasa.gov/image/PIA03096/PIA03096~large.jpg",
+      "rel": "alternate",
+      "render": "image",
+      "width": 1920,
+      "size": 350000,
+      "height": 1427
+     },
+     {
+      "href": "https://images-assets.nasa.gov/image/PIA03096/PIA03096~orig.jpg",
+      "rel": "canonical",
+      "render": "image",
+      "height": 2548,
+      "width": 3426,
+      "size": 885000
+     }
+    ]
+   }
+  ],
+  "metadata": {
+   "total_hits": 11
+  },
+  "links": [
+   {
+    "rel": "next",
+    "prompt": "Next",
+    "href": "http://images-api.nasa.gov/search?q=pillars+of+creation&media_type=image&page_size=3&page=2"
+   }
+  ]
+ }
+}
