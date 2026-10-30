@@ -3,8 +3,8 @@
 Notes for the latency session (`docs/SESSIONS.md`). They replace `docs/NEXT_SESSION.md` for
 this session. Update them before finishing, and commit them on `session/latency`.
 
-Last update: 2026-10-30. November's budget is committed and ready for review. Parallel search is
-in progress.
+Last update: 2026-10-30. November's budget is approved by main and ready to land. Parallel
+search is next, waiting for Vedant's go-ahead on migration 010.
 
 ## Current goal
 
@@ -50,14 +50,17 @@ Decisions in `docs/SESSIONS.md`.
 - `afcfe33`: November's $20 month cap; launch week 5 a visitor, 14 searches, $3.25 a day; review findings 2, 3, 4.
 - `37a6696`: Mission Control reads the live month cap through `limits_at`; November shows $20.
 - `48c49c5`: README, CHANGELOG, PLAN.md and SESSIONS.md (row, decision) record November's budget.
-- November's budget is ready for main's review: `git diff main...session/latency`.
+- `044896a`: handoff, November's budget ready for review.
+- Main reviewed November's budget on 2026-10-30: approved, ready to land.
+- `a712d09`: Mission Control shows the Anthropic limit by date ($32 in November 2026, $10 otherwise); two long lines wrapped.
+- Landing: Vedant fast-forwards `main` to `session/latency`.
 - Vedant decided (2026-10-30, via main): Console $32 in November; the fill counts against the Console only.
 - Accepted: the worst case ($22.75 in the launch week) pauses live search late in the week.
-- Checks pass: 366 Python tests, 149 TypeScript tests, ruff, ruff format, mypy, typecheck, build.
+- Checks pass at `a712d09`: 367 Python tests, 149 TypeScript tests, ruff, ruff format, mypy, typecheck, build.
 
 ## Next
 
-1. Explain migration 010 to Vedant (now with the medians function), then write it.
+1. Migration 010 explained to Vedant on 2026-10-30. Write it on his go-ahead.
 2. Parallel search: `agent/store.py`, `agent/limits.py` ($1.55 usual daily cap), `agent/ondemand.py` (a thread per item).
 3. 429 logging: a response hook on the Anthropic client, built in `api/research.py`.
 4. Progress events: `estimate_seconds` per planned item, a `progress` event, in `src/types.ts` and `src/search.ts`.
@@ -70,14 +73,13 @@ Decisions in `docs/SESSIONS.md`.
 
 ## Blockers
 
-- Main's review of November's budget (not blocking parallel search).
-- Migration 010: Vedant hears the explanation before it is written.
+- Landing November's budget: Vedant's fast-forward.
+- Migration 010: waits for Vedant's go-ahead on the explanation.
 - Per-account limits: wait for data's `agent/auth.py` and `src/session.ts` on `main`.
 - Migrations 011 and 012: wait for data and media.
 - `CLAUDE.md` and `docs/DESIGN.md` drafts: wait for Vedant's approval.
 - Vedant: Console to $32 before 3 November; back to $10 on 1 December.
 - Vedant: check the Anthropic rate-limit tier before the go/no-go.
-- Mission Control still shows the $10 Anthropic limit in November (`agent/config.py`, not owned). Not fixed; asked.
 - October's Anthropic budget is nearly used. Paid work waits for 1 November 00:00 UTC, except small runs.
 
 ## Rules to keep in mind
@@ -102,7 +104,8 @@ Decisions in `docs/SESSIONS.md`.
 - 2026-10-30, committed: `agent/limits.py`, `agent/ondemand.py`, `tests/test_quota.py`,
   `tests/test_ondemand.py` (`afcfe33`); `agent/stats.py`, `tests/test_stats.py` (`37a6696`);
   `README.md`, `CHANGELOG.md`, `docs/PLAN.md`, `docs/SESSIONS.md` (`48c49c5`);
-  `docs/handoff/latency.md`.
+  `agent/config.py`, `agent/stats.py`, `tests/test_stats.py`, `README.md`, `CHANGELOG.md`,
+  `docs/PLAN.md` (`a712d09`); `docs/handoff/latency.md`.
 
 ## Pre-launch overhaul additions (brief from main, 2026-10-30)
 
