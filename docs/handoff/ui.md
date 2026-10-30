@@ -3,7 +3,7 @@
 Notes for the ui session (`docs/SESSIONS.md`). They replace `docs/NEXT_SESSION.md` for this
 session. Update them before finishing, and commit them on `session/ui`.
 
-Last update: 2026-10-30 (brief written by main)
+Last update: 2026-10-30 (ui: prototypes built, waiting for Vedant's pick)
 
 ## Current goal
 
@@ -105,8 +105,32 @@ The checks above pass and main's review has no open findings.
 
 ## Done
 
+- Two throwaway Learn card prototypes (A image-led, B compact). Built and screenshotted at 390 px and 1280 px.
+- No commit for them. They stay untracked on purpose (`proto.html`, `src/prototypes/`) and are deleted once Vedant picks.
+- Checks with the prototypes present: `pnpm typecheck` passes, `pnpm test` passes (149 tests). There is no `lint` script in `package.json`.
+- Vite ran only on port 5174, with no API server. It is stopped. Ports 5173 and 8787 were never used.
+- Screenshots: scratchpad `shots/` folder (A and B at 390 and 1280, focus on title and on credit link).
+- Tab order in both cards: title, then the credit links (licence, then file page). A card with no image has the title only.
+
 ## Next
+
+1. Vedant picks A or B. Delete `proto.html` and `src/prototypes/`.
+2. Wait for seo's `src/brand.ts` pass on `main`. Then `git rebase main`.
+3. Header, then the card button row (must ship).
+4. Rover ranks (each fact needs an opened NASA or CNSA source URL).
+5. Progress rows, after latency's event types are on `main`.
+6. The chosen Learn card, after media's image fields are on `main`.
 
 ## Blockers
 
+- seo: `src/brand.ts` and the brand-string pass are not on `main` (`session/seo` has no commits yet).
+- Vedant: pick A or B.
+- latency: progress event types in `src/types.ts`, and a prop on `AgentLog.tsx` for "Show details".
+- media: image, credit, category and key-fact fields on `BankTopic`.
+- data: `SignInButton` props and states.
+
 ## Files touched
+
+- `docs/handoff/ui.md` (this file, committed).
+- `proto.html` (untracked, throwaway).
+- `src/prototypes/` (untracked, throwaway).
