@@ -128,7 +128,12 @@ export function QuizPage({
   }
 
   /** Called once the answer is revealed: the clock is paused first, then any trophies pop up. */
-  function onAnswered(question: QuizQuestion, correct: boolean, seconds: number): AnswerScore | null {
+  function onAnswered(
+    question: QuizQuestion,
+    correct: boolean,
+    seconds: number,
+    choice: number,
+  ): AnswerScore | null {
     const current = runRef.current;
     if (!current) {
       return null;
@@ -137,7 +142,10 @@ export function QuizPage({
     const { run: next, score } = answerInRun(current, question.id, question.topic, correct, seconds);
     replaceRun(next);
     const awards = updateProfile((p) =>
-      afterAnswer(p, next.difficulty, question.id, question.topic, score, correct, next.streak),
+      afterAnswer(p, next.difficulty, question.id, question.topic, score, correct, next.streak, {
+        seconds,
+        choice,
+      }),
     );
     if (isRunFinished(next)) {
       awards.push(...updateProfile((p) => afterRun(p, next, counted / 1000)));
@@ -279,7 +287,9 @@ export function QuizPage({
       {view.kind === "question" && (
         <QuizCard
           question={view.question}
-          onAnswered={(correct, seconds) => onAnswered(view.question, correct, seconds)}
+          onAnswered={(correct, seconds, choice) =>
+            onAnswered(view.question, correct, seconds, choice)
+          }
           nextLabel={answeredAll ? "See results" : "Next question"}
           onNext={nextQuestion}
         />

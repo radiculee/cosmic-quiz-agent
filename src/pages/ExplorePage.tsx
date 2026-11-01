@@ -375,11 +375,19 @@ export function ExplorePage({
   }
 
   /** One question on its own: scored like a quiz answer, with no streak and no run. */
-  function onAnswered(question: QuizQuestion, correct: boolean, seconds: number): AnswerScore {
+  function onAnswered(
+    question: QuizQuestion,
+    correct: boolean,
+    seconds: number,
+    choice: number,
+  ): AnswerScore {
     const streak = correct ? 1 : 0;
     const score = scoreAnswer(question.difficulty, correct, streak, seconds);
     const awards = updateProfile((p) =>
-      afterAnswer(p, question.difficulty, question.id, question.topic, score, correct, streak),
+      afterAnswer(p, question.difficulty, question.id, question.topic, score, correct, streak, {
+        seconds,
+        choice,
+      }),
     );
     setAnswered((ids) => new Set(ids).add(question.id));
     awaitingAnswer.current = false;
@@ -545,8 +553,8 @@ export function ExplorePage({
                       key={currentSlot.key}
                       question={currentQuestion}
                       revealToken={currentToken}
-                      onAnswered={(correct, seconds) =>
-                        onAnswered(currentQuestion, correct, seconds)
+                      onAnswered={(correct, seconds, choice) =>
+                        onAnswered(currentQuestion, correct, seconds, choice)
                       }
                       {...nextButton(
                         questions,

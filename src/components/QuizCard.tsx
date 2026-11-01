@@ -20,8 +20,9 @@ interface QuizCardProps {
   question: QuizQuestion;
   /** Unlocks the answer to a question from the player's own live run. */
   revealToken?: string | undefined;
-  /** Called once per answer with the seconds taken; returns the points it earned, if scored. */
-  onAnswered: (correct: boolean, seconds: number) => AnswerScore | null;
+  /** Called once per answer with the seconds taken and the option picked (0 to 3); returns the
+   * points it earned, if scored. */
+  onAnswered: (correct: boolean, seconds: number, choice: number) => AnswerScore | null;
   nextLabel: string;
   onNext: () => void;
   /** The next question is not ready yet (the web page, while it is researched). */
@@ -54,7 +55,7 @@ export function QuizCard({
     setState({ kind: "checking", picked: index });
     try {
       const answer = await fetchAnswer(question.id, revealToken);
-      const score = onAnswered(index === answer.correct_index, seconds);
+      const score = onAnswered(index === answer.correct_index, seconds, index);
       setState({ kind: "answered", picked: index, answer, score });
     } catch {
       setState({ kind: "failed", picked: index });
