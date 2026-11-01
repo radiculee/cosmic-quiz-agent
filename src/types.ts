@@ -357,6 +357,12 @@ export type ResearchEvent =
     }
   /** What one run measured, for the analytics panel; sent for discarded runs too. */
   | { type: "stats"; key: ItemKey; stats: RunStats }
+  /**
+   * The last event of a search that reserved runs, once every one has ended. `unavailable`: every
+   * run failed with nothing spent, so the model was out of reach and not the topic's fault. Such
+   * a search does not count against the daily limits (migration 013).
+   */
+  | { type: "end"; unavailable: boolean }
   | { type: "error"; message: string };
 
 /** The visitor's live searches left today (GET /api/quota, api/quota.py). */

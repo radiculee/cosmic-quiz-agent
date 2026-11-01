@@ -82,6 +82,13 @@ describe("research events", () => {
     expect(isResearchEvent({ type: "fallback", reason: "in_bank", message: "m" })).toBe(false);
   });
 
+  it("accepts the end of a search only with a yes or no for unavailable", () => {
+    expect(isResearchEvent({ type: "end", unavailable: true })).toBe(true);
+    expect(isResearchEvent({ type: "end", unavailable: false })).toBe(true);
+    expect(isResearchEvent({ type: "end" })).toBe(false);
+    expect(isResearchEvent({ type: "end", unavailable: "true" })).toBe(false);
+  });
+
   it("accepts a run's progress at a known stage and refuses anything else", () => {
     const progress = {
       type: "progress",

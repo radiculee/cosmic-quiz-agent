@@ -33,9 +33,10 @@ from agent.limits import (
     SearchSlots,
     limit_message,
 )
-from agent.llm import Completion, Message, ToolSpec, Usage
+from agent.llm import Completion, LLMError, Message, ToolSpec, Usage
 from agent.loop import run_learn, run_quiz
 from agent.ondemand import (
+    EndEvent,
     FallbackEvent,
     LogEvent,
     MissedEvent,
@@ -517,10 +518,12 @@ def script(
     statuses: dict[str, Status | None] | None = None,
     crash: frozenset[str] = frozenset(),
     together: int = 0,
+    refused: frozenset[str] = frozenset(),
 ) -> Script:
     """Replace each agent run and the gate with the stored quiz record, made for the run's mode
     and difficulty and decided as `statuses` says (published by default). With `together`, each
-    run waits until that many runs are going at once, and fails if they never are."""
+    run waits until that many runs are going at once, and fails if they never are. A run in
+    `refused` ends as a refused key leaves it: no answer, no verdict, nothing spent."""
     record = quiz_record()
     seen = Script()
     barrier = threading.Barrier(together) if together else None
@@ -546,7 +549,11 @@ def script(
         return run
 
     def fake_decide(result: RunResult, *_: object) -> ItemRecord:
-        status = (statuses or {}).get(f"{result.mode}-{result.difficulty}", "published")
+        key = f"{result.mode}-{result.difficulty}"
+        if key in refused:
+            nothing = result.model_copy(update={"cost_usd": 0.0, "answer": None})
+            return record.model_copy(update={"run": nothing, "verification": None, "status": None})
+        status = (statuses or {}).get(key, "published")
         return record.model_copy(update={"run": result, "status": status})
 
     monkeypatch.setattr(ondemand, "run_learn", fake_run("learn"))
@@ -932,6 +939,87 @@ def test_a_run_failing_keeps_its_reservation_while_the_others_finish(
     assert store.settled()[101] == (Settings().max_job_cost_usd, "failed", None)
     assert result_keys(events) == [key for key in EVERY_ITEM if key != "quiz-medium"]
     assert len(store.finished) == 6
+
+
+def test_a_search_whose_every_run_failed_with_no_spend_says_the_model_was_out_of_reach(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    script(monkeypatch, refused=frozenset(EVERY_ITEM))
+    live, store = services()
+
+    events = list(research(SEARCH, live))
+
+    assert events[-1] == EndEvent(unavailable=True)
+    assert len(of_type(events, EndEvent)) == 1
+    assert {(spent, outcome) for spent, outcome, _ in store.settled().values()} == {(0.0, "failed")}
+    assert len(store.finished) == 6
+
+
+def test_a_refused_key_through_the_real_agent_loop_and_gate_is_unavailable() -> None:
+    refused = LLMError("AuthenticationError: invalid x-api-key")
+    live, store = services(llm=FakeLLM([refused] * 6))
+
+    events = list(research(SEARCH, live))
+
+    assert events[-1] == EndEvent(unavailable=True)
+    assert {(spent, outcome) for spent, outcome, _ in store.settled().values()} == {(0.0, "failed")}
+    assert len(store.finished) == 6 and not of_type(events, ResultEvent)
+
+
+def test_a_search_with_any_run_that_reached_the_model_is_not_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    script(monkeypatch, refused=frozenset(EVERY_ITEM) - {"learn-hard"})
+    live, _ = services()
+
+    events = list(research(SEARCH, live))
+
+    assert events[-1] == EndEvent(unavailable=False)
+
+
+def test_a_normal_search_ends_saying_the_model_was_reached(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    script(monkeypatch)
+    live, _ = services()
+
+    assert list(research(SEARCH, live))[-1] == EndEvent(unavailable=False)
+
+
+def test_runs_that_crashed_are_not_called_unavailable_because_their_spend_is_unknown(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    script(monkeypatch, crash=frozenset(EVERY_ITEM))
+    live, _ = services()
+
+    assert list(research(SEARCH, live))[-1] == EndEvent(unavailable=False)
+
+
+def test_a_failed_save_does_not_change_what_a_refused_search_says(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    script(monkeypatch, refused=frozenset(EVERY_ITEM))
+    store = FakeStore()
+    live, _ = services(store=store)
+
+    def refuse(_payload: ItemPayload) -> RecordedIds:
+        raise StoreError("connection refused")
+
+    monkeypatch.setattr(store, "record_item", refuse)
+
+    events = list(research(SEARCH, live))
+
+    assert events[-1] == EndEvent(unavailable=True)
+    assert {(spent, outcome) for spent, outcome, _ in store.settled().values()} == {(0.0, "failed")}
+
+
+def test_the_items_a_cap_left_out_do_not_stop_a_search_being_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    script(monkeypatch, refused=frozenset(QUESTIONS))
+    live, _ = services(store=FakeStore(fit=3))
+
+    assert list(research(SEARCH, live))[-1] == EndEvent(unavailable=True)
 
 
 def test_a_cap_that_fits_only_some_runs_leaves_out_the_last_in_plan_order(

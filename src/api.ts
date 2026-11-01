@@ -212,6 +212,8 @@ export function isResearchEvent(value: unknown): value is ResearchEvent {
         // The figures must be for the run the key names.
         value.key === `${value.stats.mode}-${value.stats.difficulty}`
       );
+    case "end":
+      return typeof value.unavailable === "boolean";
     default:
       return false;
   }

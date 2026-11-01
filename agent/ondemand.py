@@ -33,6 +33,9 @@ it has every level. `research` yields events while it works:
    and with a signed token that lets /api/reveal answer it once the player has picked.
 6. Each run that produced a record also sends what it measured (`agent/run_stats.py`), for the
    analytics panel: numbers only, so nothing in it can give a quiz answer away.
+7. When every reserved run has ended, a last event (`EndEvent`) says whether the model was out of
+   reach: every run failed with nothing spent, as a refused key or an outage leaves it. Such a
+   search does not count against the daily limits (migration 013).
 
 Every event after the plan that concerns one item names it (`key`, such as "quiz-easy"). Beside
 the log lines, each live run sends its progress (`ProgressEvent`): the stage of its work and a
@@ -100,6 +103,9 @@ ESTIMATE_TTL_SECONDS = 3600.0
 ESTIMATE_RETRY_SECONDS = 60.0
 ESTIMATE_MIN_RUNS = 5
 ESTIMATE_FALLBACK_SECONDS = 17.0
+
+# How a reserved run ended: what it spent and its outcome.
+_EndedRun = tuple[float, OnDemandOutcome]
 
 # --- Events ------------------------------------------------------------------------------------
 
@@ -234,6 +240,16 @@ class StatsEvent(BaseModel):
     stats: RunStats
 
 
+class EndEvent(BaseModel):
+    """The last event of a search that reserved runs, sent once every one has ended."""
+
+    model_config = ConfigDict(frozen=True)
+
+    type: Literal["end"] = "end"
+    # Every reserved run failed with nothing spent: the model was out of reach, not the topic.
+    unavailable: bool
+
+
 ResearchEvent = (
     PlanEvent
     | LogEvent
@@ -243,6 +259,7 @@ ResearchEvent = (
     | ResultEvent
     | MissedEvent
     | StatsEvent
+    | EndEvent
 )
 
 
@@ -608,6 +625,15 @@ def _unavailable() -> FallbackEvent:
     )
 
 
+def _model_unreachable(search: _Search, ended: Sequence[_EndedRun]) -> bool:
+    """Whether every reserved run ended as failed with nothing spent: the same rule as
+    `on_demand_search_counts` (migration 013), so such a search is the one not counted. The cost
+    is rounded as `finish_on_demand_run` stores it."""
+    return len(ended) == len(search.runs) and all(
+        outcome == "failed" and round(spent, 6) == 0 for spent, outcome in ended
+    )
+
+
 def _settle(
     services: Services,
     slot_id: int,
@@ -631,11 +657,12 @@ def _run_search(
     named by the search and the item, then the items the caps left out. It waits for every run it
     started, so each is settled, and the stream always ends (`emit(None)`), whatever happens."""
     runs: list[threading.Thread] = []
+    ended: list[_EndedRun] = []  # appended from each run's thread
     try:
         for planned, slot_id in search.runs:
             run = threading.Thread(
                 target=_run_item,
-                args=(search, planned, slot_id, services, clock.for_item(planned.key), emit),
+                args=(search, planned, slot_id, services, clock.for_item(planned.key), emit, ended),
                 name=f"live-search-{search.id}-{planned.key}",
             )
             try:
@@ -646,6 +673,7 @@ def _run_search(
                     file=sys.stderr,
                 )
                 _settle(services, slot_id, 0.0, "failed", None)
+                ended.append((0.0, "failed"))
                 emit(
                     MissedEvent(
                         key=planned.key,
@@ -668,6 +696,7 @@ def _run_search(
     finally:
         for run in runs:
             run.join()
+        emit(EndEvent(unavailable=_model_unreachable(search, ended)))
         emit(None)
 
 
@@ -678,9 +707,10 @@ def _run_item(
     services: Services,
     clock: _Clock,
     emit: Callable[[ResearchEvent | None], None],
+    ended: list[_EndedRun],
 ) -> None:
     """One live run: research, the gate and storage, then the item or why there is none. Always
-    settles the run's slot."""
+    settles the run's slot, and adds how it ended to `ended`."""
     spent = services.settings.max_job_cost_usd  # assumed until the real cost is known
     outcome: OnDemandOutcome = "failed"
     run_id: int | None = None
@@ -729,6 +759,7 @@ def _run_item(
         )
     finally:
         _settle(services, slot_id, spent, outcome, run_id)
+        ended.append((spent, outcome))
 
 
 def _emit_stats(
