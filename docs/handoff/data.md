@@ -3,7 +3,7 @@
 Notes for the data session (`docs/SESSIONS.md`). They replace `docs/NEXT_SESSION.md` for this
 session. Update them before finishing, and commit them on `session/data`.
 
-Last update: 2026-11-01 (data: steps a and b done; step c next)
+Last update: 2026-11-01 (data: steps a, b and c done; step d next)
 
 ## Current goal
 
@@ -154,19 +154,38 @@ The checks above pass and main's review has no open findings.
   - `SignInButton`: signed in, an "Account" link to `/account`; otherwise a "Sign in" button
     that opens a panel (Escape and an outside click close it; focus starts on Google).
 
+- `36cf875` (granted by main): `.env.example` lists `VITE_ACCOUNTS`, `VITE_SUPABASE_URL`,
+  `VITE_SUPABASE_PUBLISHABLE_KEY`, empty.
+- Step c, `ad9ecb0`: `src/profile.ts`, `src/useProfile.ts`, `src/profile.test.ts` (29 tests, 19
+  new).
+  - Each pure update (`afterAnswer`, `afterRun`, `afterLearn`, `afterLiveRun`) takes an
+    optional stamp and appends an event (UUID and ISO time) to `profile.log`. The pages are
+    unchanged. `newStamp()` times only go up, so same-millisecond events keep their order.
+  - `replay(baselines, events)` rebuilds the totals through the same updates: counts add up,
+    best streak and tiers take the highest, lists join, events in time order and each once by
+    id. Tested: same as playing, idempotent, order-independent, points recalculated.
+  - Guest storage v3 (`cosmic-quiz:profile:v3`): guest id, baseline, profile with its log. A v2
+    (or v1) profile carries over as the baseline with a new guest id; the v2 entry is left as
+    it was. Past 5,000 events the oldest are folded into the baseline.
+  - The merge on sign-in: the guest's baseline and events go to the five tables with
+    `Prefer: resolution=ignore-duplicates`. Only when the server has every row does the
+    browser start a fresh guest with a new guest id. Then the account's history is read and
+    replayed, with anything still pending; no pop-ups for a merge.
+  - Signed in: each update's events go to an outbox (cached under
+    `cosmic-quiz:account:v1:<user id>`), sent at once and in batches of 500; a failed batch is
+    retried row by row. `CQ001`: the row is dropped and a warning logged once per table, no
+    retry. Other failures: retried after 30 s and when the browser comes back online.
+  - Sign-out: a fresh guest is shown; the account cache is removed unless rows are unsent.
+  - With accounts off there is no remote at all: nothing is sent (tested). The off build still
+    has no auth or Supabase code; the main bundle grew from 358.20 kB to 370.36 kB (113.64 kB
+    gzipped, +4.45 kB) with the history and replay code, which guests use too.
+
 ## In progress
 
-- Nothing uncommitted. Next: step c.
+- Nothing uncommitted. Next: step d.
 
 ## Left
 
-c. Profile v3 in `src/profile.ts` and `src/useProfile.ts`: guest id, event log, v2 carried over
-   as a baseline, the replay, the merge and the outbox.
-   - A new `guest_id` after each successful merge, with a test: sign in, sign out, play as a
-     guest, sign in again; the second guest's progress is added.
-   - An insert refused with `CQ001` is final: drop the row, log it once, no retry. Other errors
-     keep the retry.
-   - Tests: union, append, idempotent, points recalculated, v2 carried over.
 d. `AccountPage.tsx` (export as JSON; delete after the player confirms; sign out) and
    `api/account.py` (delete with the secret key, after `agent/auth.py` checks the token); then
    the `dev/api_server.py` route (granted by main).
@@ -181,7 +200,16 @@ not been drawn on a page. I will drive it in headless Chrome once ui places it o
 
 ## Blocked on
 
-- Nothing for steps c to e.
+- Before accounts are turned on: `player_answers.seconds` is `NOT NULL` in migration 011, but
+  the pages do not pass an answer's seconds to `afterAnswer` today, so those answer rows would
+  be refused (HTTP 400, not `CQ001`) and retried for ever. Two fixes, both recommended:
+  1. ui: pass the seconds (and the option picked) in the new optional argument. In
+     `QuizPage.tsx`, `afterAnswer(p, next.difficulty, question.id, question.topic, score,
+     correct, next.streak, { seconds, choice })`; the same in `ExplorePage.tsx`'s `onAnswered`.
+  2. data: make the column nullable like `choice`, as a guard: in 011,
+     `seconds real check (seconds >= 0)` with the comment "null until the pages send it"; if
+     011 has already been run, also `alter table public.player_answers alter column seconds
+     drop not null;`. Needs main's approval, since 011 was approved.
 
 ## Needs from Vedant
 
@@ -209,17 +237,17 @@ not been drawn on a page. I will drive it in headless Chrome once ui places it o
 ## Files changed
 
 - Step a: `agent/auth.py` (new), `tests/test_auth.py` (new).
-- `agent/web.py` (one field, one line), `tests/test_auth.py`.
+- `agent/web.py` (one field, one line), `tests/test_auth.py`; `.env.example`.
 - `package.json`, `pnpm-lock.yaml`.
 - Step b: `src/session.ts`, `src/session.test.ts`, `src/useSession.ts`,
   `src/components/SignInButton.tsx`, `src/components/SignInButton.test.tsx` (all new).
+- Step c: `src/profile.ts`, `src/useProfile.ts`, `src/profile.test.ts`.
 - This handoff.
 
 ## Checks run
 
-On `session/data` at `61eb143`, 2026-11-01, all passing: `pytest` (480 passed), `ruff check`,
-`ruff format --check`, `mypy --strict` (86 files), `pnpm typecheck`, `pnpm test` (177 tests in
-15 files), `pnpm build`. `tests/test_packaging.py` caught my first draft's inputs (a shared class
-constant instead of a literal `text-base`, which iOS needs); fixed before the commit. My venv
-lacked media's `pillow==13.0.0`, pinned in `requirements-media.txt`; I installed that pin. No
-other dependency changed.
+On `session/data` at `ad9ecb0`, 2026-11-01, all passing: `pytest` (480 passed), `ruff check`,
+`ruff format --check`, `mypy --strict` (86 files), `pnpm typecheck`, `pnpm test` (196 tests in
+15 files), `pnpm build` (one JS file; no auth or Supabase code in it). My venv lacked media's
+`pillow==13.0.0`, pinned in `requirements-media.txt`; I installed that pin. No other dependency
+changed.
