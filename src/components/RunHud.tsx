@@ -33,9 +33,7 @@ export function RunHud({
               <span className="sm:hidden" aria-hidden="true">
                 {label === "Question" ? "Q" : label}
               </span>
-              <span className={label === "Question" ? "sr-only sm:not-sr-only" : "sr-only"}>
-                {label}
-              </span>
+              <span className="sr-only sm:not-sr-only">{label}</span>
             </dt>
             <dd className={`mt-1 text-sm font-medium tabular-nums ${colour ?? "text-ink"}`}>
               {value}
