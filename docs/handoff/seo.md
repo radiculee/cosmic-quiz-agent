@@ -3,7 +3,7 @@
 Notes for the seo session (`docs/SESSIONS.md`). They replace `docs/NEXT_SESSION.md` for this
 session. Update them before finishing, and commit them on `session/seo`.
 
-Last update: 2026-10-30 (step 2 done)
+Last update: 2026-10-30 (CSP and media rewrite done)
 
 ## Current goal
 
@@ -104,7 +104,7 @@ Vercel Hobby allows 100 deploys a day; the Curator's hook adds at most a few.
 - Every redirect source is `/:path(.*)`. A test asserts that for each one.
 - Close-match paths: `src/closeMatch.ts`. `/lern` goes to `/learn`. The 404 page suggests near paths and sets `noindex`.
 - Favicon set, web manifest and `robots.txt` added. The icons come from `dev/make_icons.py`. The picture is a placeholder for Vedant to replace.
-- README links moved to `curiosity.`.
+- README links moved to `curiosity.`.- 711e193: `connect-src` allows the Supabase origin; `/media/:path(.*)` rewrites to the `topic-images` bucket ahead of the catch-all. Tests in `tests/test_seo.py`. One `connect-src` assertion in `tests/test_packaging.py` changed to match.
 - Rewrote only the link-preview test and the old-address test in `tests/test_packaging.py`.
 
 ## Next
@@ -112,7 +112,7 @@ Vercel Hobby allows 100 deploys a day; the Curator's hook adds at most a few.
 1. Step 3: prerender, sitemap, `Sitemap:` line in `robots.txt`, per-topic previews.
 2. JSON-LD (`WebSite` with `SearchAction`) comes with the prerender. An inline `ld+json` block in `index.html` would break the no-inline-script test.
 3. A per-page `canonical` link also comes with the prerender. One static canonical in `index.html` would be wrong for every other path, and the loads-nothing-from-another-site test rejects it.
-4. The `/media/*` rewrite and the CSP `connect-src` change, when data and media name the origin and path.
+
 5. The title Vedant picks on Monday, into `src/brand.ts`.
 
 ## Blockers
@@ -120,7 +120,7 @@ Vercel Hobby allows 100 deploys a day; the Curator's hook adds at most a few.
 - Data: the exact Supabase origin for `connect-src`.
 - Media: the Storage bucket path for the `/media/*` rewrite.
 - Latency: the Curator's deploy-hook call.
-- Vedant: approval of the `package.json` build change for prerendering.
+- Vedant: approval of the `package.json` build change for prerendering (main is asking).- Main: step 2 and this commit stay held until `curiosity.vedantgaikwad.ie` serves over HTTPS (no DNS yet).
 - Vedant: `public/og-v2.jpg`. Until then the preview is `og-v1.jpg`, which still says COSMIC QUIZ in the picture.
 - ui: a topic typo (`/learn/antimater`) renders inside `LearnPage.tsx`, not the 404 page. When the topics have loaded and the slug matches none, ui should render `<NotFoundPage topics={topics} />`. The page then redirects or suggests.
 
