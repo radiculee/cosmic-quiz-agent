@@ -395,8 +395,9 @@ Gamified after Vedant's first play-through (2026-10-03):
   +25% for answering within 15 seconds.
 - Speedrun clock: runs only while a question waits for an answer, so reading the explanation
   and sources never costs time.
-- Ranks from all-time points: Stargazer, Cadet (1,000), Navigator (3,000), Astronomer (7,500),
-  Astrophysicist (15,000), Cosmologist (30,000).
+- Ranks from all-time points, named after Mars rovers, each with one sourced fact (changed
+  2026-11-01; src/game.ts RANKS): Sojourner, Spirit (1,000), Opportunity (3,000), Curiosity
+  (7,500), Zhurong (15,000), Perseverance (30,000).
 - Badges: First light, Hot streak, Perfect run, Hard mode, Speed runner (10 in under 2 min),
   Explorer (10 topics learned).
 - No repeats: never within a run, and across visits this browser's unseen questions and
