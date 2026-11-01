@@ -10,7 +10,7 @@ import {
   SOCIAL_IMAGE_ALT,
   THEME_COLOR,
   TITLE,
-} from "./src/brand";
+} from "./src/brand.ts";
 
 const BRAND_TOKENS: Record<string, string> = {
   name: NAME,

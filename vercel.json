@@ -60,7 +60,7 @@
       "source": "/media/:path(.*)",
       "destination": "https://fbwezifjjmmczevgpfiw.supabase.co/storage/v1/object/public/topic-images/:path"
     },
-    { "source": "/((?!api/).*)", "destination": "/index.html" }
+    { "source": "/((?!api/).*)", "destination": "/spa.html" }
   ],
   "headers": [
     {

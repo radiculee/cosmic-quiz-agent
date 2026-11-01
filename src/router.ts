@@ -10,6 +10,7 @@
 import { useEffect, useSyncExternalStore } from "react";
 
 import { pageTitle } from "./brand";
+import { topicSlug } from "./slug";
 import type { BankTopic } from "./types";
 
 export type Route =
@@ -77,36 +78,8 @@ function safeDecode(text: string): string {
 
 // --- Topic slugs ------------------------------------------------------------------------------
 
-const APOSTROPHES = new Set(["'", String.fromCharCode(0x2019)]);
-
-/** Accents are split off by NFKD normalisation as combining marks (U+0300 to U+036F). */
-function isCombiningMark(char: string): boolean {
-  const code = char.charCodeAt(0);
-  return code >= 0x300 && code <= 0x36f;
-}
-
-function isSlugChar(char: string): boolean {
-  return (char >= "a" && char <= "z") || (char >= "0" && char <= "9");
-}
-
-/**
- * A topic's address: lower case, accents dropped, apostrophes removed, and every other run of
- * characters a single hyphen. "Europa's hidden ocean" is "europas-hidden-ocean".
- */
-export function topicSlug(name: string): string {
-  let slug = "";
-  for (const char of name.normalize("NFKD").toLowerCase()) {
-    if (isCombiningMark(char) || APOSTROPHES.has(char)) {
-      continue;
-    }
-    if (isSlugChar(char)) {
-      slug += char;
-    } else if (slug && !slug.endsWith("-")) {
-      slug += "-";
-    }
-  }
-  return slug.endsWith("-") ? slug.slice(0, -1) : slug;
-}
+// The rule itself lives in slug.ts, which imports nothing, so the build's prerender can use it.
+export { topicSlug };
 
 /** The bank topic a slug names, if any. */
 export function topicForSlug(topics: readonly BankTopic[], slug: string): BankTopic | undefined {

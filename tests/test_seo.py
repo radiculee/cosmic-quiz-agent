@@ -80,6 +80,7 @@ def test_robots_lets_crawlers_in_and_keeps_them_off_the_api() -> None:
 
     assert "User-agent: *" in lines and "Allow: /" in lines and "Disallow: /api/" in lines
     assert not any(line.strip() == "Disallow: /" for line in lines)
+    assert f"Sitemap: {brand()['ORIGIN']}/sitemap.xml" in lines
 
 
 def _config() -> dict[str, Any]:
@@ -93,7 +94,7 @@ def test_media_is_served_from_the_sites_own_address_ahead_of_the_catch_all() -> 
 
     assert media["source"] == "/media/:path(.*)"  # strict, like the redirects
     assert media["destination"] == f"{SUPABASE_ORIGIN}/storage/v1/object/public/topic-images/:path"
-    assert rewrites.index(media) < [r["destination"] for r in rewrites].index("/index.html")
+    assert rewrites.index(media) < [r["destination"] for r in rewrites].index("/spa.html")
 
 
 def test_the_policy_still_loads_images_only_from_this_site() -> None:
@@ -109,3 +110,17 @@ def test_the_policy_still_loads_images_only_from_this_site() -> None:
     assert directives["img-src"] == ["'self'"]  # images come through /media/*
     assert directives["connect-src"] == ["'self'", SUPABASE_ORIGIN]
     assert SUPABASE_ORIGIN not in policy.replace(f"connect-src 'self' {SUPABASE_ORIGIN}", "")
+
+
+def test_the_build_prerenders_and_every_other_address_gets_the_plain_page() -> None:
+    package = json.loads((ROOT / "package.json").read_text(encoding="utf-8"))
+    runner = (ROOT / "scripts" / "prerender.mjs").read_text(encoding="utf-8")
+    rewrites = _config()["rewrites"]
+
+    build = package["build"] if "build" in package else package["scripts"]["build"]
+    assert build.endswith("vite build && node scripts/prerender.mjs"), build
+    # Vercel serves a built file before its rewrites, so each prerendered page wins its address
+    # and the catch-all, which names the untouched shell, answers the rest.
+    assert rewrites[-1] == {"source": "/((?!api/).*)", "destination": "/spa.html"}
+    assert 'join(DIST, "spa.html")' in runner and 'join(DIST, "sitemap.xml")' in runner
+    assert int(re.sub(r"\D*(\d+).*", r"\1", package["engines"]["node"])) >= 22  # runs .ts files
