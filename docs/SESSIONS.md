@@ -288,6 +288,13 @@ entry; record a reversal as a new one.
   CC BY-SA IGO is accepted as a CC BY-SA variant; a NASA library result passes only if every
   credit it names is NASA's and nothing claims copyright; `/api/topics` leaves `image` and
   `fact` out when a topic has neither.
+- 2026-11-01, latency: The likely-topic fill (Vedant, relayed by main).
+  - The fill is approved: the 30 topics in `docs/handoff/latency.md`, as listed, with `--cap 5.00`.
+    The 5 reserves stay reserves.
+  - The eval overlap stays, all 13 names. No code in `evals/` reads the bank.
+  - Vedant reviews the queue before 3 November.
+  - It runs only after Vedant fixes the GitHub `ANTHROPIC_API_KEY`, after one cheap key test, and
+    after main gives the word.
 
 ---
 

@@ -16,6 +16,9 @@ live since 2026-11-01 21:32 UTC. The report below replaces "Where things stand",
   searches before the cutoff, 2026-10-28 to 2026-10-30, measured as the last `finished_at` less the
   first `started_at`. Four-run searches: median 127.7 s (n=7). The plan's "about 100 s" was low.
 - Step 3, the fill list and the estimate, below. Not run.
+- The fill's code: `python -m curator fill`, with `FILL_TOPICS` in `curator/topics.py` and
+  `--cap` at $5.00 by default. It is stored as a `build`, so it needs no migration. The workflow
+  never runs it. Vedant's three decisions are in `docs/SESSIONS.md`.
 - Found: the Anthropic key in GitHub Actions is refused (see Blocked on). Main confirmed it in
   Actions run 41310615378 and tells Vedant.
 
@@ -27,11 +30,10 @@ live since 2026-11-01 21:32 UTC. The report below replaces "Where things stand",
 ### Left
 
 - The after time and the `CHANGELOG.md` entry (step 2).
-- The fill's code, after Vedant approves the list. `curator build` reads only `BUILD_TOPICS`, so:
-  add `FILL_TOPICS` to `curator/topics.py`, and a way to run it, for example
-  `python -m curator build --list fill`. Keep the stored trigger `build`, because a new trigger
-  needs a migration (`curator_runs_trigger_check`). Keep `BUILD_TOPICS` as it is; a test holds it at
-  30 names with no eval name.
+- Running the fill, on main's word only: `python -m curator fill`, from a machine with a working
+  key. A run from this PC calls no deploy hook, and neither does `curator review`, so the site
+  picks up the new topics at the next deploy or at the next daily run that publishes. If that is
+  too late for the launch, Vedant calls the hook by hand after the review.
 - Step 4, per-account limits: not started; waits for main.
 - Later, not started: make the workflow red when a daily run makes nothing. Proposed change: in
   `_daily` (`curator/__main__.py`), return 1 when `jobs_run > 0`, `no_item == jobs_run` and
@@ -45,29 +47,27 @@ live since 2026-11-01 21:32 UTC. The report below replaces "Where things stand",
 ### Blocked on
 
 - Main's word for the after time.
-- The fill: Vedant's approval of the list, a working Anthropic key, and the Console at $32.
+- The fill: Vedant fixes the GitHub `ANTHROPIC_API_KEY`, one cheap key test, the Console at $32,
+  and main's word.
 
 ### Needs from Vedant
 
-1. Approve or change the fill list.
-2. Eval overlap. On 2026-10-02 the build list was set to repeat no eval topic. "Supernovae" and
-   "Dark matter" are exact eval names, and 11 others share a subject with one (marked "eval"
-   below). Recommendation: keep them. They are the likeliest to be typed, and no code in `evals/`
-   reads the bank, so the eval results stay comparable. To swap them, use the reserves.
-3. The cap. Recommendation: `--cap 5.00`, not the build's default of $6.00, to keep to the $5 line.
-4. The review queue. Plan time for it before the launch (see "What the fill gives").
+- Fix the GitHub `ANTHROPIC_API_KEY`, and put the Console at $32.
+- Review the queue before 3 November, after the fill (decided).
 
 ### Files changed
 
-- `docs/handoff/latency.md`, `docs/SESSIONS.md` (this session's row).
+- `docs/handoff/latency.md`, `docs/SESSIONS.md` (this session's row and the decisions).
+- `curator/topics.py`, `curator/__main__.py`, `tests/test_curator.py`, `docs/DEVELOPMENT.md` (one
+  row for the new command).
 
 ### Checks run
 
-All pass on `c9894d6` with this report: pytest (492), ruff check, ruff format, mypy --strict,
-pnpm typecheck, pnpm test (220), pnpm build. No paid call and no dev server. Read-only queries on
+All pass with the fill's code: pytest (497), ruff check, ruff format, mypy --strict, pnpm
+typecheck, pnpm test (220), pnpm build. No paid call and no dev server. Read-only queries on
 `on_demand_runs`, `topics`, `items`, `runs` and `curator_runs`.
 
-## The likely-topic fill (step 3, not run)
+## The likely-topic fill (step 3, approved 2026-11-01, not run)
 
 **What visitors typed.** `on_demand_runs` has 21 searches on 19 names. 18 of the 19 now have
 published items. Only "Space oceans" has none (its one item was discarded), so visitors give one
