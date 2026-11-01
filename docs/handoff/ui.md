@@ -116,7 +116,7 @@ The checks above pass and main's review has no open findings.
   - Spirit: https://science.nasa.gov/mission/mars-exploration-rovers-spirit-and-opportunity/ (landed 3 Jan 2004, 7.7 km, ended 2010).
   - Opportunity: same page (landed 24 Jan 2004, 45.16 km, last contact 10 June 2018).
   - Curiosity: https://science.nasa.gov/mission/msl-curiosity/ (landed 6 Aug 2012, Gale Crater; the page reports a 1 km climb of Mount Sharp).
-  - Zhurong: https://www.nasa.gov/news-release/nasa-statement-on-chinas-zhurong-mars-rover-photos/ (second nation to land on Mars). Landing place and month: https://science.nasa.gov/image-article/apod-2021-june-15-zhurong-new-rover-on-mars/ (northern Utopia Planitia, mid-May 2021). These are NASA pages; I found no CNSA page I could open.
+  - Zhurong: https://science.nasa.gov/image-article/apod-2021-june-15-zhurong-new-rover-on-mars/ (Tianwen-1 delivered it; northern Utopia Planitia, mid-May 2021). The "second nation" claim was dropped: NASA's statement says "second nation to ever land", which is disputed, and no page I opened says "operate a rover". I found no CNSA page I could open.
   - Perseverance: https://science.nasa.gov/mission/mars-2020-perseverance/ (landed 18 Feb 2021, Jezero Crater, Ingenuity).
 
 ## Next

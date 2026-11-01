@@ -61,7 +61,7 @@ export const RANKS = [
   {
     name: "Spirit",
     points: 1_000,
-    fact: "Landed in January 2004 and drove 7.7 km before its mission ended in 2010.",
+    fact: "Landed in January 2004 and drove 7.7 km before it concluded its mission in 2010.",
     source: "https://science.nasa.gov/mission/mars-exploration-rovers-spirit-and-opportunity/",
   },
   {
@@ -73,14 +73,14 @@ export const RANKS = [
   {
     name: "Curiosity",
     points: 7_500,
-    fact: "Landed in Gale Crater on 6 August 2012 and has climbed Mount Sharp since.",
+    fact: "Landed in Gale Crater on 6 August 2012 and has spent years climbing Mount Sharp.",
     source: "https://science.nasa.gov/mission/msl-curiosity/",
   },
   {
     name: "Zhurong",
     points: 15_000,
-    fact: "China's rover landed in Utopia Planitia in May 2021, making China the second nation to land on Mars.",
-    source: "https://www.nasa.gov/news-release/nasa-statement-on-chinas-zhurong-mars-rover-photos/",
+    fact: "Delivered by China's Tianwen-1 mission, it landed in northern Utopia Planitia in mid-May 2021.",
+    source: "https://science.nasa.gov/image-article/apod-2021-june-15-zhurong-new-rover-on-mars/",
   },
   {
     name: "Perseverance",
