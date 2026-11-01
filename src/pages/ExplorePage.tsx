@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { ApiError, fetchItem, type ResearchRequest, streamResearch } from "../api";
+import { searchOutcome } from "../outcome";
 import { AgentLog, type LogLine, type LogOutcome } from "../components/AgentLog";
 import { LearnCard } from "../components/LearnCard";
 import { Link } from "../components/Link";
@@ -23,7 +24,6 @@ import {
   firstReady,
   fromPlan,
   itemLabel,
-  madeAnything,
   measured,
   missed,
   nextOpen,
@@ -33,8 +33,6 @@ import {
   type Search,
   type Slot,
   started,
-  summarize,
-  summaryLine,
 } from "../search";
 import { type SearchStatus, searchStatus, suggestAny } from "../topics";
 import type { Award } from "../trophies";
@@ -130,6 +128,7 @@ export function ExplorePage({
   const [explanationOpen, setExplanationOpen] = useState(false);
   // The agent log sits behind "Show details" in the progress rows; each search starts it closed.
   const [detailsOpen, setDetailsOpen] = useState(false);
+  const [unavailable, setUnavailable] = useState(false);
   const [explanationLevel, setExplanationLevel] = useState<Difficulty>("easy");
   const [quotaState, refreshQuota] = useQuota();
   const request = useRef<AbortController | null>(null);
@@ -277,6 +276,7 @@ export function ExplorePage({
     setExplanationOpen(false);
     setExplanationLevel("easy");
     setDetailsOpen(false);
+    setUnavailable(false);
     setLog({ id: searchId, topic: topic ?? SURPRISE_TOPIC, lines: [], outcome: null });
     setStreaming(true);
     viewRef.current?.scrollIntoView({ behavior: scrollBehavior(), block: "start" });
@@ -326,6 +326,9 @@ export function ExplorePage({
         case "result":
           patch((s) => resolved(s, event.key, event.item, event.reveal_token ?? undefined));
           onLiveItem();
+          break;
+        case "end":
+          setUnavailable(event.unavailable);
           break;
         case "stats":
           patch((s) => measured(s, event.key, event.stats));
@@ -449,7 +452,7 @@ export function ExplorePage({
   }
 
   const logOutcome: LogOutcome | null = log
-    ? (log.outcome ?? (search?.ended ? searchOutcome(search) : { kind: "running" }))
+    ? (log.outcome ?? (search?.ended ? searchOutcome(search, unavailable) : { kind: "running" }))
     : null;
   const showItems =
     search !== null &&
@@ -646,12 +649,6 @@ export function ExplorePage({
       <StatsPanel open={statsOpen} onClose={closeStats} search={search} running={streaming} />
     </div>
   );
-}
-
-function searchOutcome(search: Search): LogOutcome {
-  const summary = summarize(search);
-  const message = summaryLine(summary);
-  return madeAnything(search) ? { kind: "done", message } : { kind: "nothing", message };
 }
 
 /** Why an item is not shown yet: "loading" from the bank, or "researching" live. */

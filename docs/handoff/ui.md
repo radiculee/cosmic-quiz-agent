@@ -127,6 +127,7 @@ The checks above pass and main's review has no open findings.
   - Stage and status come only from `progress` events. The stage bar moves only on an event.
   - Time left is the plan's `estimate_seconds` less the seconds since the run's first progress, on a clock that ticks once a second. Past the estimate it says "Taking longer than usual". No estimate: no time shown.
   - States: waiting ("Starting", whole estimate), running (stage, status, time left), loading from the bank, ready (all four stages filled), left out (rust bar, "Left out").
+- Unavailable agent message: `ExplorePage` handles latency's `end` event (cherry-picked b6c1dd5; it drops out at the next rebase). A search that made nothing and ended with `unavailable: true` says "The agent is unavailable just now. This search was not counted. Topics in the bank are still free to play." Other cases keep their text. Logic and test in `src/outcome.ts`, `src/outcome.test.ts`.
 
 ## Next
 
