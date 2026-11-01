@@ -6,8 +6,9 @@ from __future__ import annotations
 import json
 import re
 import struct
+from typing import Any
 
-from tests.site_files import ROOT, TOKENS, brand, index_html, meta_tags
+from tests.site_files import ROOT, SUPABASE_ORIGIN, TOKENS, brand, index_html, meta_tags
 
 PUBLIC = ROOT / "public"
 PNG_START = b"\x89PNG\r\n\x1a\n"
@@ -79,3 +80,32 @@ def test_robots_lets_crawlers_in_and_keeps_them_off_the_api() -> None:
 
     assert "User-agent: *" in lines and "Allow: /" in lines and "Disallow: /api/" in lines
     assert not any(line.strip() == "Disallow: /" for line in lines)
+
+
+def _config() -> dict[str, Any]:
+    result: dict[str, Any] = json.loads((ROOT / "vercel.json").read_text(encoding="utf-8"))
+    return result
+
+
+def test_media_is_served_from_the_sites_own_address_ahead_of_the_catch_all() -> None:
+    rewrites = _config()["rewrites"]
+    [media] = [rule for rule in rewrites if rule["source"].startswith("/media/")]
+
+    assert media["source"] == "/media/:path(.*)"  # strict, like the redirects
+    assert media["destination"] == f"{SUPABASE_ORIGIN}/storage/v1/object/public/topic-images/:path"
+    assert rewrites.index(media) < [r["destination"] for r in rewrites].index("/index.html")
+
+
+def test_the_policy_still_loads_images_only_from_this_site() -> None:
+    policy = next(
+        header["value"]
+        for rule in _config()["headers"]
+        if rule["source"] == "/(.*)"
+        for header in rule["headers"]
+        if header["key"] == "Content-Security-Policy"
+    )
+    directives = {part.split()[0]: part.split()[1:] for part in policy.split("; ")}
+
+    assert directives["img-src"] == ["'self'"]  # images come through /media/*
+    assert directives["connect-src"] == ["'self'", SUPABASE_ORIGIN]
+    assert SUPABASE_ORIGIN not in policy.replace(f"connect-src 'self' {SUPABASE_ORIGIN}", "")

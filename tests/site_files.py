@@ -8,6 +8,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 
+# The Supabase project: the one other origin the page may call, and where /media/* is served from.
+SUPABASE_ORIGIN = "https://fbwezifjjmmczevgpfiw.supabase.co"
+
 _CONSTANT = re.compile(r'export const (?P<name>[A-Z_]+) =\s*"(?P<value>[^"]*)";')
 
 

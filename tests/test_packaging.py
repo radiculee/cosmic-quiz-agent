@@ -9,7 +9,7 @@ import re
 import tomllib
 from pathlib import Path
 
-from tests.site_files import brand, meta_tags
+from tests.site_files import SUPABASE_ORIGIN, brand, meta_tags
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -65,7 +65,8 @@ def test_the_content_security_policy_allows_only_this_site() -> None:
     # The fonts are served from the site itself, so no visit reaches Google.
     assert policy["style-src"] == ["'self'"]
     assert policy["font-src"] == ["'self'"]
-    assert policy["connect-src"] == ["'self'"]  # the UI only calls its own /api
+    # The UI calls its own /api, and the Supabase project (accounts), nothing else.
+    assert policy["connect-src"] == ["'self'", SUPABASE_ORIGIN]
     assert policy["frame-ancestors"] == ["'none'"]  # no other site may frame the game
     assert policy["object-src"] == ["'none'"] and policy["base-uri"] == ["'none'"]
     assert "upgrade-insecure-requests" in policy
