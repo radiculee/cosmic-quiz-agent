@@ -128,6 +128,8 @@ The checks above pass and main's review has no open findings.
 2. Progress rows, after latency's parallel search is on `main`.
 3. When main says seo's step 2 is on `main`: in `LearnPage.tsx`, when the topics have loaded and `/learn/<slug>` matches no topic, render `<NotFoundPage topics={topics} />` (on `session/seo`, 86b984e).
 
+Optional, not now (main's note): at sm and wider, a name-only Learn card beside an image card stretches tall and empty. It should be rare once the image fill has run.
+
 ## Blockers
 
 - main: push, so the rebase and the `afterAnswer` change can happen. Main wires `SignInButton` into the header slot.
