@@ -295,6 +295,15 @@ entry; record a reversal as a new one.
   - Vedant reviews the queue before 3 November.
   - It runs only after Vedant fixes the GitHub `ANTHROPIC_API_KEY`, after one cheap key test, and
     after main gives the word.
+- 2026-11-01, latency: A search that failed whole with no spend does not count (Vedant, relayed
+  by main), after a refused key took two of his searches.
+  - A search counts unless every run of it has ended as `failed` with `spent_usd` 0, for the
+    visitor's daily limit and everyone's. A search still running counts. The dollar caps are as
+    they were.
+  - Migration 013 (`on_demand_search_counts`, `begin_on_demand_search`) and `on_demand_usage` use
+    the same rule. Paste 013 and run its check before the code is deployed.
+  - A search that reserved runs ends with a new event, `{"type": "end", "unavailable": bool}`;
+    ui changes the text on the page.
 
 ---
 

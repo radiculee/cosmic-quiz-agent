@@ -2304,3 +2304,9 @@ tier), decided together with the newsletter's subscribers (Vedant, 2026-10-10).
   rebased onto the explore session's close (both sessions' rows and Decisions kept); 361 Python
   and 149 TypeScript tests and every check pass; `main` fast-forwarded to it and pushed on
   Vedant's word, deploying universal topics and Surprise me. Parallel search and November's budget are not built yet (steps 3 to 5).
+- 2026-11-01 - Parallel search live, with a before time of 145.2 s (median of 4 six-run searches);
+  the after time waits for a search that succeeds. A refused key made today's daily Curator run and
+  Vedant's two live searches fail with nothing spent. So a daily run whose model calls never worked
+  now fails the workflow, and a search that failed whole with no spend no longer counts (migration
+  013, `docs/SESSIONS.md`). `python -m curator fill` is written for the 30 likely topics Vedant
+  approved; it has not run. 520 Python and 221 TypeScript tests. Nothing spent.

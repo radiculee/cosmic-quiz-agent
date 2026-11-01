@@ -27,11 +27,15 @@ live since 2026-11-01 21:32 UTC. The report below replaces "Where things stand",
   topic choice that failed; a failed topic choice beside jobs that made items, because a red step
   would skip the site's rebuild. The purge still runs on a red run. The steps that save pending
   runs use `always()`, so they run too; the image and rebuild steps are skipped.
+- A search that failed whole with no spend no longer counts (see "Free failed searches" below).
+  Migration: `supabase/migrations/013_free_failed_searches.sql`. Check script:
+  `supabase/checks/013_free_failed_searches_check.sql`. Stream event: `{"type": "end",
+  "unavailable": boolean}`.
 
 ### In progress
 
-- Step 2, after time: waits for main's word that Vedant's real search is done. The query is
-  ready: the same filter, from the cutoff onward. The `CHANGELOG.md` entry follows it.
+- Step 2, after time: no search has succeeded since the deploy, so it cannot be measured yet. The
+  query must use only searches with a run that did not fail. The `CHANGELOG.md` entry follows it.
 
 ### Left
 
@@ -44,13 +48,15 @@ live since 2026-11-01 21:32 UTC. The report below replaces "Where things stand",
 
 ### Blocked on
 
-- Main's word for the after time.
+- The after time: a search that succeeds, which needs a working key in Vercel.
+- `end` on the page: ui, after main sends the field name.
 - The fill: Vedant fixes the GitHub `ANTHROPIC_API_KEY`, one cheap key test, the Console at $32,
   and main's word.
 
 ### Needs from Vedant
 
-- Fix the GitHub `ANTHROPIC_API_KEY`, and put the Console at $32.
+- Fix the `ANTHROPIC_API_KEY` in GitHub and Vercel, and put the Console at $32.
+- Paste 013 and run its check script, after main reviews it and before this code is deployed.
 - Review the queue before 3 November, after the fill (decided).
 
 ### Files changed
@@ -58,12 +64,58 @@ live since 2026-11-01 21:32 UTC. The report below replaces "Where things stand",
 - `docs/handoff/latency.md`, `docs/SESSIONS.md` (this session's row and the decisions).
 - `curator/topics.py`, `curator/__main__.py`, `curator/discover.py`, `tests/test_curator.py`,
   `docs/DEVELOPMENT.md` (one row for the new command).
+- `agent/store.py`, `agent/limits.py`, `agent/ondemand.py`, `supabase/schema.sql`,
+  `supabase/migrations/013_free_failed_searches.sql`,
+  `supabase/checks/013_free_failed_searches_check.sql`, `src/types.ts`, `src/api.ts`,
+  `src/api.test.ts`, `tests/test_quota.py`, `tests/test_ondemand.py`, `docs/PLAN.md`.
 
 ### Checks run
 
-All pass with the red-run change: pytest (505), ruff check, ruff format, mypy --strict, pnpm
-typecheck, pnpm test (220), pnpm build. No paid call and no dev server. Read-only queries on
-`on_demand_runs`, `topics`, `items`, `runs` and `curator_runs`.
+All pass with free failed searches: pytest (520), ruff check, ruff format, mypy --strict, pnpm
+typecheck, pnpm test (221), pnpm build. No paid call and no dev server. Read-only queries on
+`on_demand_runs`, `topics`, `items`, `runs` and `curator_runs`. The SQL also ran on PGlite (see
+below); it has not run on the live bank.
+
+## Free failed searches (2026-11-01, Vedant's decision)
+
+**The rule.** A search counts unless every run of it has ended as `failed` with `spent_usd` 0. A
+run still going has no outcome, so a running search counts, and so does a stale one. The dollar
+caps are unchanged.
+
+**Order of work.** Main reviews 013; Vedant pastes it and runs the check, which must say "CHECK
+PASSED"; then the code is deployed. Before the paste, the deployed code would offer a search that
+the database refuses. The other order is safe: with 013 and the old code, the old code only refuses
+sooner. Once both are live, searches 74 and 80 stop counting, so Vedant has his 2 back.
+
+**Verified.**
+
+- PGlite (in-memory Postgres, in the scratchpad, not in the repo). The schema from before 013, then
+  013 pasted twice, then both check scripts: both pass, with no row left behind. The same on a fresh
+  project from the folded `schema.sql`. Without 013, the check fails. With 2 rows of each of searches
+  74 and 80 in their real shape, a third search under limits of 1 starts.
+- The new `on_demand_usage` on the live rows, read-only: runs 74 to 85 are all `failed` with
+  `spent_usd` 0, and it returns 0 searches today and $0.
+- A test through the real agent loop and gate, with a refused key, ends with `unavailable: true`.
+
+**For main and ui.**
+
+- `end` is sent only by a search that reserved runs, after all of them have ended. A bank-only
+  search and a refused search do not send it. `fallback` stays as it is.
+- Each failed run still sends a `missed` event first, with reason `discarded` and the text "could
+  not back ... with its sources". For a refused key that text is wrong. The page must replace it
+  when `end` arrives, or the server can send reason `failed` and a plain text for a run with no
+  spend. Main decides.
+- If writing a run's settlement to the database fails, the stream still says `unavailable: true`,
+  but the run stays unsettled, so the search counts. So the page should not promise "this did not
+  count" as a certainty. This is rare.
+
+**Accepted cost of the rule.** While the model is out of reach, the daily limits do not stop a
+visitor. The limit of 300 requests an hour still holds, and each try pays one on-topic check of
+about $0.00002 on TypeSafe, so about $0.006 an hour per visitor at most. A Surprise me pick fails
+for free in an outage.
+
+**Not changed.** `begin_on_demand_run` (006): no code calls it, and a migration after the launch
+drops it.
 
 ## The likely-topic fill (step 3, approved 2026-11-01, not run)
 
