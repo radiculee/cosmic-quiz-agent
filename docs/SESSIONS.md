@@ -304,6 +304,11 @@ entry; record a reversal as a new one.
     the same rule. Paste 013 and run its check before the code is deployed.
   - A search that reserved runs ends with a new event, `{"type": "end", "unavailable": bool}`;
     ui changes the text on the page.
+- 2026-11-01, latency: Main's review of free failed searches. 013 is approved. A run that failed
+  with nothing spent sends `missed` with reason `failed` and the text "The agent could not reach
+  the model." The ui text stays as Vedant chose it, and the rare failed write is accepted. The
+  cost while the model is out of reach (one on-topic check per try) is accepted. Vedant pastes 013
+  and runs its check; main deploys the code after "CHECK PASSED".
 
 ---
 

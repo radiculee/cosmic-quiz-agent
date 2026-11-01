@@ -56,7 +56,7 @@ live since 2026-11-01 21:32 UTC. The report below replaces "Where things stand",
 ### Needs from Vedant
 
 - Fix the `ANTHROPIC_API_KEY` in GitHub and Vercel, and put the Console at $32.
-- Paste 013 and run its check script, after main reviews it and before this code is deployed.
+- Paste 013 and run its check script, before main deploys this code.
 - Review the queue before 3 November, after the fill (decided).
 
 ### Files changed
@@ -71,7 +71,7 @@ live since 2026-11-01 21:32 UTC. The report below replaces "Where things stand",
 
 ### Checks run
 
-All pass with free failed searches: pytest (520), ruff check, ruff format, mypy --strict, pnpm
+All pass with free failed searches: pytest (521), ruff check, ruff format, mypy --strict, pnpm
 typecheck, pnpm test (221), pnpm build. No paid call and no dev server. Read-only queries on
 `on_demand_runs`, `topics`, `items`, `runs` and `curator_runs`. The SQL also ran on PGlite (see
 below); it has not run on the live bank.
@@ -82,8 +82,8 @@ below); it has not run on the live bank.
 run still going has no outcome, so a running search counts, and so does a stale one. The dollar
 caps are unchanged.
 
-**Order of work.** Main reviews 013; Vedant pastes it and runs the check, which must say "CHECK
-PASSED"; then the code is deployed. Before the paste, the deployed code would offer a search that
+**Order of work.** Main approved 013. Vedant pastes it and runs the check, which must say "CHECK
+PASSED"; then main deploys the code. Before the paste, the deployed code would offer a search that
 the database refuses. The other order is safe: with 013 and the old code, the old code only refuses
 sooner. Once both are live, searches 74 and 80 stop counting, so Vedant has his 2 back.
 
@@ -101,15 +101,13 @@ sooner. Once both are live, searches 74 and 80 stop counting, so Vedant has his 
 
 - `end` is sent only by a search that reserved runs, after all of them have ended. A bank-only
   search and a refused search do not send it. `fallback` stays as it is.
-- Each failed run still sends a `missed` event first, with reason `discarded` and the text "could
-  not back ... with its sources". For a refused key that text is wrong. The page must replace it
-  when `end` arrives, or the server can send reason `failed` and a plain text for a run with no
-  spend. Main decides.
+- A run that failed with nothing spent sends `missed` with reason `failed` and the text "The agent
+  could not reach the model." A billed run with no item keeps reason `discarded` and "could not
+  back ... with its sources".
 - If writing a run's settlement to the database fails, the stream still says `unavailable: true`,
-  but the run stays unsettled, so the search counts. So the page should not promise "this did not
-  count" as a certainty. This is rare.
+  but the run stays unsettled, so the search counts. This is rare, and main accepted it.
 
-**Accepted cost of the rule.** While the model is out of reach, the daily limits do not stop a
+**Accepted cost of the rule (main, 2026-11-01).** While the model is out of reach, the daily limits do not stop a
 visitor. The limit of 300 requests an hour still holds, and each try pays one on-topic check of
 about $0.00002 on TypeSafe, so about $0.006 an hour per visitor at most. A Surprise me pick fails
 for free in an outage.
