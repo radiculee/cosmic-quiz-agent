@@ -5,6 +5,7 @@ import { AgentLog, type LogLine, type LogOutcome } from "../components/AgentLog"
 import { LearnCard } from "../components/LearnCard";
 import { Link } from "../components/Link";
 import { QuizCard } from "../components/QuizCard";
+import { SearchProgress } from "../components/SearchProgress";
 import { SegmentedControl } from "../components/SegmentedControl";
 import { HeaderSettings } from "../components/HeaderSettings";
 import { TopicInput } from "../components/TopicInput";
@@ -26,6 +27,7 @@ import {
   measured,
   missed,
   nextOpen,
+  progressed,
   questionSlots,
   resolved,
   type Search,
@@ -126,6 +128,8 @@ export function ExplorePage({
   const [questionAt, setQuestionAt] = useState(0);
   const [answered, setAnswered] = useState<ReadonlySet<number>>(new Set());
   const [explanationOpen, setExplanationOpen] = useState(false);
+  // The agent log sits behind "Show details" in the progress rows; each search starts it closed.
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const [explanationLevel, setExplanationLevel] = useState<Difficulty>("easy");
   const [quotaState, refreshQuota] = useQuota();
   const request = useRef<AbortController | null>(null);
@@ -272,6 +276,7 @@ export function ExplorePage({
     setAnswered(new Set());
     setExplanationOpen(false);
     setExplanationLevel("easy");
+    setDetailsOpen(false);
     setLog({ id: searchId, topic: topic ?? SURPRISE_TOPIC, lines: [], outcome: null });
     setStreaming(true);
     viewRef.current?.scrollIntoView({ behavior: scrollBehavior(), block: "start" });
@@ -315,6 +320,9 @@ export function ExplorePage({
           });
           break;
         }
+        case "progress":
+          patch((s) => progressed(s, event.key, event.stage, event.status, event.seconds));
+          break;
         case "result":
           patch((s) => resolved(s, event.key, event.item, event.reveal_token ?? undefined));
           onLiveItem();
@@ -520,11 +528,20 @@ export function ExplorePage({
       <div ref={viewRef} className="mt-10 w-full scroll-mt-32" aria-live="polite">
         {log && logOutcome && (
           <div className="mb-8">
+            {search && search.slots.some((slot) => slot.source === "live") && (
+              <SearchProgress
+                key={log.id}
+                slots={search.slots}
+                detailsOpen={detailsOpen}
+                onToggleDetails={() => setDetailsOpen((open) => !open)}
+              />
+            )}
             <AgentLog
               key={log.id}
               topic={log.topic}
               lines={log.lines}
               outcome={logOutcome}
+              open={detailsOpen}
             />
             {search && search.runs.length > 0 && (
               <p className="scene-note mt-3 text-sm">

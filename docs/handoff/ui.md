@@ -122,11 +122,15 @@ The checks above pass and main's review has no open findings.
 - Rank fact wording made exact (`4a9d6a1`): Zhurong, Curiosity and Spirit now say only what their pages say.
 - Learn card B (e): `TopicGrid` draws `topicVisual(topic)` from media's `src/topics.ts`. Image card: 96/112 px thumbnail, credit line with the licence and the file page linked, alt text from the credit. Fact card: a plain outline glyph per category (`FactGlyph.tsx`) and the fact. A topic with neither shows its name only. Read topics get a teal "Read" ribbon and a teal border. The title is the one link, stretched over the card; the credit links sit above it. Tab order: title, licence, file page. `src/topicGrid.test.tsx` renders the grid to markup and checks the links, their order, the fact, the glyph and the ribbon.
 
+- Rebased on origin/main (c9894d6) and passed `{ seconds, choice }` to `afterAnswer` (`08fb147`). `QuizCard`'s `onAnswered` now also gives the option picked.
+- Progress rows (f): `src/components/SearchProgress.tsx` with pure helpers in `src/progress.ts`. One row per item (questions first, then explanations). Each row has four stages (Search, Read, Write, Verify), a status line and the time left. `ExplorePage` now handles the `progress` event with `progressed()`. The agent log sits behind "Show details" (closed for each new search).
+  - Stage and status come only from `progress` events. The stage bar moves only on an event.
+  - Time left is the plan's `estimate_seconds` less the seconds since the run's first progress, on a clock that ticks once a second. Past the estimate it says "Taking longer than usual". No estimate: no time shown.
+  - States: waiting ("Starting", whole estimate), running (stage, status, time left), loading from the bank, ready (all four stages filled), left out (rust bar, "Left out").
+
 ## Next
 
-1. Rebase on origin/main after main pushes. Then pass `{ seconds, choice }` to `afterAnswer` in `QuizPage` and `ExplorePage` `onAnswered`.
-2. Progress rows, after latency's parallel search is on `main`.
-3. When main says seo's step 2 is on `main`: in `LearnPage.tsx`, when the topics have loaded and `/learn/<slug>` matches no topic, render `<NotFoundPage topics={topics} />` (on `session/seo`, 86b984e).
+1. When main says seo's step 2 is on `main`: in `LearnPage.tsx`, when the topics have loaded and `/learn/<slug>` matches no topic, render `<NotFoundPage topics={topics} />` (on `session/seo`, 86b984e).
 
 Optional, not now (main's note): at sm and wider, a name-only Learn card beside an image card stretches tall and empty. It should be rare once the image fill has run.
 
