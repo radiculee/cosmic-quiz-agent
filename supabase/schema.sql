@@ -562,6 +562,24 @@ begin
 end;
 $$;
 
+-- Whether a live search counts against the daily search limits. A search counts unless every run
+-- of it has ended as failed with nothing spent, which is what a refused key or a model outage
+-- leaves (migration 013). A run still going has no outcome yet, so a search still running counts,
+-- and so does a stale one whose run was killed. agent/store.py `_counted_searches` is the same
+-- rule. The dollar caps do not use it: they count each run's spend or reservation as before.
+create or replace function public.on_demand_search_counts(p_search_id bigint)
+returns boolean
+language sql
+stable
+set search_path = ''
+as $$
+    select exists (
+        select 1 from public.on_demand_runs r
+        where (r.id = p_search_id or r.search_id = p_search_id)
+          and (r.outcome is distinct from 'failed' or r.spent_usd is distinct from 0)
+    );
+$$;
+
 -- Open a live search and reserve its runs (migration 010). p_items is a JSON array of {"mode", "difficulty"} in
 -- plan order. Returns {"ok": true, "ids": [...], "limit": null | "day_usd" | "month_usd"} with the
 -- ids of the items reserved, in plan order (the first n of p_items), and the cap that refused the
@@ -611,14 +629,17 @@ begin
     update public.on_demand_runs set user_hash = null
     where user_hash is not null and started_at < now() - interval '2 days';
 
-    -- The search counts once, against the visitor's searches today and everyone's.
+    -- The search counts once, against the visitor's searches today and everyone's. A search that
+    -- failed whole with nothing spent is not counted (migration 013).
     select count(*) into v_count from public.on_demand_runs
-    where user_hash = p_user_hash and search_id is null and started_at >= v_day;
+    where user_hash = p_user_hash and search_id is null and started_at >= v_day
+      and public.on_demand_search_counts(id);
     if v_count >= p_user_day_searches then
         return jsonb_build_object('ok', false, 'limit', 'user_day');
     end if;
     select count(*) into v_count from public.on_demand_runs
-    where search_id is null and started_at >= v_day;
+    where search_id is null and started_at >= v_day
+      and public.on_demand_search_counts(id);
     if v_count >= p_day_searches then
         return jsonb_build_object('ok', false, 'limit', 'day_searches');
     end if;
@@ -1382,6 +1403,9 @@ revoke execute on function public.begin_on_demand_search(
 grant execute on function public.begin_on_demand_search(
     text, text, jsonb, numeric, integer, integer, integer, numeric, numeric
 ) to service_role;
+revoke execute on function public.on_demand_search_counts(bigint)
+    from public, anon, authenticated;
+grant execute on function public.on_demand_search_counts(bigint) to service_role;
 revoke execute on function public.live_run_estimates() from public, anon, authenticated;
 grant execute on function public.live_run_estimates() to service_role;
 grant execute on function public.hit_request_limit(text, integer) to service_role;

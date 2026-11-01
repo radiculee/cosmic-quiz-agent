@@ -592,9 +592,11 @@ class _IdRow(BaseModel):
 
 
 class _UsageRow(BaseModel):
+    id: int
     started_at: datetime
     reserved_usd: float
     spent_usd: float | None
+    outcome: str | None
     # Null on the run that opened a search (migration 006), the one the search limits count.
     search_id: int | None = None
 
@@ -603,9 +605,21 @@ class _UsageRow(BaseModel):
         return self.search_id is None
 
     @property
+    def search(self) -> int:
+        """The search this run belongs to, as the id of the run that opened it."""
+        return self.id if self.search_id is None else self.search_id
+
+    @property
     def counted_usd(self) -> float:
         """What the caps count: the real cost once the run has ended, its reservation until then."""
         return self.reserved_usd if self.spent_usd is None else self.spent_usd
+
+
+def _counted_searches(rows: Iterable[_UsageRow]) -> set[int]:
+    """The searches that count against the daily limits, the same rule as
+    `on_demand_search_counts` (migration 013): all but those whose every run has ended as failed
+    with nothing spent. A run still going has no outcome yet, so its search counts."""
+    return {row.search for row in rows if row.outcome != "failed" or row.spent_usd != 0}
 
 
 _ATTEMPTED = TypeAdapter(list[_AttemptedJob])
@@ -831,7 +845,8 @@ class SupabaseStore:
         """Live searches so far today (the visitor's and everyone's) and the money spent today
         and this month, for the quota. Two small reads: the visitor's own searches today (at
         most the daily limit), and every run this month. No visitor hash leaves the database in
-        either."""
+        either. A search that failed whole with nothing spent is not counted (migration 013); the
+        money counts every run as before."""
         day = day_start(now)
         mine = self._rest.send(
             "GET",
@@ -850,7 +865,7 @@ class SupabaseStore:
             self._rest.read_all(
                 "/on_demand_runs",
                 {
-                    "select": "started_at,reserved_usd,spent_usd,search_id",
+                    "select": "id,started_at,reserved_usd,spent_usd,outcome,search_id",
                     "started_at": f"gte.{month_start(now).isoformat()}",
                     "order": "id",
                 },
@@ -858,9 +873,10 @@ class SupabaseStore:
             "reading this month's live runs",
         )
         today = [row for row in rows if row.started_at >= day]
+        counted = _counted_searches(rows)
         return OnDemandUsage(
-            visitor_searches_today=len(visitor_searches),
-            searches_today=sum(1 for row in today if row.opens_search),
+            visitor_searches_today=sum(1 for row in visitor_searches if row.id in counted),
+            searches_today=sum(1 for row in today if row.opens_search and row.id in counted),
             usd_today=sum(row.counted_usd for row in today),
             usd_this_month=sum(row.counted_usd for row in rows),
         )

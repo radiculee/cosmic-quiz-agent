@@ -115,7 +115,8 @@ class SearchSlots(BaseModel):
 
 class OnDemandUsage(BaseModel):
     """Live research so far, counted as `begin_on_demand_search` counts it: by start time in UTC,
-    searches by the run that opened each one, and a run that has not ended at its reservation."""
+    searches by the run that opened each one, leaving out a search that failed whole with nothing
+    spent, and a run that has not ended at its reservation."""
 
     model_config = ConfigDict(frozen=True)
 

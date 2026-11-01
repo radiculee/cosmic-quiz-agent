@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 from datetime import UTC, datetime
+from pathlib import Path
 
 import httpx2
 import pytest
@@ -152,25 +153,31 @@ def test_store_reads_the_visitors_searches_and_sums_the_month_without_other_hash
     month_rows = [
         # Yesterday, ended: counts its real cost for the month only.
         {
+            "id": 1,
             "started_at": "2026-10-07T20:00:00+00:00",
             "reserved_usd": 0.17,
             "spent_usd": 0.03,
+            "outcome": "published",
             "search_id": None,
         },
         # Today: a search's first run, ended.
         {
+            "id": 2,
             "started_at": "2026-10-08T09:00:00+00:00",
             "reserved_usd": 0.17,
             "spent_usd": 0.02,
+            "outcome": "published",
             "search_id": None,
         },
         # Today: a later run of that search, still running. It counts its reservation, but not
         # as another search.
         {
+            "id": 3,
             "started_at": "2026-10-08T09:01:00+00:00",
             "reserved_usd": 0.17,
             "spent_usd": None,
-            "search_id": 12,
+            "outcome": None,
+            "search_id": 2,
         },
     ]
 
@@ -198,9 +205,104 @@ def test_store_reads_the_visitors_searches_and_sums_the_month_without_other_hash
         "started_at": "gte.2026-10-08T00:00:00+00:00",
         "search_id": "is.null",  # the runs that opened a search
     }
-    assert month["select"] == "started_at,reserved_usd,spent_usd,search_id"
+    assert month["select"] == "id,started_at,reserved_usd,spent_usd,outcome,search_id"
     assert month["started_at"] == "gte.2026-10-01T00:00:00+00:00"
     assert "user_hash" not in month
+
+
+def usage_row(
+    run_id: int,
+    spent_usd: float | None = None,
+    outcome: str | None = None,
+    search_id: int | None = None,
+) -> dict[str, object]:
+    return {
+        "id": run_id,
+        "started_at": "2026-10-08T09:00:00+00:00",
+        "reserved_usd": 0.17,
+        "spent_usd": spent_usd,
+        "outcome": outcome,
+        "search_id": search_id,
+    }
+
+
+def usage_of(rows: list[dict[str, object]], mine: list[int]) -> OnDemandUsage:
+    """What `on_demand_usage` counts from these runs, with `mine` the visitor's searches."""
+
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        if "user_hash" in dict(request.url.params):
+            return httpx2.Response(200, json=[{"id": run_id} for run_id in mine])
+        return httpx2.Response(200, json=rows)
+
+    client = httpx2.Client(transport=httpx2.MockTransport(handler))
+    store = SupabaseStore(BASE, "sb_secret_test", client=client, retry_backoff_seconds=0.0)
+    return store.on_demand_usage("abc123", NOW)
+
+
+def test_a_search_that_failed_whole_with_no_spend_does_not_count() -> None:
+    rows = [
+        usage_row(74, 0.0, "failed"),
+        usage_row(75, 0.0, "failed", search_id=74),
+        usage_row(76, 0.0, "failed", search_id=74),
+    ]
+
+    found = usage_of(rows, mine=[74])
+
+    assert found.visitor_searches_today == 0 and found.searches_today == 0
+    assert found.usd_today == 0 and found.usd_this_month == 0
+
+
+@pytest.mark.parametrize(
+    ("first", "second"),
+    [
+        # Still running: the opening run has ended, another has not, so it counts its reservation.
+        (usage_row(74, 0.0, "failed"), usage_row(75, search_id=74)),
+        # The opening run is the one still going.
+        (usage_row(74), usage_row(75, 0.0, "failed", search_id=74)),
+        # One run was billed, so the model was reached.
+        (usage_row(74, 0.0, "failed"), usage_row(75, 0.02, "failed", search_id=74)),
+        # One run made an item.
+        (usage_row(74, 0.0, "failed"), usage_row(75, 0.02, "published", search_id=74)),
+        # A run ended with another outcome and no recorded spend: not a failed run.
+        (usage_row(74, 0.0, "failed"), usage_row(75, 0.0, "discarded", search_id=74)),
+    ],
+)
+def test_a_search_counts_unless_every_run_ended_failed_with_no_spend(
+    first: dict[str, object], second: dict[str, object]
+) -> None:
+    found = usage_of([first, second], mine=[74])
+
+    assert found.visitor_searches_today == 1 and found.searches_today == 1
+
+
+def test_only_the_free_search_is_left_out_and_the_money_still_counts_every_run() -> None:
+    rows = [
+        usage_row(74, 0.0, "failed"),  # free
+        usage_row(75, 0.0, "failed", search_id=74),
+        usage_row(80, 0.03, "published"),  # counts
+        usage_row(81),  # another visitor's, still running: counts at its reservation
+    ]
+
+    found = usage_of(rows, mine=[74, 80])
+
+    assert found.visitor_searches_today == 1
+    assert found.searches_today == 2
+    assert found.usd_today == pytest.approx(0.03 + 0.17)
+
+
+def test_the_migration_and_the_schema_have_the_same_counting_functions() -> None:
+    root = Path(__file__).parent.parent / "supabase"
+    schema = (root / "schema.sql").read_text(encoding="utf-8")
+    migration = (root / "migrations" / "013_free_failed_searches.sql").read_text(encoding="utf-8")
+
+    def function(sql: str, name: str) -> str:
+        start = sql.index(f"create or replace function public.{name}(")
+        return sql[start : sql.index("$$;", start)]
+
+    for name in ("on_demand_search_counts", "begin_on_demand_search"):
+        assert function(migration, name) == function(schema, name)
+    begin = function(schema, "begin_on_demand_search")
+    assert begin.count("public.on_demand_search_counts(id)") == 2
 
 
 def test_a_search_reserves_its_items_in_plan_order_with_the_limits_in_force() -> None:
