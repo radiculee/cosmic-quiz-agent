@@ -33,6 +33,7 @@ from curator import pipeline
 from curator.__main__ import (
     _positive_float,
     _positive_int,
+    _tell_workflow,
     _topics_of,
     command_daily,
     command_upkeep,
@@ -537,3 +538,42 @@ def test_a_failed_purge_fails_the_scheduled_run(
 
     assert status == 1
     assert "Visitor hashes were not cleared" in capsys.readouterr().out
+
+
+def test_a_run_tells_the_workflow_how_many_items_it_published(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    output = tmp_path / "github_output"
+    output.write_text("command=daily\n", encoding="utf-8")
+    monkeypatch.setenv("GITHUB_OUTPUT", str(output))
+
+    _tell_workflow(3)
+
+    assert output.read_text(encoding="utf-8") == "command=daily\npublished=3\n"
+
+
+def test_outside_actions_a_run_writes_no_step_output(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("GITHUB_OUTPUT", raising=False)
+    monkeypatch.chdir(tmp_path)
+
+    _tell_workflow(3)
+
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_the_workflow_rebuilds_the_site_once_after_the_images_and_only_when_published() -> None:
+    workflow = (Path(__file__).parent.parent / ".github" / "workflows" / "curator.yml").read_text(
+        encoding="utf-8"
+    )
+    curator = workflow.index("- name: Run the Curator")
+    images = workflow.index("- name: Fill topic images")
+    deploy = workflow.index("- name: Rebuild the site's prerendered pages")
+    assert curator < images < deploy
+    assert "id: curator" in workflow[curator:images]
+    step = workflow[deploy:]
+    assert "steps.curator.outputs.published" in step
+    assert "secrets.VERCEL_DEPLOY_HOOK_URL" in step
+    # The hook's URL is a secret: it is passed in the environment, never printed.
+    assert 'echo "$VERCEL_DEPLOY_HOOK_URL' not in step

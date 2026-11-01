@@ -35,6 +35,7 @@ It costs a fraction of a cent on TypeSafe and nothing on Anthropic.
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from collections.abc import Callable, Sequence
 from datetime import UTC, datetime
@@ -172,6 +173,17 @@ def _print_summary(summary: CuratorSummary) -> None:
     )
 
 
+def _tell_workflow(published: int) -> None:
+    """In GitHub Actions, give the workflow how many items this run published, as the step output
+    `published`. The workflow's last step calls the Vercel deploy hook only when it is above zero,
+    so the prerendered pages are rebuilt at most once a run, after the topic images are filled
+    (.github/workflows/curator.yml). Outside Actions it does nothing."""
+    path = os.environ.get("GITHUB_OUTPUT")
+    if path:
+        with open(path, "a", encoding="utf-8") as output:
+            output.write(f"published={published}\n")
+
+
 def _curator(store: SupabaseStore, settings: Settings) -> Curator | None:
     jev = make_jev(settings)
     if jev is None:
@@ -199,6 +211,7 @@ def command_build(args: argparse.Namespace, settings: Settings, store: SupabaseS
         return 1
     summary = curator.run("build", topics, jobs, skipped, Budget(args.cap), args.workers)
     _print_summary(summary)
+    _tell_workflow(summary.published)
     return 0
 
 
@@ -222,6 +235,7 @@ def command_complete(args: argparse.Namespace, settings: Settings, store: Supaba
         return 1
     summary = curator.run("complete", _topics_of(jobs), jobs, held, Budget(args.cap), args.workers)
     _print_summary(summary)
+    _tell_workflow(summary.published)
     report_missing(before, store.missing_slots(), print)
     return 0
 
@@ -294,6 +308,7 @@ def _daily(args: argparse.Namespace, settings: Settings, store: SupabaseStore) -
         jobs += news_jobs
     summary = curator.run("daily", topics, jobs, skipped, budget, args.workers)
     _print_summary(summary)
+    _tell_workflow(summary.published)
     return 0
 
 
@@ -321,6 +336,7 @@ def command_rejev(args: argparse.Namespace, settings: Settings, store: SupabaseS
         print("TYPESAFE_API_KEY is not set; nothing to re-check.")
         return 1
     failed = 0
+    published = 0
     spent = 0.0
     for target in targets:
         record = target.record
@@ -337,9 +353,11 @@ def command_rejev(args: argparse.Namespace, settings: Settings, store: SupabaseS
             continue
         status = decide(record.verification.model_copy(update={"jev": report}))
         store.apply_jev_recheck(target.item_id, status, report)
+        published += status == "published"
         spent += report.cost_usd
         print(f"{label}: Jev {report.verdict} -> {status} (${report.cost_usd:.5f})")
     print(f"Re-checked {len(targets) - failed} of {len(targets)}. Spent: TypeSafe ${spent:.6f}.")
+    _tell_workflow(published)
     return 1 if failed else 0
 
 
