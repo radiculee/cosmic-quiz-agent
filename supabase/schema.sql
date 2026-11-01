@@ -1452,7 +1452,8 @@ create table if not exists public.player_answers (
     -- The option picked, 0 to 3; null until the pages send it.
     choice smallint check (choice between 0 and 3),
     correct boolean not null,
-    seconds real not null check (seconds >= 0),
+    -- The seconds the answer took; null until the pages send it.
+    seconds real check (seconds >= 0),
     -- The streak including this answer, and the points it earned (src/game.ts scoreAnswer: at most
     -- 300 base x2 for a streak, plus a 75 speed bonus).
     streak integer not null check (streak >= 0),
