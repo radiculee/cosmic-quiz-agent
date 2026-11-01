@@ -3,7 +3,7 @@
 Notes for the seo session (`docs/SESSIONS.md`). They replace `docs/NEXT_SESSION.md` for this
 session. Update them before finishing, and commit them on `session/seo`.
 
-Last update: 2026-10-30 (CSP and media rewrite done)
+Last update: 2026-10-30 (prerender built)
 
 ## Current goal
 
@@ -104,23 +104,24 @@ Vercel Hobby allows 100 deploys a day; the Curator's hook adds at most a few.
 - Every redirect source is `/:path(.*)`. A test asserts that for each one.
 - Close-match paths: `src/closeMatch.ts`. `/lern` goes to `/learn`. The 404 page suggests near paths and sets `noindex`.
 - Favicon set, web manifest and `robots.txt` added. The icons come from `dev/make_icons.py`. The picture is a placeholder for Vedant to replace.
-- README links moved to `curiosity.`.- 711e193: `connect-src` allows the Supabase origin; `/media/:path(.*)` rewrites to the `topic-images` bucket ahead of the catch-all. Tests in `tests/test_seo.py`. One `connect-src` assertion in `tests/test_packaging.py` changed to match.
+- README links moved to `curiosity.`.- 7d2df03: step 3, the prerender. `pnpm build` now runs `node scripts/prerender.mjs`. It writes home, `/learn`, `/quiz`, `/explore` and one page per complete Learn topic, plus `sitemap.xml`, with canonical, OG, Twitter and JSON-LD. Code in `scripts/prerender/`. `topicSlug` moved to `src/slug.ts`. `dist/spa.html` is the plain shell; the catch-all rewrite now serves it. No bank key means fixed pages only. Checked against the live bank: 38 topics, 42 pages.- 711e193: `connect-src` allows the Supabase origin; `/media/:path(.*)` rewrites to the `topic-images` bucket ahead of the catch-all. Tests in `tests/test_seo.py`. One `connect-src` assertion in `tests/test_packaging.py` changed to match.
 - Rewrote only the link-preview test and the old-address test in `tests/test_packaging.py`.
 
 ## Next
 
-1. Step 3: prerender, sitemap, `Sitemap:` line in `robots.txt`, per-topic previews.
-2. JSON-LD (`WebSite` with `SearchAction`) comes with the prerender. An inline `ld+json` block in `index.html` would break the no-inline-script test.
-3. A per-page `canonical` link also comes with the prerender. One static canonical in `index.html` would be wrong for every other path, and the loads-nothing-from-another-site test rejects it.
-
-5. The title Vedant picks on Monday, into `src/brand.ts`.
+1. Per-topic preview images (1200 x 630, Pillow, media). Then a per-topic \`og:image\` and \`twitter:image\` in \`scripts/prerender/render.ts\`.
+2. Check on a Vercel preview deploy: a topic page, \`/quiz\` and a deep link serve their own file (no rewrite), and \`/lern\` serves the app.
+3. Check that the Vercel project exposes \`SUPABASE_URL\` and \`SUPABASE_PUBLISHABLE_KEY\` at build time.
+4. Validate the JSON-LD with Google's Rich Results Test after deploy.
+5. The title Vedant picks on Monday, into \`src/brand.ts\`.
+6. Rebase onto main before the push.
 
 ## Blockers
 
 - Data: the exact Supabase origin for `connect-src`.
 - Media: the Storage bucket path for the `/media/*` rewrite.
 - Latency: the Curator's deploy-hook call.
-- Vedant: approval of the `package.json` build change for prerendering (main is asking).- Main: step 2 and this commit stay held until `curiosity.vedantgaikwad.ie` serves over HTTPS (no DNS yet).
+- ui: the Learn page has no `?q=` search address, so the home page has no `SearchAction`. Add one in ui's file and I add it to the JSON-LD.- Main: step 2 and this commit stay held until `curiosity.vedantgaikwad.ie` serves over HTTPS (no DNS yet).
 - Vedant: `public/og-v2.jpg`. Until then the preview is `og-v1.jpg`, which still says COSMIC QUIZ in the picture.
 - ui: a topic typo (`/learn/antimater`) renders inside `LearnPage.tsx`, not the 404 page. When the topics have loaded and the slug matches none, ui should render `<NotFoundPage topics={topics} />`. The page then redirects or suggests.
 
