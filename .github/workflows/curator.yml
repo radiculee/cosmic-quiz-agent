@@ -92,8 +92,10 @@ jobs:
 
       # A picture or a fact for each topic card (curator/images.py, the media session). Free: no
       # model calls. It skips topics that have a picture, so most days it does little; a failure
-      # never fails the run.
+      # never fails the run. It runs only when the repository variable TOPIC_IMAGES is "on", set
+      # after Vedant has read the fill's dry run.
       - name: Fill topic images
+        if: ${{ vars.TOPIC_IMAGES == 'on' }}
         continue-on-error: true
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
