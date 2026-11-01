@@ -3,6 +3,7 @@
 python -m curator build [--topics N] [--cap USD] [--workers N] [--yes]
 python -m curator daily [--cap USD] [--workers N] [--yes]
 python -m curator complete [--cap USD] [--workers N] [--yes]
+python -m curator fill [--cap USD] [--workers N] [--yes]
 python -m curator review [--mode learn|quiz] [--difficulty easy|medium|hard] [--reported]
 python -m curator upkeep
 python -m curator rejev [--yes]
@@ -20,6 +21,8 @@ still allows. Either way it runs the same pipeline and retires news items past t
 complete fills every missing slot at once, under its cap, and reports what is still missing.
 Learn and Quiz list a topic only once it has every slot (decided 2026-10-28); a slot is tried at
 most three times, and one with an item in review waits for the review queue.
+fill researches the likely topics visitors will type (FILL_TOPICS in curator/topics.py) in the same
+way as build, and is stored as a build. It is run by hand; the scheduled workflow never runs it.
 review shows each item the gate sent to review, with its sources, and publishes or discards it
 on your decision (free); with --reported it shows the published items that players' reports
 have hidden instead, to keep or discard. upkeep does the free part of a daily run only: it stores
@@ -68,13 +71,14 @@ from curator.pipeline import (
     open_jobs,
 )
 from curator.review import review, review_reported
-from curator.topics import BUILD_TOPICS
+from curator.topics import BUILD_TOPICS, FILL_TOPICS
 
 # More retries than the CLI: a Curator run sends many requests and may meet rate limits.
 CURATOR_MAX_RETRIES = 6
 BUILD_CAP_USD = 6.00  # approved 2026-10-02 for the 30-topic build (estimate about $5)
 DAILY_CAP_USD = 0.40  # approved 2026-10-02 for one news topic a day (estimate about $0.17)
 COMPLETE_CAP_USD = 3.00  # approved 2026-10-28 for the 67 missing slots (estimate about $2)
+FILL_CAP_USD = 5.00  # approved 2026-11-01 for the 30 likely topics (estimate $4.50 to $5.00)
 DEFAULT_WORKERS = 3
 DISCOVERY_COST_TYPICAL = 0.004  # one short Haiku call over the feed headlines
 # Missing slots a daily run fills before its news topic: one topic's worth, about $0.17 typical
@@ -196,14 +200,30 @@ def _curator(store: SupabaseStore, settings: Settings) -> Curator | None:
 
 
 def command_build(args: argparse.Namespace, settings: Settings, store: SupabaseStore) -> int:
+    names = BUILD_TOPICS[: args.topics] if args.topics else BUILD_TOPICS
+    return _build("Build", names, args, settings, store)
+
+
+def command_fill(args: argparse.Namespace, settings: Settings, store: SupabaseStore) -> int:
+    return _build("Fill", FILL_TOPICS, args, settings, store)
+
+
+def _build(
+    label: str,
+    names: Sequence[str],
+    args: argparse.Namespace,
+    settings: Settings,
+    store: SupabaseStore,
+) -> int:
+    """Research evergreen topics in both modes at every level, skipping jobs already run. Always
+    stored with the trigger `build`, which `curator_runs_trigger_check` allows."""
     curator = _curator(store, settings)
     if curator is None:
         return 1
     curator.flush_pending()
-    names = BUILD_TOPICS[: args.topics] if args.topics else BUILD_TOPICS
     topics = [TopicRef(name=name, kind="evergreen") for name in names]
     jobs, skipped = curator.plan(topics)
-    print(f"Build: {len(topics)} topics x 2 modes x 3 difficulties.")
+    print(f"{label}: {len(topics)} topics x 2 modes x 3 difficulties.")
     if not jobs:
         print("Every job is already in the bank; nothing to do.")
         return 0
@@ -388,8 +408,7 @@ def command_review(args: argparse.Namespace, settings: Settings, store: Supabase
     return 0
 
 
-def main(argv: list[str] | None = None) -> int:
-    use_utf8_output()
+def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="python -m curator", description=__doc__.splitlines()[0])
     commands = parser.add_subparsers(dest="command", required=True)
 
@@ -413,7 +432,12 @@ def main(argv: list[str] | None = None) -> int:
         "--cap", type=_positive_float, default=COMPLETE_CAP_USD, help="Anthropic cap in USD."
     )
 
-    for command in (build, daily, complete):
+    fill = commands.add_parser("fill", help="Research the likely topics visitors will type.")
+    fill.add_argument(
+        "--cap", type=_positive_float, default=FILL_CAP_USD, help="Anthropic cap in USD."
+    )
+
+    for command in (build, daily, complete, fill):
         command.add_argument("--workers", type=_positive_int, default=DEFAULT_WORKERS)
         command.add_argument("--yes", action="store_true", help="Approve the cost in advance.")
 
@@ -430,13 +454,19 @@ def main(argv: list[str] | None = None) -> int:
         "rejev", help="Re-run Jev on items whose Jev check failed (TypeSafe, under a cent)."
     )
     rejev.add_argument("--yes", action="store_true", help="Approve the cost in advance.")
-    args = parser.parse_args(argv)
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    use_utf8_output()
+    args = _parser().parse_args(argv)
 
     settings = load_settings()
     handlers = {
         "build": command_build,
         "daily": command_daily,
         "complete": command_complete,
+        "fill": command_fill,
         "review": command_review,
         "upkeep": command_upkeep,
         "rejev": command_rejev,

@@ -58,6 +58,7 @@ The command-line tools, and what each one costs:
 | `python -m curator build` | the 30 evergreen topics, each in both modes at three levels | about $5, capped at $6 |
 | `python -m curator daily` | fills up to 6 missing levels, then one topic from the NASA and ESA news, and retires old items | about $0.17, capped at $0.40 |
 | `python -m curator complete` | every level a listed topic still lacks (3 tries a level) | about $0.03 a level, capped at $3 |
+| `python -m curator fill` | the 30 likely topics visitors will type, each in both modes at three levels; by hand only | about $5, capped at $5 |
 | `python -m curator.images` | a picture (NASA or Wikimedia, credited) or a fact card for each topic; `--dry-run` first | free |
 | `python -m curator review` | shows each item in review with its sources; you publish or discard it | free |
 | `python -m curator review --reported` | the same for items that players' reports have hidden | free |

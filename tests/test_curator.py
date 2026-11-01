@@ -31,11 +31,14 @@ from agent.tools import ToolContext
 from agent.tools.feeds import parse_rss
 from curator import pipeline
 from curator.__main__ import (
+    FILL_CAP_USD,
+    _parser,
     _positive_float,
     _positive_int,
     _tell_workflow,
     _topics_of,
     command_daily,
+    command_fill,
     command_upkeep,
     report_missing,
 )
@@ -51,7 +54,7 @@ from curator.pipeline import (
     plan_jobs,
     run_jobs,
 )
-from curator.topics import BUILD_TOPICS, NEWS_RETIRE_DAYS
+from curator.topics import BUILD_TOPICS, FILL_TOPICS, NEWS_RETIRE_DAYS
 from evals.topics import TOPICS as EVAL_TOPICS
 from tests.conftest import FakeLLM, FakeWeb
 from tests.test_store import quiz_record
@@ -67,6 +70,7 @@ class MemoryStore:
         self.attempted = attempted or set()
         self.payloads: list[ItemPayload] = []
         self.curator_runs: dict[int, CuratorSummary | None] = {}
+        self.started: list[tuple[CuratorTrigger, tuple[str, ...], float]] = []
         self.existing: list[TopicRef] = []
         self.missing: list[MissingSlot] = []
         self.fail_writes = False
@@ -80,6 +84,7 @@ class MemoryStore:
     ) -> int:
         run_id = len(self.curator_runs) + 1
         self.curator_runs[run_id] = None
+        self.started.append((trigger, tuple(topics), dollar_cap))
         return run_id
 
     def finish_curator_run(self, curator_run_id: int, summary: CuratorSummary) -> None:
@@ -128,6 +133,12 @@ def test_build_topics_are_thirty_and_distinct_from_the_eval_set() -> None:
     assert len(BUILD_TOPICS) == 30
     assert len({t.casefold() for t in BUILD_TOPICS}) == 30
     assert not {t.casefold() for t in BUILD_TOPICS} & {t.casefold() for t in EVAL_TOPICS}
+
+
+def test_fill_topics_are_thirty_and_none_is_a_build_topic() -> None:
+    assert len(FILL_TOPICS) == 30
+    assert len({t.casefold() for t in FILL_TOPICS}) == 30
+    assert not {t.casefold() for t in FILL_TOPICS} & {t.casefold() for t in BUILD_TOPICS}
 
 
 def test_plan_runs_every_mode_and_difficulty_and_skips_attempted_jobs() -> None:
@@ -513,6 +524,51 @@ def test_upkeep_stores_left_over_runs_and_retires_without_any_model(
     # The visitor hashes past their time are cleared every day (SECURITY_AUDIT.md S13).
     assert store.purges == 1
     assert "cleared 2 live-run and 1 report visitor hash(es); deleted 5 old" in out
+
+
+def test_fill_runs_its_topics_as_a_build_and_skips_jobs_already_run(
+    tmp_path: Path, settings: Settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store = MemoryStore(attempted={job_key("Space oceans", "quiz", "easy")})
+    curator = make_curator(store, tmp_path, settings)
+    monkeypatch.setattr("curator.__main__._curator", lambda *_args: curator)
+    monkeypatch.setattr(pipeline, "produce", lambda *_args: record_with("published", cost=0.02))
+    args = argparse.Namespace(cap=FILL_CAP_USD, workers=1, yes=True)
+
+    status = command_fill(args, settings, store)  # type: ignore[arg-type]
+
+    assert status == 0
+    assert store.started == [("build", FILL_TOPICS, 5.00)]
+    assert len(store.payloads) == 179  # 30 topics x 6, less the one already run
+    assert {payload.topic.kind for payload in store.payloads} == {"evergreen"}
+
+
+def test_fill_spends_nothing_when_its_cost_is_declined(
+    tmp_path: Path, settings: Settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store = MemoryStore()
+    curator = make_curator(store, tmp_path, settings)
+    monkeypatch.setattr("curator.__main__._curator", lambda *_args: curator)
+    monkeypatch.setattr("curator.__main__.confirm", lambda *_args: False)
+    args = argparse.Namespace(cap=FILL_CAP_USD, workers=1, yes=False)
+
+    status = command_fill(args, settings, store)  # type: ignore[arg-type]
+
+    assert status == 1
+    assert not store.started and not store.payloads
+
+
+def test_fill_is_capped_at_its_approved_five_dollars_by_default() -> None:
+    assert _parser().parse_args(["fill"]).cap == 5.00
+    assert _parser().parse_args(["fill", "--cap", "1.5", "--yes"]).cap == 1.5
+
+
+def test_the_workflow_never_runs_the_fill() -> None:
+    workflow = (Path(__file__).parent.parent / ".github" / "workflows" / "curator.yml").read_text(
+        encoding="utf-8"
+    )
+
+    assert "curator fill" not in workflow
 
 
 def test_daily_clears_visitor_hashes_even_when_it_stops_early(
