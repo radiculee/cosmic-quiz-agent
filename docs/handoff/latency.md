@@ -21,6 +21,12 @@ live since 2026-11-01 21:32 UTC. The report below replaces "Where things stand",
   never runs it. Vedant's three decisions are in `docs/SESSIONS.md`.
 - Found: the Anthropic key in GitHub Actions is refused (see Blocked on). Main confirmed it in
   Actions run 41310615378 and tells Vedant.
+- A daily run whose model calls never worked now fails the workflow (`_model_calls_failed` in
+  `curator/__main__.py`). Red: every job ended without an item and spent nothing; or there were no
+  jobs and the topic choice failed and spent nothing. Green: a job reached the model; a billed
+  topic choice that failed; a failed topic choice beside jobs that made items, because a red step
+  would skip the site's rebuild. The purge still runs on a red run. The steps that save pending
+  runs use `always()`, so they run too; the image and rebuild steps are skipped.
 
 ### In progress
 
@@ -31,18 +37,10 @@ live since 2026-11-01 21:32 UTC. The report below replaces "Where things stand",
 
 - The after time and the `CHANGELOG.md` entry (step 2).
 - Running the fill, on main's word only: `python -m curator fill`, from a machine with a working
-  key. A run from this PC calls no deploy hook, and neither does `curator review`, so the site
-  picks up the new topics at the next deploy or at the next daily run that publishes. If that is
-  too late for the launch, Vedant calls the hook by hand after the review.
+  key. Learn and Quiz read `/api/topics` live, so a topic shows as soon as its sixth item is
+  published, with no deploy. After the fill's review, if the prerender is live, call the deploy
+  hook once. One deploy covers every topic published before it.
 - Step 4, per-account limits: not started; waits for main.
-- Later, not started: make the workflow red when a daily run makes nothing. Proposed change: in
-  `_daily` (`curator/__main__.py`), return 1 when `jobs_run > 0`, `no_item == jobs_run` and
-  `anthropic_cost_usd == 0`, after `_print_summary` and `_tell_workflow`. This catches a refused
-  key and a reached Console limit, and not a normal bad day, because a normal job costs money.
-  `command_daily` still runs the purge. The steps that save pending runs use `always()`, so they
-  still run; the image and rebuild steps are skipped. Add one test. A run with no jobs stays green,
-  so a run with only a failed topic choice and no gaps is not caught; add the discovery failure to
-  the check if Vedant wants that too.
 
 ### Blocked on
 
@@ -58,12 +56,12 @@ live since 2026-11-01 21:32 UTC. The report below replaces "Where things stand",
 ### Files changed
 
 - `docs/handoff/latency.md`, `docs/SESSIONS.md` (this session's row and the decisions).
-- `curator/topics.py`, `curator/__main__.py`, `tests/test_curator.py`, `docs/DEVELOPMENT.md` (one
-  row for the new command).
+- `curator/topics.py`, `curator/__main__.py`, `curator/discover.py`, `tests/test_curator.py`,
+  `docs/DEVELOPMENT.md` (one row for the new command).
 
 ### Checks run
 
-All pass with the fill's code: pytest (497), ruff check, ruff format, mypy --strict, pnpm
+All pass with the red-run change: pytest (505), ruff check, ruff format, mypy --strict, pnpm
 typecheck, pnpm test (220), pnpm build. No paid call and no dev server. Read-only queries on
 `on_demand_runs`, `topics`, `items`, `runs` and `curator_runs`.
 
