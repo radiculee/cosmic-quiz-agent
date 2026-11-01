@@ -3,8 +3,155 @@
 Notes for the latency session (`docs/SESSIONS.md`). They replace `docs/NEXT_SESSION.md` for
 this session. Update them before finishing, and commit them on `session/latency`.
 
-Last update: 2026-10-30. Stopped on main's word after the headless drive, which passed. Parallel
-search is committed; it lands after 010 is pasted and checked and 2 real searches pass.
+Last update: 2026-11-01. Fresh session, rebased on `origin/main` at `c9894d6`. Parallel search is
+live since 2026-11-01 21:32 UTC. The report below replaces "Where things stand", "Next" and
+"Blockers" further down, which are kept as the record of 2026-10-30.
+
+## Report, 2026-11-01
+
+### Done
+
+- Rebase on `origin/main` (`c9894d6`).
+- Step 2, before time: **median 145.2 s (range 118.9 to 171.6 s, n=4)**. These are all the six-run
+  searches before the cutoff, 2026-10-28 to 2026-10-30, measured as the last `finished_at` less the
+  first `started_at`. Four-run searches: median 127.7 s (n=7). The plan's "about 100 s" was low.
+- Step 3, the fill list and the estimate, below. Not run.
+- Found: the Anthropic key in GitHub Actions is refused (see Blocked on). Main confirmed it in
+  Actions run 41310615378 and tells Vedant.
+
+### In progress
+
+- Step 2, after time: waits for main's word that Vedant's real search is done. The query is
+  ready: the same filter, from the cutoff onward. The `CHANGELOG.md` entry follows it.
+
+### Left
+
+- The after time and the `CHANGELOG.md` entry (step 2).
+- The fill's code, after Vedant approves the list. `curator build` reads only `BUILD_TOPICS`, so:
+  add `FILL_TOPICS` to `curator/topics.py`, and a way to run it, for example
+  `python -m curator build --list fill`. Keep the stored trigger `build`, because a new trigger
+  needs a migration (`curator_runs_trigger_check`). Keep `BUILD_TOPICS` as it is; a test holds it at
+  30 names with no eval name.
+- Step 4, per-account limits: not started; waits for main.
+- Later, not started: make the workflow red when a daily run makes nothing. Proposed change: in
+  `_daily` (`curator/__main__.py`), return 1 when `jobs_run > 0`, `no_item == jobs_run` and
+  `anthropic_cost_usd == 0`, after `_print_summary` and `_tell_workflow`. This catches a refused
+  key and a reached Console limit, and not a normal bad day, because a normal job costs money.
+  `command_daily` still runs the purge. The steps that save pending runs use `always()`, so they
+  still run; the image and rebuild steps are skipped. Add one test. A run with no jobs stays green,
+  so a run with only a failed topic choice and no gaps is not caught; add the discovery failure to
+  the check if Vedant wants that too.
+
+### Blocked on
+
+- Main's word for the after time.
+- The fill: Vedant's approval of the list, a working Anthropic key, and the Console at $32.
+
+### Needs from Vedant
+
+1. Approve or change the fill list.
+2. Eval overlap. On 2026-10-02 the build list was set to repeat no eval topic. "Supernovae" and
+   "Dark matter" are exact eval names, and 11 others share a subject with one (marked "eval"
+   below). Recommendation: keep them. They are the likeliest to be typed, and no code in `evals/`
+   reads the bank, so the eval results stay comparable. To swap them, use the reserves.
+3. The cap. Recommendation: `--cap 5.00`, not the build's default of $6.00, to keep to the $5 line.
+4. The review queue. Plan time for it before the launch (see "What the fill gives").
+
+### Files changed
+
+- `docs/handoff/latency.md`, `docs/SESSIONS.md` (this session's row).
+
+### Checks run
+
+All pass on `c9894d6` with this report: pytest (492), ruff check, ruff format, mypy --strict,
+pnpm typecheck, pnpm test (220), pnpm build. No paid call and no dev server. Read-only queries on
+`on_demand_runs`, `topics`, `items`, `runs` and `curator_runs`.
+
+## The likely-topic fill (step 3, not run)
+
+**What visitors typed.** `on_demand_runs` has 21 searches on 19 names. 18 of the 19 now have
+published items. Only "Space oceans" has none (its one item was discarded), so visitors give one
+topic directly. The other 29 are classics, chosen to match how visitors type and what they asked
+about: short plain names, exotic physics (Antimatter, Wormholes), missions (Skylab, James Webb) and
+well-known objects (Olympus Mons).
+
+**Names are short on purpose.** A search matches the bank only on the exact name, ignoring case
+(`topic_named` in `agent/bank.py`). "Why Mars is red" does not serve a visitor who types "Mars".
+So "Moon" does not match "The Moon" either; only the list of suggestions helps there.
+
+**Checked against the live bank (read-only):** 30 distinct names, and none has a topic row except
+"Space oceans".
+
+| # | Topic | Group | Why | Eval |
+| --- | --- | --- | --- | --- |
+| 1 | Mars | Solar system | Classic | eval |
+| 2 | Jupiter | Solar system | Classic | eval |
+| 3 | Saturn | Solar system | Classic | eval |
+| 4 | The Moon | Solar system | Classic; a visitor asked about its dark side | eval |
+| 5 | Pluto | Solar system | Classic | eval |
+| 6 | Comets | Solar system | Classic; a visitor asked about meteoroids | eval |
+| 7 | Meteor showers | Solar system | A visitor asked about meteoroids | |
+| 8 | Enceladus | Solar system | Goes with "Space oceans" | |
+| 9 | Lunar eclipses | Solar system | A visitor asked about solar eclipses | |
+| 10 | Supernovae | Stars | Classic | exact |
+| 11 | Neutron stars | Stars | Classic | eval |
+| 12 | Betelgeuse | Stars | Classic | |
+| 13 | Alpha Centauri | Stars | Classic | |
+| 14 | Brown dwarfs | Stars | A visitor asked about red dwarfs | |
+| 15 | Constellations | Stars | Classic | |
+| 16 | Nebulae | Stars | Classic; a visitor asked about cosmic clouds | eval |
+| 17 | Dark matter | Cosmos | Classic | exact |
+| 18 | The Milky Way | Cosmos | Classic | eval |
+| 19 | Andromeda Galaxy | Cosmos | Classic | eval |
+| 20 | Exoplanets | Cosmos | Classic; a visitor asked about the Drake equation | eval |
+| 21 | The Fermi paradox | Cosmos | A visitor asked about the Drake equation | |
+| 22 | Time dilation | Cosmos | Visitors asked about wormholes and antimatter | |
+| 23 | Hawking radiation | Cosmos | Visitors asked about black holes | |
+| 24 | The observable universe | Cosmos | Classic | |
+| 25 | The Space Race | Exploration | A visitor asked about space travel | |
+| 26 | Cassini-Huygens | Exploration | Classic mission | |
+| 27 | New Horizons | Exploration | Classic mission | |
+| 28 | Parker Solar Probe | Exploration | Classic mission | |
+| 29 | Space debris | Exploration | Classic | |
+| 30 | Space oceans | Visitors | Typed by a visitor; no published item | |
+
+**Reserves with no eval overlap:** Oort cloud, Yuri Gagarin, The speed of light, Kepler Space
+Telescope, The multiverse.
+
+**Left out on purpose:** Artemis and Starship. They change quickly, and evergreen topics never
+retire, so their items would go out of date.
+
+**Estimate.**
+
+- Jobs: 179, which is 30 topics x 6, less the 1 "Space oceans" job already tried. `daily` can
+  retry that slot.
+- Anthropic: about **$4.50 to $5.00**. The 2 October build measured $4.98 for 180 jobs. The mean
+  since 20 October is about $0.025 a job, or about $4.50.
+- TypeSafe: about $0.04, from the prepaid balance.
+- Time: about 19 minutes on 3 workers (174 jobs took 18 min 18 s on 2 October).
+
+**The cap it counts against.** Only the Console limit: the "$5 for the 30-topic fill" line in
+November's $32. It does not count against the $20 live cap or the $3.25 daily cap, because those
+read only `on_demand_runs`, and Curator runs do not write there. The `--cap` is a hard stop on
+this one run. A job reserves its $0.17 limit before it starts, so with `--cap 5.00` no job starts
+once the spend passes $4.83. At the top of the estimate, about 5 jobs stay open, and `daily` takes
+them from its own budget.
+
+**What the fill gives.** Learn and Quiz list a topic only when all 6 slots are published.
+
+- By the measured rates, about 36% to 48% of items go to review (65 of 180 in the first build, 10
+  of 21 in the last fill) and about 8% to 14% are discarded. Expect about **65 to 85 items in
+  review**, on top of the 5 there now.
+- Few topics reach 6 slots without that review, so the Learn and Quiz lists grow only after Vedant
+  works through the queue (`python -m curator review`, free). The later the fill, the less time
+  this leaves before the launch on 3 November.
+
+**Before it runs:** a working key (the local `.env` key too, with the one cheap test call from
+earlier fills, on Vedant's word), and the Console at $32.
+
+**Also found:** `on_demand_runs` has no run between 2026-10-30 00:19 UTC and the cutoff. So the "2
+real local searches" of the deploy order left no row there, and Vedant's live search may be the
+first real parallel search. Main should weigh this when reading its result.
 
 ## Current goal
 
