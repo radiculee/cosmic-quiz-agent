@@ -17,7 +17,9 @@ difficulty. It can be re-run: jobs already in the bank are skipped, so an interr
 build continues where it stopped. daily first fills up to six slots (a mode at a difficulty) that
 listed topics still lack, oldest topic first: a live search's leftovers, or a news topic an
 earlier run stopped on. Then it picks one new topic from the NASA and ESA news feeds, if the cap
-still allows. Either way it runs the same pipeline and retires news items past their date.
+still allows. Either way it runs the same pipeline and retires news items past their date. It
+exits with 1 if its model calls never worked, for example on a refused key, so the scheduled
+workflow shows red.
 complete fills every missing slot at once, under its cap, and reports what is still missing.
 Learn and Quiz list a topic only once it has every slot (decided 2026-10-28); a slot is tried at
 most three times, and one with an item in review waits for the review queue.
@@ -55,7 +57,7 @@ from agent.tools import ToolContext, make_http_client
 from agent.verifiers import make_jev
 from agent.verifiers.jev import verify_with_jev
 from curator.discover import MAX_COST_USD as DISCOVERY_MAX_COST_USD
-from curator.discover import discover, read_news
+from curator.discover import Discovery, discover, read_news
 from curator.pipeline import (
     DIFFICULTIES,
     JOB_COST_TYPICAL,
@@ -85,6 +87,8 @@ DISCOVERY_COST_TYPICAL = 0.004  # one short Haiku call over the feed headlines
 # (decided 2026-10-28). The rest of the cap goes to the news topic, and whatever the cap stops
 # is filled the next day.
 FINISH_JOBS_PER_DAY = 6
+# Less than any real job costs. A run's totals are rounded to six places.
+NO_SPEND_USD = 0.000001
 
 
 def _positive_int(text: str) -> int:
@@ -276,6 +280,18 @@ def purge_visitor_hashes(store: SupabaseStore) -> int:
     return 0
 
 
+def _model_calls_failed(summary: CuratorSummary, discovery: Discovery) -> bool:
+    """Whether a daily run's model calls never worked: every job ended without an item and spent
+    nothing or, with no jobs, the topic choice failed and spent nothing. A refused key or a reached
+    Console limit looks like this, and a normal bad day does not, because a job that reaches the
+    model costs money. A run that made items stays green even if its topic choice failed: a failed
+    step would skip the workflow's rebuild of the site."""
+    if summary.jobs_run > 0:
+        jobs_spent = summary.anthropic_cost_usd - discovery.cost_usd
+        return summary.no_item == summary.jobs_run and jobs_spent < NO_SPEND_USD
+    return discovery.call_failed and discovery.cost_usd == 0
+
+
 def command_daily(args: argparse.Namespace, settings: Settings, store: SupabaseStore) -> int:
     status = _daily(args, settings, store)
     return max(status, purge_visitor_hashes(store))
@@ -329,6 +345,9 @@ def _daily(args: argparse.Namespace, settings: Settings, store: SupabaseStore) -
     summary = curator.run("daily", topics, jobs, skipped, budget, args.workers)
     _print_summary(summary)
     _tell_workflow(summary.published)
+    if _model_calls_failed(summary, discovery):
+        print("Every model call failed and nothing was made. Check the key and the Console limit.")
+        return 1
     return 0
 
 

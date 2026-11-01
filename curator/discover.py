@@ -90,12 +90,14 @@ class _PicksReply(BaseModel):
 
 @dataclass
 class Discovery:
-    """The chosen topic (or None), what the model call cost, and why candidates were skipped."""
+    """The chosen topic (or None), what the model call cost, why candidates were skipped, and
+    whether the model call itself failed."""
 
     topic: TopicRef | None
     usage: Usage = field(default_factory=Usage)
     cost_usd: float = 0.0
     notes: list[str] = field(default_factory=list)
+    call_failed: bool = False
 
 
 def read_news(ctx: ToolContext, say: Callable[[str], None]) -> list[FeedItem]:
@@ -192,6 +194,7 @@ def discover(
             usage=error.usage,
             cost_usd=error.usage.cost_usd(settings.price),
             notes=[f"topic choice failed: {error}"],
+            call_failed=True,
         )
     cost = usage.cost_usd(settings.price)
     try:

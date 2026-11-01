@@ -4,7 +4,7 @@ models, no network and no paid calls."""
 from __future__ import annotations
 
 import argparse
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -42,7 +42,7 @@ from curator.__main__ import (
     command_upkeep,
     report_missing,
 )
-from curator.discover import NewsPick, build_prompt, choose, discover, read_news
+from curator.discover import Discovery, NewsPick, build_prompt, choose, discover, read_news
 from curator.pipeline import (
     MAX_SLOT_ATTEMPTS,
     Budget,
@@ -370,8 +370,14 @@ def test_a_billed_topic_choice_that_fails_still_logs_its_cost(
 
     found = discover(parse_rss(RSS), [], llm, settings, ctx, NOW)
 
-    assert found.topic is None
+    assert found.topic is None and found.call_failed
     assert found.cost_usd == pytest.approx(1024 * 5 / 1_000_000)
+
+
+def test_a_topic_choice_with_no_feed_items_is_not_a_failed_call(
+    ctx: ToolContext, settings: Settings
+) -> None:
+    assert not discover([], [], FakeLLM(), settings, ctx, NOW).call_failed
 
 
 def test_a_result_that_cannot_be_saved_is_kept_on_disk(
@@ -569,6 +575,111 @@ def test_the_workflow_never_runs_the_fill() -> None:
     )
 
     assert "curator fill" not in workflow
+
+
+def refused_job() -> ItemRecord:
+    """A job whose model calls never worked: no item, and nothing spent."""
+    return record_with(None, cost=0.0).model_copy(update={"verification": None})
+
+
+def run_daily(
+    store: MemoryStore,
+    discovery: Discovery,
+    job: Callable[[], ItemRecord],
+    tmp_path: Path,
+    settings: Settings,
+    monkeypatch: pytest.MonkeyPatch,
+) -> int:
+    curator = make_curator(store, tmp_path, settings)
+    monkeypatch.setattr("curator.__main__._curator", lambda *_args: curator)
+    monkeypatch.setattr("curator.__main__.read_news", lambda *_args: [])
+    monkeypatch.setattr("curator.__main__.discover", lambda *_args: discovery)
+    monkeypatch.setattr(pipeline, "produce", lambda *_args: job())
+    args = argparse.Namespace(cap=0.40, workers=1, yes=True)
+    return command_daily(args, settings, store)  # type: ignore[arg-type]
+
+
+def test_daily_fails_when_a_refused_key_stops_every_job(
+    tmp_path: Path,
+    settings: Settings,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    store = MemoryStore()
+    found = Discovery(topic=QUASARS)
+
+    status = run_daily(store, found, refused_job, tmp_path, settings, monkeypatch)
+
+    assert status == 1
+    assert "Every model call failed" in capsys.readouterr().out
+    assert store.purges == 1  # the visitor hashes are still cleared
+
+
+def test_daily_fails_when_jobs_spend_nothing_after_a_paid_topic_choice(
+    tmp_path: Path, settings: Settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    found = Discovery(topic=QUASARS, cost_usd=0.003)
+
+    status = run_daily(MemoryStore(), found, refused_job, tmp_path, settings, monkeypatch)
+
+    assert status == 1
+
+
+def test_daily_fails_when_the_topic_choice_is_refused_and_there_are_no_jobs(
+    tmp_path: Path, settings: Settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    found = Discovery(topic=None, call_failed=True)
+
+    status = run_daily(MemoryStore(), found, refused_job, tmp_path, settings, monkeypatch)
+
+    assert status == 1
+
+
+@pytest.mark.parametrize(
+    "found",
+    [
+        Discovery(topic=None),  # no news worth a topic, and no gaps
+        Discovery(topic=None, call_failed=True, cost_usd=0.005),  # billed, so the key works
+    ],
+)
+def test_daily_stays_green_with_no_jobs_when_the_model_was_reached_or_not_needed(
+    found: Discovery, tmp_path: Path, settings: Settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    status = run_daily(MemoryStore(), found, refused_job, tmp_path, settings, monkeypatch)
+
+    assert status == 0
+
+
+def test_daily_stays_green_when_jobs_make_no_item_but_reach_the_model(
+    tmp_path: Path, settings: Settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    found = Discovery(topic=QUASARS)
+
+    status = run_daily(
+        MemoryStore(), found, lambda: record_with(None), tmp_path, settings, monkeypatch
+    )
+
+    assert status == 0
+
+
+def test_daily_stays_green_and_tells_the_workflow_when_only_the_topic_choice_failed(
+    tmp_path: Path, settings: Settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    found = Discovery(topic=QUASARS, call_failed=True)
+    output = tmp_path / "github_output"
+    monkeypatch.setenv("GITHUB_OUTPUT", str(output))
+
+    status = run_daily(
+        MemoryStore(),
+        found,
+        lambda: record_with("published", cost=0.01),
+        tmp_path,
+        settings,
+        monkeypatch,
+    )
+
+    assert status == 0
+    assert "published=6" in output.read_text(encoding="utf-8")
 
 
 def test_daily_clears_visitor_hashes_even_when_it_stops_early(
