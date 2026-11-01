@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import io
 from collections.abc import Callable
 from uuid import UUID
+from wsgiref.util import setup_testing_defaults
 
 import httpx2
 import pytest
@@ -18,7 +20,7 @@ from agent.auth import (
     checker_from_env,
     signed_in_user,
 )
-from agent.web import salted_hash
+from agent.web import request_from_environ, salted_hash
 
 BASE = "https://example.supabase.co"
 KEY = "sb_publishable_test"
@@ -201,3 +203,26 @@ def test_the_account_key_is_a_salted_hash_of_the_id_never_the_id() -> None:
 def test_the_account_key_has_the_ip_keys_form_and_cannot_match_one() -> None:
     assert account_visitor(USER_ID, "salt") == salted_hash(f"account:{USER_ID}", "salt")
     assert account_visitor(USER_ID, "salt") != salted_hash(str(USER_ID), "salt")
+
+
+# --- The request --------------------------------------------------------------------------------
+
+
+def environ_with(headers: dict[str, str]) -> dict[str, object]:
+    environ: dict[str, object] = {}
+    setup_testing_defaults(environ)
+    environ.update({"REQUEST_METHOD": "GET", "PATH_INFO": "/api/account"})
+    environ["wsgi.input"] = io.BytesIO(b"")
+    environ.update(headers)
+    return environ
+
+
+def test_a_request_without_an_authorization_header_has_none() -> None:
+    request = request_from_environ(environ_with({}))
+    assert request.authorization == ""
+
+
+def test_a_request_keeps_its_authorization_header_as_sent() -> None:
+    environ = environ_with({"HTTP_AUTHORIZATION": f"Bearer {TOKEN}"})
+    request = request_from_environ(environ)
+    assert request.authorization == f"Bearer {TOKEN}"

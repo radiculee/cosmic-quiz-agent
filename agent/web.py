@@ -53,6 +53,8 @@ class ApiRequest:
     # "same-site", "cross-site" or "none"); both "" when the client did not send them.
     content_type: str = ""
     fetch_site: str = ""
+    # The Authorization header as sent ("Bearer <token>" when signed in); "" when absent.
+    authorization: str = ""
 
 
 @dataclass(frozen=True)
@@ -218,6 +220,7 @@ def request_from_environ(environ: WSGIEnvironment) -> ApiRequest:
         visitor=salted_hash(visitor_address(ip), salt) if salt and ip else "",
         content_type=str(environ.get("CONTENT_TYPE", "")),
         fetch_site=str(environ.get("HTTP_SEC_FETCH_SITE", "")).strip().lower(),
+        authorization=str(environ.get("HTTP_AUTHORIZATION", "")),
     )
 
 
