@@ -9,6 +9,8 @@ interface DropdownProps<T extends string> {
   describedBy?: string | undefined;
   /** Grow to the height of its row (in a bar beside other controls) instead of a fixed one. */
   stretch?: boolean;
+  /** A shorter control, for the header's settings row. */
+  small?: boolean;
 }
 
 /**
@@ -25,11 +27,12 @@ export function Dropdown<T extends string>({
   disabled = [],
   describedBy,
   stretch = false,
+  small = false,
 }: DropdownProps<T>) {
   return (
     <div
       className={`relative inline-flex w-28 shrink-0 items-center justify-between gap-2 rounded-lg border border-white/10 bg-surface px-3 text-teal transition-colors hover:border-white/25 has-[select:focus-visible]:outline-2 has-[select:focus-visible]:outline-offset-2 has-[select:focus-visible]:outline-teal ${
-        stretch ? "min-h-12 self-stretch" : "h-12"
+        stretch ? "min-h-12 self-stretch" : small ? "h-10" : "h-12"
       }`}
     >
       <span aria-hidden="true" className="font-pixel text-[10px] uppercase leading-none">

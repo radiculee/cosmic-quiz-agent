@@ -3,6 +3,7 @@ import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { ApiError, fetchItem } from "../api";
 import { DiceIcon } from "../components/DiceIcon";
 import { Dropdown } from "../components/Dropdown";
+import { HeaderSettings } from "../components/HeaderSettings";
 import { LearnCard } from "../components/LearnCard";
 import { Link } from "../components/Link";
 import { TopicGrid } from "../components/TopicGrid";
@@ -38,10 +39,10 @@ export function LearnPage({ slug, ...props }: PageProps & { slug?: string | unde
 
 /**
  * The topics: a difficulty dropdown, a search box and Random, then the grid. The controls sit in
- * one solid bar that sticks to the top of the screen while the grid scrolls under it (decided
- * 2026-10-10), so they are always at hand with a single scroll; a box that scrolled on its own
- * would trap the page's scroll on a phone. The bar is one row at every width (decided
- * 2026-10-17): on a phone, Random shows only its die.
+ * the site header's settings row, which sticks to the top of the screen while the grid scrolls
+ * under it (decided 2026-10-10; moved into the header 2026-10-30), so they are always at hand
+ * with a single scroll; a box that scrolled on its own would trap the page's scroll on a phone.
+ * They are one row at every width (decided 2026-10-17): on a phone, Random shows only its die.
  */
 function LearnIndex({ topicsState, retryTopics, profile, difficulty, setDifficulty }: PageProps) {
   usePageTitle("Learn");
@@ -66,41 +67,43 @@ function LearnIndex({ topicsState, retryTopics, profile, difficulty, setDifficul
         Pick a topic for a plain-language explanation and the pages it is based on.
       </PageHeading>
 
-      <div className="pixel-border sticky top-0 z-10 mt-10 flex gap-3 rounded-sm bg-surface p-3">
-        <Dropdown
-          label="Difficulty"
-          options={DIFFICULTIES}
-          value={difficulty}
-          onChange={setDifficulty}
-          stretch
-        />
-        <label htmlFor={searchId} className="sr-only">
-          Search topics
-        </label>
-        {/* 16px text: iOS zooms the page into any smaller input. */}
-        <input
-          id={searchId}
-          type="search"
-          autoComplete="off"
-          spellCheck={false}
-          placeholder="Search topics"
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          className="min-w-0 flex-1 rounded-lg border border-white/10 bg-void px-4 py-3 text-base text-ink placeholder:text-slate/70 focus:border-teal focus:outline-none"
-        />
-        <button
-          type="button"
-          onClick={pickRandom}
-          disabled={available.length === 0}
-          title="A random topic"
-          className={`${SECONDARY_BUTTON} shrink-0 px-4 py-3 text-[9px]`}
-        >
-          <DiceIcon />
-          <span className="sr-only sm:not-sr-only">Random</span>
-        </button>
-      </div>
+      <HeaderSettings>
+        <div className="flex gap-3">
+          <Dropdown
+            label="Difficulty"
+            options={DIFFICULTIES}
+            value={difficulty}
+            onChange={setDifficulty}
+            small
+          />
+          <label htmlFor={searchId} className="sr-only">
+            Search topics
+          </label>
+          {/* 16px text: iOS zooms the page into any smaller input. */}
+          <input
+            id={searchId}
+            type="search"
+            autoComplete="off"
+            spellCheck={false}
+            placeholder="Search topics"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            className="h-10 min-w-0 flex-1 rounded-lg border border-white/10 bg-void px-4 text-base text-ink placeholder:text-slate/70 focus:border-teal focus:outline-none"
+          />
+          <button
+            type="button"
+            onClick={pickRandom}
+            disabled={available.length === 0}
+            title="A random topic"
+            className={`${SECONDARY_BUTTON} h-10 shrink-0 px-4 text-[9px]`}
+          >
+            <DiceIcon />
+            <span className="sr-only sm:not-sr-only">Random</span>
+          </button>
+        </div>
+      </HeaderSettings>
 
-      <div className="mt-6">
+      <div className="mt-10">
         <TopicsNotice state={topicsState} onRetry={retryTopics} />
         {topicsState.kind === "loaded" && (
           <>
@@ -260,16 +263,17 @@ function LearnTopic({
   return (
     <div className="pt-8">
       <h1 className="sr-only">{topic.name}</h1>
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        {back}
+      <HeaderSettings>
         <Dropdown
           label="Difficulty"
           options={DIFFICULTIES}
           value={level}
           onChange={setDifficulty}
           disabled={DIFFICULTIES.filter((option) => !topic.learn.includes(option))}
+          small
         />
-      </div>
+      </HeaderSettings>
+      {back}
       <div className="mt-6" aria-live="polite">
         {view.kind === "loading" && (
           <p className="scene-note mx-auto text-center text-sm">Loading {topic.name}...</p>

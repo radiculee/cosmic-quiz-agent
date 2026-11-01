@@ -1,6 +1,7 @@
-import { type ReactNode, useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 
 import { ApiError, fetchItem } from "../api";
+import { HeaderSettings } from "../components/HeaderSettings";
 import { ProfileStrip } from "../components/ProfileStrip";
 import { QuizCard } from "../components/QuizCard";
 import { RunHud } from "../components/RunHud";
@@ -48,18 +49,6 @@ type View =
       pointsAfter: number;
       awards: Award[];
     };
-
-/** A label beside a control, for sighted players; the control carries its own accessible name. */
-function Row({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <div className="flex flex-col items-center gap-2 sm:flex-row sm:gap-4">
-      <span aria-hidden="true" className="on-scene-muted font-pixel text-[8px] uppercase sm:w-24 sm:text-right">
-        {label}
-      </span>
-      {children}
-    </div>
-  );
-}
 
 /**
  * QUIZ: pick a difficulty and a length, then play a run against the clock, every question on a
@@ -214,16 +203,15 @@ export function QuizPage({
           question waits for an answer.
         </PageHeading>
 
-        <div className="mt-10 flex flex-col items-center gap-5">
-          <Row label="Difficulty">
+        <HeaderSettings>
+          <div className="flex flex-wrap items-center gap-3">
             <Dropdown
               label="Difficulty"
               options={DIFFICULTIES}
               value={difficulty}
               onChange={setDifficulty}
+              small
             />
-          </Row>
-          <Row label="Questions">
             <SegmentedControl
               label="Questions"
               options={RUN_LENGTHS}
@@ -231,23 +219,24 @@ export function QuizPage({
               onChange={setWanted}
               disabled={RUN_LENGTHS.filter((option) => option > count)}
               describedBy={note ? noteId : undefined}
+              compact
             />
-          </Row>
-          {note && (
-            <p id={noteId} className="scene-note max-w-md text-center text-sm">
-              {note}
-            </p>
-          )}
-        </div>
+          </div>
+        </HeaderSettings>
+        {note && (
+          <p id={noteId} className="scene-note mt-10 max-w-md text-center text-sm">
+            {note}
+          </p>
+        )}
 
-        <div className="mt-8">
+        <div className="mt-6">
           <TopicsNotice state={topicsState} onRetry={retryTopics} />
         </div>
         <button
           type="button"
           onClick={() => length !== null && start(length, difficulty)}
           disabled={length === null}
-          className={`${PRIMARY_BUTTON} mt-2 px-14 py-4 text-[11px]`}
+          className={`${PRIMARY_BUTTON} mt-8 px-14 py-4 text-[11px]`}
         >
           Start
         </button>
@@ -265,25 +254,24 @@ export function QuizPage({
 
   const answeredAll = run.results.length >= run.topics.length;
   return (
-    <div ref={viewRef} className="scroll-mt-6 pt-6" aria-live="polite">
+    <div ref={viewRef} className="scroll-mt-32 pt-6" aria-live="polite">
       <h1 className="sr-only">Quiz run, {run.difficulty}</h1>
       {view.kind !== "results" && (
         <>
-          <RunHud
-            run={run}
-            question={view.kind === "question" ? view.number : run.results.length + 1}
-            elapsed={clock.elapsed}
-            running={clock.running}
-          />
-          <div className="-mt-2 mb-4 flex justify-end">
-            <button
-              type="button"
-              onClick={endRun}
-              className="on-scene-muted font-pixel text-[8px] uppercase underline-offset-4 hover:text-ink hover:underline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-teal"
-            >
-              End run
-            </button>
-          </div>
+          <HeaderSettings>
+            <RunHud
+              run={run}
+              question={view.kind === "question" ? view.number : run.results.length + 1}
+              elapsed={clock.elapsed}
+              running={clock.running}
+              onEnd={endRun}
+            />
+          </HeaderSettings>
+          {run.repeats && (
+            <p className="scene-note mb-4 text-xs">
+              You have played every other topic at this level, so some questions repeat.
+            </p>
+          )}
         </>
       )}
       {view.kind === "loading" && <p className="scene-note mx-auto text-center text-sm">{view.label}</p>}

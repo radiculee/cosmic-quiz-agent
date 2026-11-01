@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { HeaderSlotContext } from "./components/HeaderSettings";
 import { Scene } from "./components/Scene";
 import { SiteFooter } from "./components/SiteFooter";
 import { SiteHeader } from "./components/SiteHeader";
@@ -59,6 +60,7 @@ export function App() {
   const [difficulty, setDifficulty] = useState<Difficulty>("easy");
   const [popups, setPopups] = useState<(readonly Award[])[]>([]);
   const reducedMotion = useReducedMotion();
+  const [settingsSlot, setSettingsSlot] = useState<HTMLElement | null>(null);
   const [scenesPaused, setScenesPaused] = useState(false);
   const toggleScenes = useCallback(() => setScenesPaused((paused) => !paused), []);
   const main = useRef<HTMLElement>(null);
@@ -98,14 +100,16 @@ export function App() {
     <>
       <Scene home={route.page === "home"} paused={scenesPaused} reducedMotion={reducedMotion} />
       <div className="flex min-h-svh flex-col">
-        <SiteHeader showHomeLink={route.page !== "home"} />
-        <main
-          ref={main}
-          tabIndex={-1}
-          className="mx-auto w-full max-w-3xl flex-1 px-4 pb-20 focus:outline-none"
-        >
-          {page(route, props, slideshow)}
-        </main>
+        <SiteHeader onSettingsSlot={setSettingsSlot} />
+        <HeaderSlotContext.Provider value={settingsSlot}>
+          <main
+            ref={main}
+            tabIndex={-1}
+            className="mx-auto w-full max-w-3xl flex-1 px-4 pb-20 focus:outline-none"
+          >
+            {page(route, props, slideshow)}
+          </main>
+        </HeaderSlotContext.Provider>
         <SiteFooter />
         <TrophyPopup awards={popups[0]} onClose={closePopup} />
       </div>

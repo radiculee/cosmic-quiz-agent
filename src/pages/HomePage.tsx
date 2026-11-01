@@ -115,7 +115,7 @@ export function HomePage({
       <div
         id={PROGRESS_ID}
         tabIndex={-1}
-        className="pixel-border w-full scroll-mt-6 rounded-sm bg-surface px-5 py-5 focus:outline-none sm:px-6 sm:py-6"
+        className="pixel-border w-full scroll-mt-20 rounded-sm bg-surface px-5 py-5 focus:outline-none sm:px-6 sm:py-6"
       >
         <ProfileStrip profile={profile} shelf />
         {loaded && (

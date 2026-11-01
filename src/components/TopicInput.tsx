@@ -10,6 +10,8 @@ interface TopicInputProps {
   onChange: (value: string) => void;
   /** Enter with no suggestion highlighted: start the round. */
   onSubmit: () => void;
+  /** A shorter box, for the header's settings row. */
+  small?: boolean;
 }
 
 /**
@@ -23,6 +25,7 @@ export function TopicInput({
   placeholder = "Pick a topic, e.g. Black holes",
   onChange,
   onSubmit,
+  small = false,
 }: TopicInputProps) {
   const listId = useId();
   const [open, setOpen] = useState(false);
@@ -85,7 +88,7 @@ export function TopicInput({
         onFocus={() => setOpen(true)}
         onBlur={() => setOpen(false)}
         onKeyDown={onKeyDown}
-        className="w-full rounded-lg border border-white/10 bg-surface px-5 py-4 text-base text-ink placeholder:text-slate/70 focus:border-teal focus:outline-none disabled:text-slate"
+        className={`w-full rounded-lg border border-white/10 bg-void ${small ? "h-10 px-4" : "px-5 py-4"} text-base text-ink placeholder:text-slate/70 focus:border-teal focus:outline-none disabled:text-slate`}
       />
       {showList && (
         <ul

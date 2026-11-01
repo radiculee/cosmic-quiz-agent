@@ -6,11 +6,12 @@ import { LearnCard } from "../components/LearnCard";
 import { Link } from "../components/Link";
 import { QuizCard } from "../components/QuizCard";
 import { SegmentedControl } from "../components/SegmentedControl";
+import { HeaderSettings } from "../components/HeaderSettings";
 import { TopicInput } from "../components/TopicInput";
 import { type AnswerScore, scoreAnswer } from "../game";
 import { isPlainObject } from "../guards";
 import { afterAnswer, afterLearn, afterLiveRun } from "../profile";
-import { GLOBAL_CAP_NOTICE, quotaLine } from "../quota";
+import { GLOBAL_CAP_NOTICE, quotaLine, quotaShort } from "../quota";
 import { navigate, PATHS, useLocation, usePageTitle } from "../router";
 import { startsOffScreen } from "../scroll";
 import {
@@ -448,15 +449,26 @@ export function ExplorePage({
         questions.
       </PageHeading>
 
+      <HeaderSettings>
+        <div className="flex items-center gap-3">
+          <TopicInput
+            value={query}
+            suggestions={suggestions}
+            disabled={topicsState.kind !== "loaded"}
+            placeholder="A new topic, e.g. Pulsars"
+            onChange={setQuery}
+            onSubmit={go}
+            small
+          />
+          {quota && (
+            <span className="shrink-0 font-pixel text-[8px] uppercase text-slate">
+              {quotaShort(quota)}
+            </span>
+          )}
+        </div>
+      </HeaderSettings>
+
       <div className="mt-10 w-full max-w-xl">
-        <TopicInput
-          value={query}
-          suggestions={suggestions}
-          disabled={topicsState.kind !== "loaded"}
-          placeholder="A new topic, e.g. Pulsars"
-          onChange={setQuery}
-          onSubmit={go}
-        />
         <Hint
           state={topicsState}
           status={status}
@@ -497,7 +509,7 @@ export function ExplorePage({
         Mission Control
       </button>
 
-      <div ref={viewRef} className="mt-10 w-full scroll-mt-6" aria-live="polite">
+      <div ref={viewRef} className="mt-10 w-full scroll-mt-32" aria-live="polite">
         {log && logOutcome && (
           <div className="mb-8">
             <AgentLog
@@ -523,7 +535,7 @@ export function ExplorePage({
 
         {search && showItems && (
           <div className="space-y-10">
-            <section ref={questionsRef} aria-label="Questions" className="scroll-mt-6">
+            <section ref={questionsRef} aria-label="Questions" className="scroll-mt-32">
               <QuestionStrip slots={questions} current={current} answered={answered} />
               {currentSlot && current !== null ? (
                 <div className="mt-4">
@@ -563,7 +575,7 @@ export function ExplorePage({
             </section>
 
             {lock && (
-              <section ref={explanationRef} aria-label="Explanations" className="scroll-mt-6">
+              <section ref={explanationRef} aria-label="Explanations" className="scroll-mt-32">
                 <h2 className="on-scene font-heading text-xl font-bold">Explanations</h2>
                 <div className="mt-4">
                   {explanationOpen && lock.kind === "open" ? (
@@ -830,7 +842,7 @@ function Hint({ state, status, tooLong, onRetry }: HintProps) {
       return (
         <p className={base}>
           Not in the bank yet. GO uses one search: a question at each level, then the
-          explanations, easiest first, about two to three minutes in all.
+          explanations, easiest first, about 30 seconds in all.
         </p>
       );
     case "partial":

@@ -2,17 +2,20 @@ import { formatClock, type Run, streakMultiplier } from "../game";
 
 const NUMBER = new Intl.NumberFormat("en-IE");
 
-/** The bar above the question during a run: progress, the speedrun clock, points and streak. */
+/** The run's figures and End run, drawn in the site header's settings row during a run:
+ * progress, the speedrun clock, points and streak. */
 export function RunHud({
   run,
   question,
   elapsed,
   running,
+  onEnd,
 }: {
   run: Run;
   question: number;
   elapsed: number;
   running: boolean;
+  onEnd: () => void;
 }) {
   const multiplier = streakMultiplier(run.streak + 1);
   const stats: [string, string, string?][] = [
@@ -22,20 +25,31 @@ export function RunHud({
     ["Streak", run.streak > 0 ? `${run.streak}${multiplier > 1 ? ` x${multiplier}` : ""}` : "0"],
   ];
   return (
-    <div className="mb-4">
-      <dl className="grid grid-cols-2 gap-3 rounded-lg border border-white/10 bg-surface px-4 py-3 sm:grid-cols-4">
+    <div className="flex items-center gap-3">
+      <dl className="grid flex-1 grid-cols-4 gap-2">
         {stats.map(([label, value, colour]) => (
           <div key={label}>
-            <dt className="font-pixel text-[8px] uppercase text-slate">{label}</dt>
-            <dd className={`mt-1 font-medium tabular-nums ${colour ?? "text-ink"}`}>{value}</dd>
+            <dt className="font-pixel text-[8px] uppercase text-slate">
+              <span className="sm:hidden" aria-hidden="true">
+                {label === "Question" ? "Q" : label}
+              </span>
+              <span className={label === "Question" ? "sr-only sm:not-sr-only" : "sr-only"}>
+                {label}
+              </span>
+            </dt>
+            <dd className={`mt-1 text-sm font-medium tabular-nums ${colour ?? "text-ink"}`}>
+              {value}
+            </dd>
           </div>
         ))}
       </dl>
-      {run.repeats && (
-        <p className="scene-note mt-2 text-xs">
-          You have played every other topic at this level, so some questions repeat.
-        </p>
-      )}
+      <button
+        type="button"
+        onClick={onEnd}
+        className="shrink-0 rounded-sm border border-white/15 px-3 py-2.5 font-pixel text-[8px] uppercase text-slate hover:border-white/40 hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal"
+      >
+        End run
+      </button>
     </div>
   );
 }
