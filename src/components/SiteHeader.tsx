@@ -85,7 +85,9 @@ export function SiteHeader({ onSettingsSlot }: { onSettingsSlot: (element: HTMLE
           {links}
         </nav>
         <div className="ml-auto flex items-center gap-2">
-          {/* The sign-in button goes here (data's SignInButton). */}
+          {/* The sign-in slot: main wires data's SignInButton here once it is on main. Empty and
+              without a box until then. */}
+          <div data-slot="sign-in" className="contents" />
           <a
             href={GITHUB_URL}
             target="_blank"
