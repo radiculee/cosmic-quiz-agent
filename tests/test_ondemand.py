@@ -951,6 +951,11 @@ def test_a_search_whose_every_run_failed_with_no_spend_says_the_model_was_out_of
 
     assert events[-1] == EndEvent(unavailable=True)
     assert len(of_type(events, EndEvent)) == 1
+    missed_runs = of_type(events, MissedEvent)
+    assert sorted(m.key for m in missed_runs) == sorted(EVERY_ITEM)
+    assert {(m.reason, m.message) for m in missed_runs} == {
+        ("failed", "The agent could not reach the model.")
+    }
     assert {(spent, outcome) for spent, outcome, _ in store.settled().values()} == {(0.0, "failed")}
     assert len(store.finished) == 6
 
@@ -975,6 +980,20 @@ def test_a_search_with_any_run_that_reached_the_model_is_not_unavailable(
     events = list(research(SEARCH, live))
 
     assert events[-1] == EndEvent(unavailable=False)
+    assert {m.reason for m in of_type(events, MissedEvent)} == {"failed"}
+
+
+def test_a_billed_run_with_no_item_still_says_its_sources_could_not_back_it(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    script(monkeypatch, statuses={"quiz-easy": None})
+    live, _ = services()
+
+    events = list(research(SEARCH, live))
+
+    [missed] = of_type(events, MissedEvent)
+    assert (missed.key, missed.reason) == ("quiz-easy", "discarded")
+    assert "could not back" in missed.message
 
 
 def test_a_normal_search_ends_saying_the_model_was_reached(

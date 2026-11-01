@@ -106,6 +106,9 @@ ESTIMATE_FALLBACK_SECONDS = 17.0
 
 # How a reserved run ended: what it spent and its outcome.
 _EndedRun = tuple[float, OnDemandOutcome]
+# What a run that failed with nothing spent says: it never reached the model, as with a refused key
+# or an outage, so its sources were not the problem.
+MODEL_UNREACHED_MESSAGE = "The agent could not reach the model."
 
 # --- Events ------------------------------------------------------------------------------------
 
@@ -625,12 +628,17 @@ def _unavailable() -> FallbackEvent:
     )
 
 
+def _failed_unspent(spent: float, outcome: OnDemandOutcome) -> bool:
+    """Whether a run failed with nothing spent. The cost is rounded as `finish_on_demand_run`
+    stores it."""
+    return outcome == "failed" and round(spent, 6) == 0
+
+
 def _model_unreachable(search: _Search, ended: Sequence[_EndedRun]) -> bool:
-    """Whether every reserved run ended as failed with nothing spent: the same rule as
-    `on_demand_search_counts` (migration 013), so such a search is the one not counted. The cost
-    is rounded as `finish_on_demand_run` stores it."""
+    """Whether every reserved run failed with nothing spent: the same rule as
+    `on_demand_search_counts` (migration 013), so such a search is the one not counted."""
     return len(ended) == len(search.runs) and all(
-        outcome == "failed" and round(spent, 6) == 0 for spent, outcome in ended
+        _failed_unspent(spent, outcome) for spent, outcome in ended
     )
 
 
@@ -737,6 +745,8 @@ def _run_item(
                 else None
             )
             emit(ResultEvent(key=planned.key, item=item, reveal_token=token))
+        elif _failed_unspent(spent, outcome):
+            emit(MissedEvent(key=planned.key, reason="failed", message=MODEL_UNREACHED_MESSAGE))
         else:
             emit(
                 MissedEvent(
