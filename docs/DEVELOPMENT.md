@@ -37,7 +37,9 @@ cp .env.example .env                 # then fill in the keys
 
 Paste `supabase/schema.sql` into the Supabase SQL editor. It includes every migration, so a new
 project needs nothing else. `supabase/migrations/` keeps the changes made after the first build,
-in order, for a database that already exists.
+in order, for a database that already exists. `supabase/checks/` holds checks to paste after a
+migration: each tests the new functions on the live bank and undoes its own rows (it always ends
+with an error message, "CHECK PASSED" or "CHECK FAILED").
 
 ## Run it
 
@@ -54,7 +56,9 @@ The command-line tools, and what each one costs:
 | `python -m agent learn "Pulsars"` | one explanation at EASY, printed step by step; `--verify` adds the checks | about $0.02 |
 | `python -m agent quiz "Pulsars" --difficulty hard` | one quiz question, with all three checks | about $0.03 |
 | `python -m curator build` | the 30 evergreen topics, each in both modes at three levels | about $5, capped at $6 |
-| `python -m curator daily` | one topic from the NASA and ESA news, and retires old items | about $0.17, capped at $0.40 |
+| `python -m curator daily` | fills up to 6 missing levels, then one topic from the NASA and ESA news, and retires old items | about $0.17, capped at $0.40 |
+| `python -m curator complete` | every level a listed topic still lacks (3 tries a level) | about $0.03 a level, capped at $3 |
+| `python -m curator.images` | a picture (NASA or Wikimedia, credited) or a fact card for each topic; `--dry-run` first | free |
 | `python -m curator review` | shows each item in review with its sources; you publish or discard it | free |
 | `python -m curator review --reported` | the same for items that players' reports have hidden | free |
 | `python -m curator upkeep` | stores left-over runs, retires stale items, clears old visitor hashes | free |
@@ -88,15 +92,30 @@ tool in `requirements-dev.txt`) and `pnpm audit`.
   `AGENT_MODEL`.
 - **GitHub Actions** runs the Curator every day (`.github/workflows/curator.yml`). It needs the
   secrets `ANTHROPIC_API_KEY`, `TYPESAFE_API_KEY`, `SUPABASE_URL` and `SUPABASE_SECRET_KEY`.
+  After the Curator it fills topic images (`python -m curator.images`, free), and when the run
+  published anything it calls the Vercel deploy hook once, so the prerendered pages are rebuilt.
+  The hook's URL is the secret `VERCEL_DEPLOY_HOOK_URL`; without it, that step skips.
 
 ## The live-search limits
 
 Every limit and cap is a number in `agent/limits.py` (`LimitSettings`), passed to the database
-on each call, so a change is a reviewed code change and a deploy. A temporary change, like the
-launch week of 3 to 9 November 2026, is a dated set (`LAUNCH_STARTS`, `LAUNCH_ENDS`,
-`LAUNCH_LIMITS`): `limits_at(now)` picks it for each request, so it starts and ends by itself.
-Keep the monthly cap (`usd_per_month`) under what the $10 Anthropic limit leaves after the
-daily Curator.
+on each call, so a change is a reviewed code change and a deploy. A temporary change is a dated
+set that `limits_at(now)` picks for each request, so it starts and ends by itself: November 2026
+(`NOVEMBER_LIMITS`, $20 a month for live research) and, inside it, the launch week of 3 to 9
+November (`LAUNCH_LIMITS`). Keep the monthly cap (`usd_per_month`) under what the Anthropic
+Console limit leaves after the daily Curator.
+
+A live search runs its items at once (`agent/ondemand.py`): one database call
+(`begin_on_demand_search`, migration 010) counts the search and reserves every run at $0.17, in
+plan order, while today's and the month's caps fit; the items a cap leaves out are reported as
+not started. So the day's last search can still make every item only when the daily cap holds
+(`searches_per_day` - 1) searches plus one whole reservation of 6 runs: $1.55 for the usual 4
+searches, $3.25 for the launch week's 14. Raise `usd_per_day` with `searches_per_day`.
+
+Each run streams progress events for the page's progress rows, with its usual time from
+`live_run_estimates()` (the median of the last 30 days of runs at its mode and level). Each run
+has its own thread, named `live-search-<search id>-<item>`, and `api/research.py` logs every 429
+from Anthropic with the thread's name, so the logs say which item met a rate limit.
 
 ## The repository
 
@@ -109,16 +128,16 @@ daily Curator.
 | `agent/verify.py` | layer 1: cited URLs fetched, quotes word for word, numbers on the pages |
 | `agent/verifiers/` | layer 2 (`haiku.py`) and layer 3 (`jev.py`) |
 | `agent/gate.py` | the publish rule: published, review or discarded, from the stored results |
-| `agent/ondemand.py` | a live search: the limits, the runs one at a time, the streamed log |
-| `agent/limits.py` | the live-search limits and caps, and `limits_at`, which picks the dated launch-week numbers |
+| `agent/ondemand.py` | a live search: the limits, every run at once, the streamed log and progress |
+| `agent/limits.py` | the live-search limits and caps, and `limits_at`, which picks the dated November and launch-week numbers |
 | `agent/store.py`, `agent/bank.py` | the database: writes with the secret key, public reads |
 | `agent/web.py` | the HTTP layer the functions in `api/` share |
-| `curator/` | the scheduled Curator: build, daily, review, upkeep, rejev |
+| `curator/` | the scheduled Curator: build, daily, complete, review, upkeep, rejev, and the topic images |
 | `api/` | the Vercel functions, one file per endpoint |
 | `src/` | the React and TypeScript site, with its Vitest tests beside the code |
 | `tests/` | the Python tests |
 | `evals/` | the fixed eval set and its scoring |
-| `supabase/` | the schema and its migrations |
+| `supabase/` | the schema, its migrations, and the checks to paste after a migration |
 | `dev/` | the local API server and the statistics check; never deployed |
 | `public/` | the scenes, the fonts and the link-preview image |
 | `docs/` | the design record, the session-by-session plan, the evals, the security audit and this page |
