@@ -313,8 +313,13 @@ def test_no_text_field_is_small_enough_for_ios_to_zoom_into() -> None:
             end = text.find(FIELD_ENDS[tag], match.end())
             element = text[match.end() : end]
             at = element.find('className="')
-            assert at >= 0, f"{file.name}: a <{tag}> without a plain className"
-            classes = element[at + len('className="') :].split('"', 1)[0].split()
+            if at >= 0:
+                classes = element[at + len('className="') :].split('"', 1)[0].split()
+            else:
+                # A template literal: read its static text and drop each ${...} part.
+                literal = re.search(r"className=\{`([^`]*)`\}", element)
+                assert literal, f"{file.name}: a <{tag}> without a plain className"
+                classes = re.sub(r"\$\{[^}]*\}", " ", literal.group(1)).split()
             assert "text-base" in classes or any(
                 c in classes for c in ("text-lg", "text-xl", "text-2xl")
             ), f"{file.name}: <{tag}> has no text size of 16px or more"
