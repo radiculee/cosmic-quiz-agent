@@ -119,12 +119,14 @@ The checks above pass and main's review has no open findings.
   - Zhurong: https://science.nasa.gov/image-article/apod-2021-june-15-zhurong-new-rover-on-mars/ (Tianwen-1 delivered it; northern Utopia Planitia, mid-May 2021). The "second nation" claim was dropped: NASA's statement says "second nation to ever land", which is disputed, and no page I opened says "operate a rover". I found no CNSA page I could open.
   - Perseverance: https://science.nasa.gov/mission/mars-2020-perseverance/ (landed 18 Feb 2021, Jezero Crater, Ingenuity).
 
+- Rank fact wording made exact (`4a9d6a1`): Zhurong, Curiosity and Spirit now say only what their pages say.
+- Learn card B (e): `TopicGrid` draws `topicVisual(topic)` from media's `src/topics.ts`. Image card: 96/112 px thumbnail, credit line with the licence and the file page linked, alt text from the credit. Fact card: a plain outline glyph per category (`FactGlyph.tsx`) and the fact. A topic with neither shows its name only. Read topics get a teal "Read" ribbon and a teal border. The title is the one link, stretched over the card; the credit links sit above it. Tab order: title, licence, file page. `src/topicGrid.test.tsx` renders the grid to markup and checks the links, their order, the fact, the glyph and the ribbon.
+
 ## Next
 
 1. Rebase on origin/main after main pushes. Then pass `{ seconds, choice }` to `afterAnswer` in `QuizPage` and `ExplorePage` `onAnswered`.
-2. Learn card B, with media's image and fact fields.
-3. Progress rows, after latency's parallel search is on `main`.
-4. When main says seo's step 2 is on `main`: in `LearnPage.tsx`, when the topics have loaded and `/learn/<slug>` matches no topic, render `<NotFoundPage topics={topics} />` (on `session/seo`, 86b984e).
+2. Progress rows, after latency's parallel search is on `main`.
+3. When main says seo's step 2 is on `main`: in `LearnPage.tsx`, when the topics have loaded and `/learn/<slug>` matches no topic, render `<NotFoundPage topics={topics} />` (on `session/seo`, 86b984e).
 
 ## Blockers
 
