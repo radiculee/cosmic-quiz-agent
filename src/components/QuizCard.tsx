@@ -129,16 +129,23 @@ export function QuizCard({
               )}
             </p>
             {score && <PointsPop score={score} />}
-            <p className="mt-4 leading-relaxed text-ink/90">{answer.explanation}</p>
             <Doubts doubts={answer.doubts} />
-            <QuizSourceCheck check={answer.source_check} options={question.options} />
-            <SourcesList sources={answer.sources} />
             <CardActions
               itemId={question.id}
               nextLabel={nextLabel}
               onNext={onNext}
               nextDisabled={nextDisabled}
               canReport={question.status === "published"}
+              explanation={<p className="mt-6 leading-relaxed text-ink/90">{answer.explanation}</p>}
+              sources={{
+                count: answer.sources.length,
+                content: (
+                  <>
+                    <QuizSourceCheck check={answer.source_check} options={question.options} />
+                    <SourcesList sources={answer.sources} />
+                  </>
+                ),
+              }}
             />
           </>
         )}

@@ -3,7 +3,7 @@
 Notes for the ui session (`docs/SESSIONS.md`). They replace `docs/NEXT_SESSION.md` for this
 session. Update them before finishing, and commit them on `session/ui`.
 
-Last update: 2026-10-30 (ui: stopped at main's request; prototypes built, waiting for Vedant's pick)
+Last update: 2026-11-01 (ui: header and card button row done)
 
 ## Current goal
 
@@ -105,51 +105,29 @@ The checks above pass and main's review has no open findings.
 
 ## Done
 
-- Two throwaway Learn card prototypes (A image-led, B compact). Built and screenshotted at 390 px and 1280 px.
-- No commit for them. They stay untracked on purpose (`proto.html`, `src/prototypes/`) and are deleted once Vedant picks.
-- Checks with the prototypes present: `pnpm typecheck` passes, `pnpm test` passes (149 tests). There is no `lint` script in `package.json`.
-- Vite ran only on port 5174, with no API server. It is stopped. Ports 5173 and 8787 were never used.
-- Screenshots: scratchpad `shots/` folder (A and B at 390 and 1280, focus on title and on credit link).
-- Tab order in both cards: title, then the credit links (licence, then file page). A card with no image has the title only.
+- Header (must ship): `7af0890`, with the sign-in slot named in `77aebd2`. Main checked it in a browser and approved it.
+- Explore wait text now says "about 30 seconds in all" (`7af0890`).
+- Card button row (must ship): "Read the explanation", "Sources (n)", "Next" in `CardActions`. Both panels start closed and the last choice is kept in `localStorage` (`src/panels.ts`, tested). Used by `QuizCard` (Quiz and Web) and `LearnCard`. Doubts stay visible outside the panels.
+- Learn card prototypes were built, B was picked, and the throwaway files are deleted.
 
 ## Next
 
-1. Vedant picks A or B. Delete `proto.html` and `src/prototypes/`.
-2. Wait for seo's `src/brand.ts` pass on `main`. Then `git rebase main`.
-3. Header, then the card button row (must ship).
-4. Rover ranks (each fact needs an opened NASA or CNSA source URL).
-5. Progress rows, after latency's event types are on `main`.
-6. The chosen Learn card, after media's image fields are on `main`.
+1. Rebase on origin/main after main pushes. Then pass `{ seconds, choice }` to `afterAnswer` in `QuizPage` and `ExplorePage` `onAnswered`.
+2. Rover ranks (each fact needs an opened NASA or CNSA source URL).
+3. Learn card B, with media's image and fact fields.
+4. Progress rows, after latency's parallel search is on `main`.
 
 ## Blockers
 
-- Stopped at main's request: no rebase, no header, no new work. Main lands this branch.
-- seo: `src/brand.ts` and the brand-string pass are not on `main` (they are on `session/seo`: `8cb0d15`, `cef5818`, `0906f49`).
-- Vedant: pick A or B.
-- latency: progress event types in `src/types.ts`, and a prop on `AgentLog.tsx` for "Show details".
-- media: image, credit, category and key-fact fields on `BankTopic`.
-- data: `SignInButton` props and states.
+- main: push, so the rebase and the `afterAnswer` change can happen. Main wires `SignInButton` into the header slot.
+- latency: parallel search on `main`, for the progress rows.
 
 ## Files touched
 
-- `docs/handoff/ui.md` (this file, committed).
-- `proto.html` (untracked, throwaway).
-- `src/prototypes/` (untracked, throwaway).
-- `proto-shots/` (untracked, screenshots).
+- Header: `SiteHeader.tsx`, `HeaderSettings.tsx`, `RunHud.tsx`, `App.tsx`, `Dropdown.tsx`, `TopicInput.tsx`, `TopicGrid.tsx`, the Learn, Quiz, Explore and Home pages, `header.test.ts`.
+- Card buttons: `CardActions.tsx`, `QuizCard.tsx`, `LearnCard.tsx`, `src/panels.ts`, `src/panels.test.ts`.
 
 ## Needs from Vedant
 
-Pick card A or B. Screenshots, all in `C:\Users\vedan\cqa-ui\proto-shots\` (untracked, do not commit):
-
-- `A-390.png`: A, 390 px, all 8 cards.
-- `A-1280.png`: A, 1280 px, all 8 cards.
-- `A-390-focus-title.png`: A, 390 px, focus on the title link.
-- `A-390-focus-credit.png`: A, 390 px, focus on a credit link.
-- `A-1280-focus-title.png`: A, 1280 px, focus on the title link.
-- `A-1280-focus-credit.png`: A, 1280 px, focus on a credit link.
-- `B-390.png`: B, 390 px, all 8 cards.
-- `B-1280.png`: B, 1280 px, all 8 cards.
-- `B-390-focus-title.png`: B, 390 px, focus on the title link.
-- `B-1280-focus-title.png`: B, 1280 px, focus on the title link.
-
-Also: `package.json` has no `lint` script. Say whether to add one.
+- Look at the settings that moved into the header (Quiz difficulty and run length; Web topic box).
+- No `lint` script exists in `package.json`. Say whether to add one.

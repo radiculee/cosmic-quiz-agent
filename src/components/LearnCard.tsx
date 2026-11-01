@@ -24,13 +24,20 @@ export function LearnCard({
         ))}
       </div>
       <Doubts doubts={item.doubts} />
-      <LearnSourceCheck check={item.source_check} />
-      <SourcesList sources={item.sources} />
       <CardActions
         itemId={item.id}
         nextLabel={nextLabel}
         onNext={onNext}
         canReport={item.status === "published"}
+        sources={{
+          count: item.sources.length,
+          content: (
+            <>
+              <LearnSourceCheck check={item.source_check} />
+              <SourcesList sources={item.sources} />
+            </>
+          ),
+        }}
       />
     </CardFrame>
   );
