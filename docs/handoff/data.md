@@ -3,7 +3,7 @@
 Notes for the data session (`docs/SESSIONS.md`). They replace `docs/NEXT_SESSION.md` for this
 session. Update them before finishing, and commit them on `session/data`.
 
-Last update: 2026-11-01 (data: step a done, `agent/auth.py`; step b next)
+Last update: 2026-11-01 (data: steps a and b done; step c next)
 
 ## Current goal
 
@@ -125,26 +125,41 @@ The checks above pass and main's review has no open findings.
   `main` as `bc1779d`, `bfecd2a`, `616c3cb`, `1b868c2`, `e830bbf`.
 - 2026-11-01: `session/data` rebased onto `main` (`8d4ff76`). My five earlier commits were already
   on `main` with the same content, so the rebase skipped them.
-- Step a, `afe8ef4`: `agent/auth.py` and `tests/test_auth.py` (30 tests).
+- Step a, `afe8ef4` (approved by main): `agent/auth.py` and `tests/test_auth.py`.
   - `TokenChecker.user_id(authorization)` asks Supabase's `GET /auth/v1/user` with the
-    publishable key and returns the user's UUID, or None. One request, a 5 s timeout, no retry.
-  - None for: no or malformed bearer header (no request sent), any 4xx (expired, signed out,
-    deleted), an anonymous user, an unexpected reply. 429, 5xx and network errors are also None
-    and are logged to stderr.
-  - `signed_in_user(authorization)` reads `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY` from
-    the environment; a guest when they are not set.
-  - `account_visitor(user_id, salt)`: sha256 of `"{salt}:account:{user_id}"`, the same form as
-    `agent.web.salted_hash`, never the raw id; it cannot match an IP key.
+    publishable key; the user's UUID, or None (no or bad header with no request sent, any 4xx,
+    an anonymous user, an unexpected reply; 429, 5xx and network errors are logged too). One
+    request, 5 s timeout, no retry.
+  - `signed_in_user(authorization)` reads `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY`.
+  - `account_visitor(user_id, salt)`: sha256 of `"{salt}:account:{user_id}"`, never the raw id.
+- `8fab178` (granted by main): `ApiRequest.authorization` in `agent/web.py`, read from
+  `HTTP_AUTHORIZATION` ("" when absent), with two tests in `tests/test_auth.py`.
+- `76ae3c3`: `@supabase/auth-js` 2.118.0 (MIT, released 2026-10-15, one dependency: `tslib`) in
+  `package.json` and `pnpm-lock.yaml`, approved by Vedant.
+- Step b, `61eb143`: `src/session.ts`, `src/useSession.ts`, `src/components/SignInButton.tsx`,
+  with `src/session.test.ts` (20 tests) and `src/components/SignInButton.test.tsx`.
+  - The flag: accounts are on only when the build sets `VITE_ACCOUNTS=on`,
+    `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY`. Off (the default), the auth library
+    is not in the build at all and nothing is sent to Supabase; `SignInButton` renders nothing.
+    Checked by building the button alone both ways: off, one 4.05 KB (gzipped) file; on, the
+    same plus auth-js as its own 25.9 KB chunk. The site's own bundle is unchanged (358.20 kB).
+  - On, auth-js loads only when a visitor starts a sign-in, comes back from one (`?code=` or
+    `?error_description=`) or has a saved session (`cosmic-quiz:session` in local storage).
+  - Google: a top-level redirect to Supabase and back to the same page. Email: one message with
+    a link and a 6-digit code (PKCE); a link opened in another browser says to use the code.
+    After a return, Supabase's parameters are removed from the address.
+  - Sign-out ends this browser's session only (`scope: "local"`).
+  - `authHeader()` gives `{ Authorization: "Bearer <token>" }` for a signed-in player and `{}`
+    for a guest, without loading anything. For latency's `src/api.ts`.
+  - `SignInButton`: signed in, an "Account" link to `/account`; otherwise a "Sign in" button
+    that opens a panel (Escape and an outside click close it; focus starts on Google).
 
 ## In progress
 
-- Nothing uncommitted. Next: step b.
+- Nothing uncommitted. Next: step c.
 
 ## Left
 
-b. `src/session.ts`, `src/useSession.ts`, the `VITE_ACCOUNTS` flag (off by default),
-   `SignInButton.tsx`; `@supabase/auth-js` in `package.json` and `pnpm-lock.yaml` in its own
-   commit (approved by Vedant). The email carries a link and a 6-digit code.
 c. Profile v3 in `src/profile.ts` and `src/useProfile.ts`: guest id, event log, v2 carried over
    as a baseline, the replay, the merge and the outbox.
    - A new `guest_id` after each successful merge, with a test: sign in, sign out, play as a
@@ -153,26 +168,20 @@ c. Profile v3 in `src/profile.ts` and `src/useProfile.ts`: guest id, event log, 
      keep the retry.
    - Tests: union, append, idempotent, points recalculated, v2 carried over.
 d. `AccountPage.tsx` (export as JSON; delete after the player confirms; sign out) and
-   `api/account.py` (delete with the secret key, after `agent/auth.py` checks the token).
-e. `PrivacyPage.tsx` (free now: seo's brand pass is on `main`). It says: rows kept until the
-   player deletes the account; the per-account limit key is a salted hash of the user id, those
-   limit rows stay after deletion and the hash is cleared after a day; the Supabase session is
-   kept in local storage.
+   `api/account.py` (delete with the secret key, after `agent/auth.py` checks the token); then
+   the `dev/api_server.py` route (granted by main).
+e. `PrivacyPage.tsx`. It says: rows kept until the player deletes the account; the per-account
+   limit key is a salted hash of the user id, those limit rows stay after deletion and the hash
+   is cleared after a day; the session is kept in local storage under `cosmic-quiz:session`.
 f. Text for `CHANGELOG.md` and `README.md`, for latency to fold in.
 g. After the launch, not now: a purge of long-inactive accounts, in the daily upkeep (latency's).
 
+Not yet seen in a browser: the sign-in panel has unit tests but no header slot yet, so it has
+not been drawn on a page. I will drive it in headless Chrome once ui places it or at step d.
+
 ## Blocked on
 
-- Step d's `api/account.py` needs the request's `Authorization` header, and `ApiRequest` in
-  `agent/web.py` does not carry it. `agent/web.py` has no owner in `docs/SESSIONS.md`. The change,
-  for Vedant to approve or assign:
-  - in `ApiRequest`, add `authorization: str = ""` with the comment
-    `# The Authorization header as sent ("Bearer <token>" when signed in); "" when absent.`
-  - in `request_from_environ`, add
-    `authorization=str(environ.get("HTTP_AUTHORIZATION", "")),`
-  latency needs the same field to key `api/research.py` and `api/quota.py` by account.
-- `dev/api_server.py` (no owner) needs `account` in its `from api import ...` line and
-  `"/api/account": account.app,` in `ROUTES`, for step d to run locally.
+- Nothing for steps c to e.
 
 ## Needs from Vedant
 
@@ -182,24 +191,35 @@ g. After the launch, not now: a purge of long-inactive accounts, in the daily up
 - A Google Cloud OAuth client (web app), with Supabase's callback URL as its redirect.
 - In Supabase Auth: Google and email providers on; custom SMTP with Resend; the email template
   with both `{{ .ConfirmationURL }}` and `{{ .Token }}`; site URL
-  `https://curiosity.vedantgaikwad.ie`; redirect URLs for localhost, `curiosity.` and the preview
-  domain. Keep "Anonymous sign-ins" off (anonymous users get the `authenticated` role and would
-  pass migration 011's policies; `agent/auth.py` refuses them as well).
+  `https://curiosity.vedantgaikwad.ie`. Redirect URLs, as a sign-in returns to the page it
+  started on: `https://curiosity.vedantgaikwad.ie/**`, `http://localhost:5173/**` and the
+  preview domain's pattern. Keep "Anonymous sign-ins" off (anonymous users get the
+  `authenticated` role and would pass migration 011's policies; `agent/auth.py` refuses them as
+  well).
 - A Resend account with SPF and DKIM on vedantgaikwad.ie.
-- The two unowned-file changes under "Blocked on".
-- Pass on the requests above: seo (`connect-src`), ui (route and header slot), latency
-  (`authHeader()`, `agent/auth.py` in the limits, retire items and never delete them).
+- To turn accounts on (only after they are verified): in Vercel, `VITE_ACCOUNTS=on`,
+  `VITE_SUPABASE_URL` (the same value as `SUPABASE_URL`) and `VITE_SUPABASE_PUBLISHABLE_KEY`
+  (the same as `SUPABASE_PUBLISHABLE_KEY`; browser-safe under hard rule 5); the same three in
+  `.env` locally. `.env.example` (no owner) should list them, commented out.
+- Pass on the requests above: seo (`connect-src`, and `PATHS.account = "/account"` in
+  `src/router.ts`), ui (the `/account` page slot and `<SignInButton />` in the header), latency
+  (`authHeader()` from `src/session.ts` in `src/api.ts`, `agent/auth.py` in the limits, retire
+  items and never delete them).
 
 ## Files changed
 
 - Step a: `agent/auth.py` (new), `tests/test_auth.py` (new).
+- `agent/web.py` (one field, one line), `tests/test_auth.py`.
+- `package.json`, `pnpm-lock.yaml`.
+- Step b: `src/session.ts`, `src/session.test.ts`, `src/useSession.ts`,
+  `src/components/SignInButton.tsx`, `src/components/SignInButton.test.tsx` (all new).
 - This handoff.
-- Earlier (on `main`): `supabase/migrations/011_accounts.sql`, `docs/SESSIONS.md`.
 
 ## Checks run
 
-On `session/data` at `afe8ef4`, 2026-11-01, all passing: `pytest` (478 passed), `ruff check`,
-`ruff format --check`, `mypy --strict` (86 files), `pnpm typecheck`, `pnpm test` (156 tests),
-`pnpm build`. My venv lacked media's `pillow==13.0.0` (already pinned in
-`requirements-media.txt`, read by `requirements-dev.txt`); I installed that pin so `mypy` could
-check `curator/images.py`. No dependency file changed.
+On `session/data` at `61eb143`, 2026-11-01, all passing: `pytest` (480 passed), `ruff check`,
+`ruff format --check`, `mypy --strict` (86 files), `pnpm typecheck`, `pnpm test` (177 tests in
+15 files), `pnpm build`. `tests/test_packaging.py` caught my first draft's inputs (a shared class
+constant instead of a literal `text-base`, which iOS needs); fixed before the commit. My venv
+lacked media's `pillow==13.0.0`, pinned in `requirements-media.txt`; I installed that pin. No
+other dependency changed.
