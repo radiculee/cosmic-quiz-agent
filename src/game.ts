@@ -49,19 +49,53 @@ export function scoreAnswer(
 
 // --- Ranks ------------------------------------------------------------------------------------
 
+// Each rank is a Mars rover with one fact and the page the fact comes from (all opened on
+// 2026-11-01). Saved profiles keep their points, so a player's rank changes name, not level.
 export const RANKS = [
-  { name: "Stargazer", points: 0 },
-  { name: "Cadet", points: 1_000 },
-  { name: "Navigator", points: 3_000 },
-  { name: "Astronomer", points: 7_500 },
-  { name: "Astrophysicist", points: 15_000 },
-  { name: "Cosmologist", points: 30_000 },
+  {
+    name: "Sojourner",
+    points: 0,
+    fact: "Landed with the Pathfinder mission on 4 July 1997 and rolled out onto Mars on 5 July.",
+    source: "https://science.nasa.gov/mission/mars-pathfinder/",
+  },
+  {
+    name: "Spirit",
+    points: 1_000,
+    fact: "Landed in January 2004 and drove 7.7 km before its mission ended in 2010.",
+    source: "https://science.nasa.gov/mission/mars-exploration-rovers-spirit-and-opportunity/",
+  },
+  {
+    name: "Opportunity",
+    points: 3_000,
+    fact: "Landed on 24 January 2004 and drove 45.16 km, until it went silent in June 2018.",
+    source: "https://science.nasa.gov/mission/mars-exploration-rovers-spirit-and-opportunity/",
+  },
+  {
+    name: "Curiosity",
+    points: 7_500,
+    fact: "Landed in Gale Crater on 6 August 2012 and has climbed Mount Sharp since.",
+    source: "https://science.nasa.gov/mission/msl-curiosity/",
+  },
+  {
+    name: "Zhurong",
+    points: 15_000,
+    fact: "China's rover landed in Utopia Planitia in May 2021, making China the second nation to land on Mars.",
+    source: "https://www.nasa.gov/news-release/nasa-statement-on-chinas-zhurong-mars-rover-photos/",
+  },
+  {
+    name: "Perseverance",
+    points: 30_000,
+    fact: "Landed in Jezero Crater on 18 February 2021 and carried the Ingenuity helicopter.",
+    source: "https://science.nasa.gov/mission/mars-2020-perseverance/",
+  },
 ] as const;
 
 export type RankName = (typeof RANKS)[number]["name"];
 
 export interface RankProgress {
   name: RankName;
+  /** One fact about the rover, from a NASA page. */
+  fact: string;
   next: { name: RankName; points: number } | null;
   /** Share of the way from this rank to the next, 0 to 1 (1 at the top rank). */
   progress: number;
@@ -75,10 +109,15 @@ export function rankFor(points: number): RankProgress {
   const current = RANKS[index] ?? RANKS[0];
   const next = RANKS[index + 1];
   if (!next) {
-    return { name: current.name, next: null, progress: 1 };
+    return { name: current.name, fact: current.fact, next: null, progress: 1 };
   }
   const progress = (points - current.points) / (next.points - current.points);
-  return { name: current.name, next: { name: next.name, points: next.points }, progress };
+  return {
+    name: current.name,
+    fact: current.fact,
+    next: { name: next.name, points: next.points },
+    progress,
+  };
 }
 
 // --- Runs -------------------------------------------------------------------------------------

@@ -21,8 +21,9 @@ export function ProfileStrip({ profile, shelf = false }: { profile: Profile; she
           {rank.next ? ` / ${NUMBER.format(rank.next.points)}` : ""} pts
         </p>
       </div>
+      <p className="mt-1 text-xs leading-relaxed text-slate">{rank.fact}</p>
       <div
-        className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/10"
+        className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/10"
         role="progressbar"
         aria-valuemin={0}
         aria-valuemax={100}

@@ -90,7 +90,7 @@ describe("updates", () => {
     const start: Profile = { ...EMPTY_PROFILE, points: 950, correct: 3, answered: 3 };
     const [, earned] = afterAnswer(start, "easy", 1, "t", scoreAnswer("easy", true, 1, 30), true, 1);
 
-    expect(earned).toContainEqual({ kind: "rank", name: "Cadet", points: 1_000 });
+    expect(earned).toContainEqual({ kind: "rank", name: "Spirit", points: 1_000 });
   });
 
   it("counts learned topics towards Explorer", () => {

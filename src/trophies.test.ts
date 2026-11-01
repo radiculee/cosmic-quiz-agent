@@ -139,8 +139,8 @@ describe("what is new", () => {
 
   it("notices a rank-up and names the rank's threshold", () => {
     expect(rankUp(900, 950)).toBeNull();
-    expect(rankUp(900, 1_100)).toEqual({ kind: "rank", name: "Cadet", points: 1_000 });
-    expect(rankUp(900, 3_500)).toEqual({ kind: "rank", name: "Navigator", points: 3_000 });
+    expect(rankUp(900, 1_100)).toEqual({ kind: "rank", name: "Spirit", points: 1_000 });
+    expect(rankUp(900, 3_500)).toEqual({ kind: "rank", name: "Opportunity", points: 3_000 });
   });
 });
 

@@ -8,6 +8,7 @@ import {
   lengthNote,
   planRun,
   quizTopicCount,
+  RANKS,
   rankFor,
   runAccuracy,
   scoreAnswer,
@@ -39,9 +40,34 @@ describe("points", () => {
 
 describe("ranks", () => {
   it("climbs with points and reports progress to the next rank", () => {
-    expect(rankFor(0)).toMatchObject({ name: "Stargazer", progress: 0 });
-    expect(rankFor(2_000)).toMatchObject({ name: "Cadet", progress: 0.5 });
-    expect(rankFor(50_000)).toEqual({ name: "Cosmologist", next: null, progress: 1 });
+    expect(rankFor(0)).toMatchObject({ name: "Sojourner", progress: 0 });
+    expect(rankFor(2_000)).toMatchObject({ name: "Spirit", progress: 0.5 });
+    expect(rankFor(50_000)).toMatchObject({ name: "Perseverance", next: null, progress: 1 });
+  });
+});
+
+describe("rover ranks", () => {
+  it("lists the six rovers at the agreed points", () => {
+    expect(RANKS.map(({ name, points }) => [name, points])).toEqual([
+      ["Sojourner", 0],
+      ["Spirit", 1_000],
+      ["Opportunity", 3_000],
+      ["Curiosity", 7_500],
+      ["Zhurong", 15_000],
+      ["Perseverance", 30_000],
+    ]);
+  });
+
+  it("gives every rank a fact and a NASA page it came from", () => {
+    for (const { fact, source } of RANKS) {
+      expect(fact.length).toBeGreaterThan(20);
+      expect(new URL(source).hostname).toMatch(/(^|\.)nasa\.gov$/);
+    }
+  });
+
+  it("shows the fact of the rank the points are in", () => {
+    expect(rankFor(7_500).fact).toBe(RANKS[3].fact);
+    expect(rankFor(50_000).fact).toBe(RANKS[5].fact);
   });
 });
 

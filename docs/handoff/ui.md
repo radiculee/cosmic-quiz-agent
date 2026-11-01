@@ -109,13 +109,22 @@ The checks above pass and main's review has no open findings.
 - Explore wait text now says "about 30 seconds in all" (`7af0890`).
 - Card button row (must ship): "Read the explanation", "Sources (n)", "Next" in `CardActions`. Both panels start closed and the last choice is kept in `localStorage` (`src/panels.ts`, tested). Used by `QuizCard` (Quiz and Web) and `LearnCard`. Doubts stay visible outside the panels.
 - Learn card prototypes were built, B was picked, and the throwaway files are deleted.
+- Two fixes main asked for: the iOS zoom test reads template-literal classNames (`2994840`), and the run bar shows its labels at sm and wider (`66063b2`).
+- Rover ranks (d): `RANKS` in `src/game.ts` now has Sojourner, Spirit, Opportunity, Curiosity, Zhurong and Perseverance at the same points, each with a `fact` and a `source`. `ProfileStrip` shows the fact. Tests cover the list, the facts and the sources.
+  All sources were opened on 2026-11-01 (Vedant checks them):
+  - Sojourner: https://science.nasa.gov/mission/mars-pathfinder/ (landing 4 July 1997; Sojourner deployed the night of 5 July).
+  - Spirit: https://science.nasa.gov/mission/mars-exploration-rovers-spirit-and-opportunity/ (landed 3 Jan 2004, 7.7 km, ended 2010).
+  - Opportunity: same page (landed 24 Jan 2004, 45.16 km, last contact 10 June 2018).
+  - Curiosity: https://science.nasa.gov/mission/msl-curiosity/ (landed 6 Aug 2012, Gale Crater; the page reports a 1 km climb of Mount Sharp).
+  - Zhurong: https://www.nasa.gov/news-release/nasa-statement-on-chinas-zhurong-mars-rover-photos/ (second nation to land on Mars). Landing place and month: https://science.nasa.gov/image-article/apod-2021-june-15-zhurong-new-rover-on-mars/ (northern Utopia Planitia, mid-May 2021). These are NASA pages; I found no CNSA page I could open.
+  - Perseverance: https://science.nasa.gov/mission/mars-2020-perseverance/ (landed 18 Feb 2021, Jezero Crater, Ingenuity).
 
 ## Next
 
 1. Rebase on origin/main after main pushes. Then pass `{ seconds, choice }` to `afterAnswer` in `QuizPage` and `ExplorePage` `onAnswered`.
-2. Rover ranks (each fact needs an opened NASA or CNSA source URL).
-3. Learn card B, with media's image and fact fields.
-4. Progress rows, after latency's parallel search is on `main`.
+2. Learn card B, with media's image and fact fields.
+3. Progress rows, after latency's parallel search is on `main`.
+4. When main says seo's step 2 is on `main`: in `LearnPage.tsx`, when the topics have loaded and `/learn/<slug>` matches no topic, render `<NotFoundPage topics={topics} />` (on `session/seo`, 86b984e).
 
 ## Blockers
 
