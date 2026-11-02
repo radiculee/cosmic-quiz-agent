@@ -3,7 +3,7 @@
 Notes for the ui session (`docs/SESSIONS.md`). They replace `docs/NEXT_SESSION.md` for this
 session. Update them before finishing, and commit them on `session/ui`.
 
-Last update: 2026-11-01 (ui: header and card button row done)
+Last update: 2026-11-02 (ui: all work live on main at fa23eda; idle)
 
 ## Current goal
 
@@ -133,14 +133,18 @@ The checks above pass and main's review has no open findings.
 
 ## Next
 
-1. When main says seo's step 2 is on `main`: in `LearnPage.tsx`, when the topics have loaded and `/learn/<slug>` matches no topic, render `<NotFoundPage topics={topics} />` (on `session/seo`, 86b984e).
+Nothing in progress. Waiting on main for the next item:
+
+1. When main says seo's step 2 is on `main`: in `LearnPage.tsx`, when the topics have loaded and `/learn/<slug>` matches no topic, render `<NotFoundPage topics={topics} />`.
+2. When main says accounts are set up: the sign-in slot.
+
+Accepted by Vedant as they are (2026-11-02): the trophy pop-up over the first question, and "Explanations: 0 of 3 ready" when caps leave the explanations out.
 
 Optional, not now (main's note): at sm and wider, a name-only Learn card beside an image card stretches tall and empty. It should be rare once the image fill has run.
 
 ## Blockers
 
-- main: push, so the rebase and the `afterAnswer` change can happen. Main wires `SignInButton` into the header slot.
-- latency: parallel search on `main`, for the progress rows.
+- main: the next item. Main wires `SignInButton` into the header slot.
 
 ## Files touched
 
