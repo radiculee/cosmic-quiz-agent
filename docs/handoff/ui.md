@@ -106,7 +106,7 @@ The checks above pass and main's review has no open findings.
 ## Done
 
 - Header (must ship): `7af0890`, with the sign-in slot named in `77aebd2`. Main checked it in a browser and approved it.
-- Explore wait text now says "about 30 seconds in all" (`7af0890`).
+- Explore wait text first said "about 30 seconds in all" (`7af0890`); it now says a minute or two, with the first question under a minute.
 - Card button row (must ship): "Read the explanation", "Sources (n)", "Next" in `CardActions`. Both panels start closed and the last choice is kept in `localStorage` (`src/panels.ts`, tested). Used by `QuizCard` (Quiz and Web) and `LearnCard`. Doubts stay visible outside the panels.
 - Learn card prototypes were built, B was picked, and the throwaway files are deleted.
 - Two fixes main asked for: the iOS zoom test reads template-literal classNames (`2994840`), and the run bar shows its labels at sm and wider (`66063b2`).

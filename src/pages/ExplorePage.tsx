@@ -851,15 +851,16 @@ function Hint({ state, status, tooLong, onRetry }: HintProps) {
     case "empty":
       return (
         <p className={base}>
-          Any astronomy or space topic. The agent writes a question at each level first, the EASY
-          one in about 20 seconds, then the explanations, easiest first.
+          Any astronomy or space topic. The agent writes a question and an explanation at each
+          level. The first question usually takes under a minute, and the whole topic a minute or
+          two.
         </p>
       );
     case "new":
       return (
         <p className={base}>
-          Not in the bank yet. GO uses one search: a question at each level, then the
-          explanations, easiest first, about 30 seconds in all.
+          Not in the bank yet. GO uses one search: a question and an explanation at each level,
+          usually a minute or two in all.
         </p>
       );
     case "partial":
