@@ -3,9 +3,40 @@
 Notes for the latency session (`docs/SESSIONS.md`). They replace `docs/NEXT_SESSION.md` for
 this session. Update them before finishing, and commit them on `session/latency`.
 
-Last update: 2026-11-02. On `origin/main` at `2435f0c`. Parallel search is
+Last update: 2026-11-02. On `origin/main` at `fa23eda`. Parallel search is
 live since 2026-11-01 21:32 UTC. The reports below replace "Where things stand", "Next" and
 "Blockers" further down, which are kept as the record of 2026-10-30.
+
+## Where this session stopped (2026-11-02)
+
+Vedant ended the session. No server of this session is running. No paid call was made.
+
+**State.** The EASY-first run order is live: main landed `7b00bf3` unchanged, and `origin/main` is at
+`fa23eda`. `session/latency` was rebased onto it, and nothing is left unmerged except this note.
+
+**Next, each on main's word:**
+
+1. **Measure the EASY-first order.** The next main gives the real search's numbers. Use only searches
+   with a run that did not fail, started after the deploy of `fa23eda`, with six runs. Compare the
+   total (last `finished_at` less first `started_at`) and the first question with 61.3 s and 49 s, both
+   n=1. Then update `CHANGELOG.md`, where "up to about 90 s" is still an estimate, and send main a
+   report with the seven headings. Check whether it is a cold search: the first model calls in `steps`
+   take about 20 s when cold, and quiz and learn compile apart, so a cold search should pay this twice.
+2. **Check the daily Curator run.** Did it run both modes, and were later first calls fast? This tests
+   whether the daily run keeps the schemas warm. The cause of the first-call cost stays "inferred".
+3. **The fill.** `python -m curator fill`, paid. It waits for main's word, after the cheap key test. The
+   worktree's `.env` still holds the old Anthropic key, so it needs the new one first.
+4. **Per-account limits (step 4).** Not started. It waits for main to say accounts are set up.
+
+**Decided, do not reopen.** No warm-up now, `strict: true` stays, no `max_tokens` test now. Left-out
+items are reported after the first run starts, and `SEARCH_SECONDS` stays 280. The `timeLeft` note needs
+no action: ui's branch no longer uses it in its progress code.
+
+**Tools.** The scripts in the session's scratchpad do not carry over: `search_times.py`, `why_slow.py`,
+`why_steps.py`, `why_first.py`, `why_cold.py`. Each is a read-only PostgREST query on `on_demand_runs`
+and `runs`, loading `.env` with python-dotenv; `steps` holds each call's seconds. Vercel's request logs
+for `/api/research` were still readable 15 minutes after the search; read them soon after a search if
+429s matter, as they may not stay long.
 
 ## Report, 2026-11-02, the EASY question first
 
