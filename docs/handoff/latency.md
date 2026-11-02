@@ -3,9 +3,138 @@
 Notes for the latency session (`docs/SESSIONS.md`). They replace `docs/NEXT_SESSION.md` for
 this session. Update them before finishing, and commit them on `session/latency`.
 
-Last update: 2026-11-01. Fresh session, rebased on `origin/main` at `c9894d6`. Parallel search is
-live since 2026-11-01 21:32 UTC. The report below replaces "Where things stand", "Next" and
+Last update: 2026-11-02. On `origin/main` at `2435f0c`. Parallel search is
+live since 2026-11-01 21:32 UTC. The reports below replace "Where things stand", "Next" and
 "Blockers" further down, which are kept as the record of 2026-10-30.
+
+## Report, 2026-11-02
+
+### Done
+
+- After time, in `CHANGELOG.md`: **61.3 s, n=1** (search 86, "Light speed", six runs, 2026-11-02
+  03:10:25 UTC, $0.2005). Before: median 145.2 s, n=4. Searches 74 and 80 (all failed) and 92 and 95
+  (Pulsars, three runs, all failed, $0) are left out.
+- Why each run took 35 to 61 s: see "Why search 86 took 61 s" below. No code changed.
+
+### In progress
+
+- Nothing.
+
+### Left
+
+- Main's decision on the page text and on the keep-warm options, below.
+- A warm six-run search, to measure the time without the first-call cost. Not paid for by this
+  session; the next real search within 24 hours of a run of both modes gives it.
+- The fill: after the cheap key test and main's word. Per-account limits: when accounts are set up.
+- `CHANGELOG.md` has no line yet for free failed searches or the red-run change. Main decides.
+
+### Blocked on
+
+- Nothing. The items above wait for main.
+
+### Needs from Vedant
+
+- The page text below (ui makes the change).
+- Any recurring paid warm-up needs his approval (hard rule 1). This report does not recommend one yet.
+
+### Files changed
+
+- `CHANGELOG.md`, `docs/handoff/latency.md`.
+
+### Checks run
+
+All pass: pytest, ruff check, ruff format, mypy --strict, pnpm typecheck, pnpm test, pnpm build. Read-only
+queries on `on_demand_runs`, `runs`, `curator_runs`; Vercel request logs; GitHub run logs. No paid call
+and no dev server.
+
+## Why search 86 took 61 s (2026-11-02)
+
+**Cause: most likely the one-time compile of the strict tool schemas.** It is the first model call of
+each run, not the parallel runs. This is inferred from timing: the API does not report compile time,
+and no controlled test has run (it is paid).
+
+| | Search 86 | Sequential runs (63) |
+|---|---|---|
+| First model call, each run | 19.4 to 22.6 s, 68 to 120 output tokens | warm: median 2.7 s (n=48); slow: median 21.9 s (n=15) |
+| Later model calls per run | 4.33 calls, 19.2 s, 1,276 tokens | 2.94 calls, 12.7 s, 942 tokens |
+| Seconds per 100 output tokens, later calls | 1.50 | 1.35 |
+| Tool time per run | 2.3 s | 4.1 s |
+| Run time not in the model, tools or verifiers | 0.1 to 0.3 s | median 0.3 s |
+
+Evidence:
+
+- All six runs paid it, and the times group by tool set: quiz 22.5, 22.5, 22.6 s; learn 19.4, 19.5,
+  19.8 s. Later calls in the same runs took their usual time.
+- The same 18 to 26 s is in the data since 2026-10-02, on sequential searches and the Curator, so
+  parallel runs did not cause it. A sequential search paid it once for each mode; now all six runs wait
+  together, which costs the search about 20 s, not 120 s.
+- First call against the hours since a run of the same mode ended, all 340 runs with a model call:
+
+| Hours since | Slow (over 10 s) | Fast |
+|---|---|---|
+| over 24 | 15 | 0 |
+| 1 to 24 | 3 | 8 |
+| under 1 | 7 | 305 |
+| no earlier run | 1 | 1 |
+
+- All 7 slow calls under 1 hour began together with a cold call of the same mode. Of the 3 slow calls
+  at 1 to 24 hours, one is at 23.89 hours, the edge of the window. **The other two are not explained:**
+  search 68 on 2026-10-30, at 5.15 hours, with no change to the tool or schema files since 2026-10-10.
+- Anthropic's structured outputs page: "The first time you use a specific schema, there is additional
+  latency while the grammar compiles", "cached for 24 hours from last use", and strict tool use "uses
+  the same grammar pipeline". The cache is invalidated by a change to "the set of tools"; a change
+  only to a name or description is not. The page lists Haiku 4.5, and does not state the cache's scope.
+  `agent/llm.py:299` sets `strict: true` on every tool, and the first calls ran 74.8 hours after the
+  last run with a model call: `DAILY_FROM` kept the Curator on upkeep until 2026-11-01, and that day's
+  run failed on the old key.
+
+Ruled out:
+
+- **429 retries.** The request's log has 110 lines and no 429. It has 44 Anthropic lines, all 200: 32
+  agent calls, 6 verifier calls and 6 token counts. That is the exact count with no retry at all.
+- **CPU or thread contention.** Time outside the model is flat, tools were faster, and a later call was
+  11% slower per token (n=1, within the spread between topics). Refused-key searches 74 and 80 ran six
+  threads in 0.4 s on the same function.
+
+The rest of the gap is this topic: it made more calls and wrote more. Its slowest run made 8 calls, so
+without the first-call cost it would still have taken about 41 s, not 30 s. One verifier was slow too
+(quiz-easy, 8.0 s against a usual 4.2 s), which may be its own schema compiling.
+
+**Recommendation.** Change no code in the search: not the threads, the retries or the client.
+
+1. Let the daily Curator keep the schemas warm. It costs nothing more, and it only began real runs on
+   2026-11-01. Today's run is its first with a working key. Check that it runs both modes, and that the
+   next real search within 24 hours has fast first calls. Limits: the cron at 06:17 UTC ran at 13:18,
+   12:23 and 12:50, so a day's gap can pass 24 hours by minutes; a day with jobs in one mode only leaves
+   the other cold.
+2. Add a warm-up only if the launch week's logs show cold searches. It would be one small call per tool
+   set and verifier schema, twice a day: about $0.70 a month. It first needs a test that a call with
+   `max_tokens` 1 does compile the grammar, using a changed schema, under $0.01, on main's word.
+3. Keep `strict: true`. Taking it off would remove the compile, but it needs a paid eval, and it comes
+   just before the code freeze.
+
+## The page text (for ui, Vedant chooses)
+
+The two lines in `src/pages/ExplorePage.tsx:860` and `:867` are fixed text; no estimate feeds them.
+They are right only when warm, and they also say the explanations come after the questions. In search
+86 the explanations were done first (35 s against 49 s).
+
+| | Warm | Cold |
+|---|---|---|
+| First question | 16.4, 16.8, 18.5 s (searches 50, 56, 62, rebuilt from sequential run times) | 49.0 s (search 86) |
+| Whole search | 26.0, 29.0, 58.5 s (the same searches, rebuilt) | 61.3 s (search 86) |
+
+Proposed:
+
+- Empty: "Any astronomy or space topic. The agent writes a question and an explanation at each level.
+  The first question takes 15 to 50 seconds, and the whole topic usually 30 to 60."
+- New: "Not in the bank yet. GO uses one search: a question and an explanation at each level, usually 30
+  to 60 seconds in all."
+
+**The estimates.** `live_run_estimates` feeds only the progress rows, through `estimate_seconds` and
+`timeLeft` in `src/progress.ts`. Keep it. Its sum matches a run's real time within 0.3 s, and its medians
+(19.3 to 27.2 s) are right for a warm run. A cold run passes its estimate, and the row then says "Taking
+longer than usual", which is true. Do not feed the fixed text from it: a median leaves out the cold case.
 
 ## Report, 2026-11-01
 
