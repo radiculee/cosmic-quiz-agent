@@ -233,8 +233,9 @@ def test_the_plan_takes_from_the_bank_what_it_already_has() -> None:
 
 
 def test_every_run_has_the_agents_whole_budget_and_ends_inside_vercels_limit() -> None:
-    # Every run of a search starts in its first seconds, so none needs a shorter budget.
-    assert Settings().max_seconds < ondemand.SEARCH_SECONDS < 300  # Vercel's limit
+    # A search has two batches at most, the EASY question and then the rest, so none needs a
+    # shorter budget.
+    assert 2 * Settings().max_seconds < ondemand.SEARCH_SECONDS < 300  # Vercel's limit
 
 
 def test_each_live_item_carries_its_usual_run_time_and_bank_items_none() -> None:
@@ -519,11 +520,13 @@ def script(
     crash: frozenset[str] = frozenset(),
     together: int = 0,
     refused: frozenset[str] = frozenset(),
+    alone: frozenset[str] = frozenset(),
 ) -> Script:
     """Replace each agent run and the gate with the stored quiz record, made for the run's mode
     and difficulty and decided as `statuses` says (published by default). With `together`, each
-    run waits until that many runs are going at once, and fails if they never are. A run in
-    `refused` ends as a refused key leaves it: no answer, no verdict, nothing spent."""
+    run not in `alone` waits until that many such runs are going at once, and fails if they never
+    are. A run in `refused` ends as a refused key leaves it: no answer, no verdict, nothing
+    spent."""
     record = quiz_record()
     seen = Script()
     barrier = threading.Barrier(together) if together else None
@@ -538,7 +541,7 @@ def script(
         ) -> RunResult:
             key = f"{mode}-{difficulty}"
             seen.runs.append((key, settings.max_seconds, threading.current_thread().name))
-            if barrier is not None:
+            if barrier is not None and key not in alone:
                 barrier.wait(timeout=5)
             if key in crash:
                 raise RuntimeError("the agent fell over")
@@ -630,43 +633,289 @@ def test_a_search_reserves_every_item_in_one_call_and_counts_once(
     assert jev_lines and all(line.verdict is None for line in jev_lines)
 
 
-def test_every_run_of_a_search_goes_at_once(monkeypatch: pytest.MonkeyPatch) -> None:
-    # Each run waits until all six are going: run one at a time, the first would time out.
-    script(monkeypatch, together=6)
+def first_line_of(events: list[ResearchEvent], key: str) -> int:
+    return next(i for i, e in enumerate(events) if isinstance(e, LogEvent) and e.key == key)
+
+
+def result_of(events: list[ResearchEvent], key: str) -> int:
+    return next(i for i, e in enumerate(events) if isinstance(e, ResultEvent) and e.key == key)
+
+
+def test_the_easy_question_goes_alone_and_the_rest_start_together_when_it_ends(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Each later run waits until all five are going: run one at a time, the first would time out.
+    seen = script(monkeypatch, together=5, alone=frozenset({"quiz-easy"}))
     live, store = services()
 
     events = list(research(SEARCH, live))
 
+    assert seen.runs[0][0] == "quiz-easy"
+    assert store.finished[0][0] == 100  # settled before any other run began
+    done = result_of(events, "quiz-easy")
+    assert all(first_line_of(events, key) > done for key in EVERY_ITEM[1:])
     assert result_keys(events) == EVERY_ITEM
     assert of_type(events, MissedEvent) == []
     assert len(store.finished) == 6
 
 
-def test_runs_finishing_out_of_order_each_send_their_own_item(
+def test_with_the_easy_question_in_the_bank_every_live_run_starts_together(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    script(monkeypatch, together=5)
+    have = BankTopic(name="Black holes", kind="evergreen", learn=[], quiz=["easy"])
+    request = SearchRequest(topic="Black Holes", visitor="v1")
+    live, store = services(bank=FakeBank(known="Black holes", have=have))
+
+    events = list(research(request, live))
+
+    assert result_keys(events) == EVERY_ITEM[1:]
+    assert of_type(events, MissedEvent) == []
+    assert len(store.finished) == 5
+
+
+def test_a_lone_live_easy_question_is_the_whole_search(monkeypatch: pytest.MonkeyPatch) -> None:
+    seen = script(monkeypatch)
+    have = BankTopic(
+        name="Black holes",
+        kind="evergreen",
+        learn=["easy", "medium", "hard"],
+        quiz=["medium", "hard"],
+    )
+    request = SearchRequest(topic="Black Holes", visitor="v1")
+    live, store = services(bank=FakeBank(known="Black holes", have=have))
+
+    events = list(research(request, live))
+
+    assert [run[0] for run in seen.runs] == ["quiz-easy"]
+    assert result_keys(events) == ["quiz-easy"] and len(store.finished) == 1
+    assert events[-1] == EndEvent(unavailable=False)
+
+
+def test_an_easy_question_that_failed_unspent_stops_the_rest_without_starting_them(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    seen = script(monkeypatch, refused=frozenset({"quiz-easy"}))
+    live, store = services()
+
+    events = list(research(SEARCH, live))
+
+    assert [run[0] for run in seen.runs] == ["quiz-easy"]
+    assert not any(isinstance(e, LogEvent) and e.key in EVERY_ITEM[1:] for e in events)
+    missed = of_type(events, MissedEvent)
+    assert sorted(m.key for m in missed) == sorted(EVERY_ITEM)
+    assert {(m.reason, m.message) for m in missed} == {("failed", ondemand.MODEL_UNREACHED_MESSAGE)}
+    # Every reservation settles as failed with nothing spent, so migration 013 does not count it.
+    assert sorted(store.settled()) == list(range(100, 106))
+    assert {(spent, outcome) for spent, outcome, _ in store.settled().values()} == {(0.0, "failed")}
+    assert events[-1] == EndEvent(unavailable=True)
+    assert len(of_type(events, EndEvent)) == 1
+
+
+def test_a_billed_easy_question_with_no_item_still_starts_the_rest(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    seen = script(monkeypatch, statuses={"quiz-easy": None})
+    live, store = services()
+
+    events = list(research(SEARCH, live))
+
+    assert sorted(run[0] for run in seen.runs) == sorted(EVERY_ITEM)
+    assert seen.runs[0][0] == "quiz-easy"
+    assert result_keys(events) == EVERY_ITEM[1:]
+    assert len(store.finished) == 6 and events[-1] == EndEvent(unavailable=False)
+
+
+def test_a_crashed_easy_question_still_starts_the_rest_as_its_spend_is_unknown(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    seen = script(monkeypatch, crash=frozenset({"quiz-easy"}))
+    live, store = services()
+
+    events = list(research(SEARCH, live))
+
+    assert sorted(run[0] for run in seen.runs) == sorted(EVERY_ITEM)
+    assert store.settled()[100] == (Settings().max_job_cost_usd, "failed", None)
+    assert result_keys(events) == EVERY_ITEM[1:]
+    assert events[-1] == EndEvent(unavailable=False)
+
+
+def test_a_discarded_easy_question_still_starts_the_rest(monkeypatch: pytest.MonkeyPatch) -> None:
+    seen = script(monkeypatch, statuses={"quiz-easy": "discarded"})
+    live, _ = services()
+
+    events = list(research(SEARCH, live))
+
+    assert sorted(run[0] for run in seen.runs) == sorted(EVERY_ITEM)
+    assert result_keys(events) == EVERY_ITEM[1:]
+
+
+def threads_that_cannot_start(
+    monkeypatch: pytest.MonkeyPatch,
+    *names: str,
+    error: Exception | None = None,
+) -> None:
+    """Make the threads with these names fail to start, as a process out of threads does, or
+    with `error`."""
+
+    class Failing(threading.Thread):
+        def start(self) -> None:
+            if self.name in names:
+                raise error or RuntimeError("can't start new thread")
+            super().start()
+
+    monkeypatch.setattr(threading, "Thread", Failing)
+
+
+def test_an_easy_question_whose_thread_cannot_start_does_not_stop_the_rest(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    seen = script(monkeypatch)
+    threads_that_cannot_start(monkeypatch, "live-search-100-quiz-easy")
+    live, store = services()
+
+    events = list(research(SEARCH, live))
+
+    assert sorted(run[0] for run in seen.runs) == sorted(EVERY_ITEM[1:])
+    [missed] = of_type(events, MissedEvent)
+    assert (missed.key, missed.reason) == ("quiz-easy", "failed")
+    assert missed.message == "Something went wrong with the EASY question on our side."
+    assert store.settled()[100] == (0.0, "failed", None)
+    assert result_keys(events) == EVERY_ITEM[1:]
+    assert len(store.finished) == 6 and events[-1] == EndEvent(unavailable=False)
+
+
+def test_a_later_run_whose_thread_cannot_start_costs_only_that_run(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     script(monkeypatch)
-    # The HARD explanation's record is stored first, the EASY question's last.
+    threads_that_cannot_start(monkeypatch, "live-search-100-learn-medium")
+    live, store = services()
+
+    events = list(research(SEARCH, live))
+
+    [missed] = of_type(events, MissedEvent)
+    assert (missed.key, missed.reason) == ("learn-medium", "failed")
+    assert missed.message == "Something went wrong with the MEDIUM explanation on our side."
+    assert store.settled()[104] == (0.0, "failed", None)
+    assert result_keys(events) == [key for key in EVERY_ITEM if key != "learn-medium"]
+    assert len(store.finished) == 6 and events[-1] == EndEvent(unavailable=False)
+
+
+def test_a_search_with_no_thread_at_all_settles_every_run_and_says_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    seen = script(monkeypatch)
+    threads_that_cannot_start(monkeypatch, *(f"live-search-100-{key}" for key in EVERY_ITEM))
+    live, store = services()
+
+    events = list(research(SEARCH, live))
+
+    assert seen.runs == []
+    assert sorted(m.key for m in of_type(events, MissedEvent)) == sorted(EVERY_ITEM)
+    assert {(spent, outcome) for spent, outcome, _ in store.settled().values()} == {(0.0, "failed")}
+    assert events[-1] == EndEvent(unavailable=True)
+
+
+def test_a_search_thread_that_cannot_start_settles_every_run_and_falls_back(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    seen = script(monkeypatch)
+    threads_that_cannot_start(monkeypatch, "live-search-100")
+    live, store = services()
+
+    events = list(research(SEARCH, live))
+
+    assert seen.runs == []
+    assert isinstance(events[-1], FallbackEvent) and events[-1].reason == "unavailable"
+    assert {(spent, outcome) for spent, outcome, _ in store.settled().values()} == {(0.0, "failed")}
+    assert len(store.finished) == 6
+
+
+def test_a_start_that_goes_wrong_midway_still_settles_every_run_and_ends_the_stream(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    script(monkeypatch)
+    threads_that_cannot_start(
+        monkeypatch,
+        *(f"live-search-100-{key}" for key in EVERY_ITEM[1:]),
+        error=ValueError("not a thread failure"),
+    )
+    live, store = services()
+
+    events = list(research(SEARCH, live))
+
+    assert result_keys(events) == ["quiz-easy"]
+    assert sorted(m.key for m in of_type(events, MissedEvent)) == sorted(EVERY_ITEM[1:])
+    assert sorted(store.settled()) == list(range(100, 106))
+    assert store.settled()[105] == (0.0, "failed", None)
+    assert events[-1] == EndEvent(unavailable=False)
+
+
+def test_waiting_for_the_easy_question_does_not_hold_up_the_stream(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    script(monkeypatch)
+    release = threading.Event()
     original = ondemand._produce
 
-    def slower_for_easier(
+    def held(
         topic: str,
         planned: PlannedItem,
         services: Services,
         clock: ondemand._Clock,
         emit: Callable[[ResearchEvent | None], None],
     ) -> ItemRecord:
-        time.sleep(0.05 * (len(EVERY_ITEM) - 1 - EVERY_ITEM.index(planned.key)))
+        assert release.wait(timeout=5), "the stream was held up"
         return original(topic, planned, services, clock, emit)
 
-    monkeypatch.setattr(ondemand, "_produce", slower_for_easier)
+    monkeypatch.setattr(ondemand, "_produce", held)
+    live, store = services(store=FakeStore(fit=3))
+    stream = research(SEARCH, live)
+
+    seen: list[ResearchEvent] = []
+    # The first run's lines and the items the caps left out arrive while that run is held.
+    while len(of_type(seen, MissedEvent)) < 3:
+        seen.append(next(stream))
+    assert [m.key for m in of_type(seen, MissedEvent)] == EXPLANATIONS
+    assert not of_type(seen, ResultEvent)
+    release.set()
+
+    events = seen + list(stream)
+
+    assert result_keys(events) == QUESTIONS and len(store.finished) == 3
+
+
+def test_runs_finishing_out_of_order_each_send_their_own_item(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    script(monkeypatch)
     live, store = services()
+    # The MEDIUM question is second in the plan and waits until the other five have settled, so its
+    # item is last whatever the threads do. Nothing fixes the order of the other runs.
+    original = ondemand._produce
+
+    def slow_medium_question(
+        topic: str,
+        planned: PlannedItem,
+        services: Services,
+        clock: ondemand._Clock,
+        emit: Callable[[ResearchEvent | None], None],
+    ) -> ItemRecord:
+        if planned.key == "quiz-medium":
+            deadline = time.monotonic() + 5
+            while len(store.finished) < 5:
+                assert time.monotonic() < deadline, "the other runs never finished"
+                time.sleep(0.01)
+        return original(topic, planned, services, clock, emit)
+
+    monkeypatch.setattr(ondemand, "_produce", slow_medium_question)
 
     events = list(research(SEARCH, live))
 
     results = of_type(events, ResultEvent)
-    assert results[0].key == "learn-hard"
-    assert results[-1].key == "quiz-easy"
+    assert results[0].key == "quiz-easy"  # it runs first, and alone
+    assert results[-1].key == "quiz-medium"
     for result in results:
         assert result.key == f"{result.item.mode}-{result.item.difficulty}"
     assert len(store.finished) == 6
@@ -962,19 +1211,21 @@ def test_a_search_whose_every_run_failed_with_no_spend_says_the_model_was_out_of
 
 def test_a_refused_key_through_the_real_agent_loop_and_gate_is_unavailable() -> None:
     refused = LLMError("AuthenticationError: invalid x-api-key")
-    live, store = services(llm=FakeLLM([refused] * 6))
+    llm = FakeLLM([refused] * 6)
+    live, store = services(llm=llm)
 
     events = list(research(SEARCH, live))
 
     assert events[-1] == EndEvent(unavailable=True)
     assert {(spent, outcome) for spent, outcome, _ in store.settled().values()} == {(0.0, "failed")}
     assert len(store.finished) == 6 and not of_type(events, ResultEvent)
+    assert len(llm.calls) == 1  # the first run found out, so the other five never tried
 
 
 def test_a_search_with_any_run_that_reached_the_model_is_not_unavailable(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    script(monkeypatch, refused=frozenset(EVERY_ITEM) - {"learn-hard"})
+    script(monkeypatch, refused=frozenset(EVERY_ITEM) - {"quiz-easy"})
     live, _ = services()
 
     events = list(research(SEARCH, live))
@@ -1106,7 +1357,7 @@ def test_a_player_leaving_mid_search_still_gets_every_run_stored_and_settled(
     assert isinstance(next(stream), PlanEvent)
     assert isinstance(next(stream), LogEvent)  # the on-topic check
     budget = next(stream)  # the runs are reserved and the search's thread has started
-    stream.close()  # the player leaves: closing waits for every run to be stored
+    stream.close()  # the player leaves: closing waits for both batches to be stored
 
     assert isinstance(budget, LogEvent) and budget.label == "Budget"
     assert len(store.payloads) == 6

@@ -2064,6 +2064,27 @@ Prompt for that session:
 
 ---
 
+### The EASY question first (2026-11-02, Vedant's decision)
+
+A search starts the EASY question alone when it is a live item, and the other reserved runs together
+when it ends. This changes "Faster live searches: every run at once" above. In `_run_search`:
+
+- The EASY question from the bank: every live run starts together, as before.
+- The EASY question failed with nothing spent: the others never start. Each settles at $0 as failed
+  and sends `missed` with "The agent could not reach the model.", and the search ends with
+  `unavailable: true`, so migration 013 does not count it. A refused key now makes one model call,
+  not six.
+- It ended any other way, billed with no item or crashed included: the others start.
+- A thread that cannot start costs only that run, with today's message. The wait is on the search's
+  own thread, so the stream goes on. The items the caps left out are reported when the first run has
+  started.
+- Reservations are unchanged: all in one call at the start, with the same dollar caps. Every run
+  settles and the stream always ends.
+
+**Time.** Expect a new topic to take up to about 90 s; not measured yet. `vercel.json` gives the
+function 300 s. Two batches of runs at the agent's 120 s budget, about 240 s plus the verifiers, end
+inside it. The longest run stored so far took 61.8 s.
+
 ## Later - v2: Newsletter
 Planned in detail once v1 is live. Curator email output via Resend (portfolio `api/contact.ts`
 pattern), subscribers with double opt-in and unsubscribe, then WhatsApp. (Changed 2026-10-08 by
@@ -2310,3 +2331,7 @@ tier), decided together with the newsletter's subscribers (Vedant, 2026-10-10).
   now fails the workflow, and a search that failed whole with no spend no longer counts (migration
   013, `docs/SESSIONS.md`). `python -m curator fill` is written for the 30 likely topics Vedant
   approved; it has not run. 521 Python and 221 TypeScript tests. Nothing spent.
+- 2026-11-02 - First real parallel search: 61.3 s (n=1), with its first question at 49 s. Most of the
+  gap to the estimate looks like the API compiling the strict tool schemas after 75 idle hours
+  (inferred, `docs/handoff/latency.md`). On Vedant's word, the EASY question now goes first and alone,
+  then the rest together; it has not run live yet. No warm-up, and `strict: true` stays. No paid call.

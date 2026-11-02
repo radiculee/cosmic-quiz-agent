@@ -106,7 +106,10 @@ set that `limits_at(now)` picks for each request, so it starts and ends by itsel
 November (`LAUNCH_LIMITS`). Keep the monthly cap (`usd_per_month`) under what the Anthropic
 Console limit leaves after the daily Curator.
 
-A live search runs its items at once (`agent/ondemand.py`): one database call
+A live search runs the EASY question first and alone, then its other items together
+(`agent/ondemand.py`). With the EASY question in the bank, every live item starts together. If the
+EASY question fails with nothing spent, the others never start: each settles as failed with nothing
+spent, and migration 013 does not count the search. One database call
 (`begin_on_demand_search`, migration 010) counts the search and reserves every run at $0.17, in
 plan order, while today's and the month's caps fit; the items a cap leaves out are reported as
 not started. So the day's last search can still make every item only when the daily cap holds
@@ -129,7 +132,7 @@ from Anthropic with the thread's name, so the logs say which item met a rate lim
 | `agent/verify.py` | layer 1: cited URLs fetched, quotes word for word, numbers on the pages |
 | `agent/verifiers/` | layer 2 (`haiku.py`) and layer 3 (`jev.py`) |
 | `agent/gate.py` | the publish rule: published, review or discarded, from the stored results |
-| `agent/ondemand.py` | a live search: the limits, every run at once, the streamed log and progress |
+| `agent/ondemand.py` | a live search: the limits, the EASY question and then the rest, the streamed log and progress |
 | `agent/limits.py` | the live-search limits and caps, and `limits_at`, which picks the dated November and launch-week numbers |
 | `agent/store.py`, `agent/bank.py` | the database: writes with the secret key, public reads |
 | `agent/web.py` | the HTTP layer the functions in `api/` share |

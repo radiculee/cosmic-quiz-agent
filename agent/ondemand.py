@@ -23,11 +23,14 @@ it has every level. `research` yields events while it works:
    against the visitor's daily limit and everyone's (`agent/limits.py`). The runs are reserved
    in plan order while the dollar caps fit, so a cap leaves out the last items, which are
    reported as not started. Over a limit, the player keeps what the bank has.
-4. The reserved runs go all at once (changed 2026-10-30; they went one at a time, so a search
-   took about 100 s), each the Curator's evaluated pipeline: the agent researches the item and
-   the same three-layer gate decides (`agent/publish.py`). Every step is streamed as a log line,
-   including each Jev claim check, tagged with its item, so the lines of runs at once
-   interleave.
+4. The EASY question goes first, alone, when it is a live item; the other reserved runs start
+   together when it ends (changed 2026-11-02 by Vedant; from 2026-10-30 every run started at once,
+   and before that they went one at a time). With the EASY question in the bank, every live run
+   starts together. If the EASY question failed with nothing spent, the model is out of reach, so
+   the others never start: each is settled as failed with nothing spent and reported as missed.
+   A run is the Curator's evaluated pipeline: the agent researches the item and the same
+   three-layer gate decides (`agent/publish.py`). Every step is streamed as a log line, including
+   each Jev claim check, tagged with its item, so the lines of runs at once interleave.
 5. Each run is stored in the bank whatever the outcome, its real cost settles its reservation,
    and a published or review item is sent to the player. A quiz item comes without its answer
    and with a signed token that lets /api/reveal answer it once the player has picked.
@@ -56,6 +59,7 @@ import sys
 import threading
 import time
 import traceback
+from collections import deque
 from collections.abc import Callable, Generator, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -89,9 +93,9 @@ from agent.verifiers import JevClient
 
 REVEAL_PURPOSE = "reveal"
 
-# Vercel ends a function at 300 seconds, so a search must be stored and settled by this time. Its
-# runs all start in the first seconds and each has the agent's 120 s budget, so they end well
-# inside it; this is how long a player leaving waits for them.
+# Vercel ends a function at 300 seconds, so a search must be stored and settled by this time. A
+# search has two batches at most, the EASY question and then the rest, and each run has the agent's
+# 120 s budget, so they end inside it; this is how long a player leaving waits for them.
 SEARCH_SECONDS = 280.0
 
 # How long a live item's run usually takes, for the page's progress rows (migration 010): read at
@@ -125,6 +129,10 @@ NOUNS: dict[Mode, str] = {"learn": "explanation", "quiz": "question"}
 def item_key(mode: Mode, difficulty: Difficulty) -> str:
     """How events name an item of a search: "learn-medium", "quiz-easy" and so on."""
     return f"{mode}-{difficulty}"
+
+
+# The run that goes first and alone when it is live. The plan puts it first (`plan_search`).
+FIRST_RUN_KEY = item_key("quiz", "easy")
 
 
 class PlannedItem(BaseModel):
@@ -661,36 +669,31 @@ def _run_search(
     clock: _Clock,
     emit: Callable[[ResearchEvent | None], None],
 ) -> None:
-    """The paid part of a search, on its own thread: every reserved run at once, each on a thread
-    named by the search and the item, then the items the caps left out. It waits for every run it
-    started, so each is settled, and the stream always ends (`emit(None)`), whatever happens."""
+    """The paid part of a search, on its own thread, so waiting here never holds up the stream.
+    The EASY question goes first and alone when it is live; when it ends, the other reserved runs
+    start together, unless it failed with nothing spent, when they are settled unstarted. Each run
+    has a thread named by the search and the item. The items the caps left out are reported once
+    the first run has started. It waits for every run it started and settles any it did not, so
+    the stream always ends (`emit(None)`), whatever happens."""
     runs: list[threading.Thread] = []
     ended: list[_EndedRun] = []  # appended from each run's thread
-    try:
-        for planned, slot_id in search.runs:
-            run = threading.Thread(
-                target=_run_item,
-                args=(search, planned, slot_id, services, clock.for_item(planned.key), emit, ended),
-                name=f"live-search-{search.id}-{planned.key}",
-            )
-            try:
-                run.start()
-            except RuntimeError as error:  # this run never started: nothing was spent on it
-                print(
-                    f"live search {search.id}: {planned.key} not started: {error}",
-                    file=sys.stderr,
-                )
-                _settle(services, slot_id, 0.0, "failed", None)
-                ended.append((0.0, "failed"))
-                emit(
-                    MissedEvent(
-                        key=planned.key,
-                        reason="failed",
-                        message=f"Something went wrong with {planned.label} on our side.",
-                    )
-                )
-                continue
+    waiting = deque(search.runs)
+
+    def start_next() -> threading.Thread | None:
+        planned, slot_id = waiting[0]
+        run = _start_run(search, planned, slot_id, services, clock, emit, ended)
+        waiting.popleft()
+        if run is not None:
             runs.append(run)
+        return run
+
+    def give_up_on_waiting(message: Callable[[PlannedItem], str]) -> None:
+        while waiting:
+            planned, slot_id = waiting.popleft()
+            _give_up(planned, slot_id, message(planned), services, emit, ended)
+
+    try:
+        first = start_next() if waiting[0][0].key == FIRST_RUN_KEY else None
         for left in search.left_out:
             emit(
                 MissedEvent(
@@ -699,13 +702,65 @@ def _run_search(
                     message=f"Not started. {search.left_out_reason}",
                 )
             )
+        if first is not None:
+            first.join()
+            if ended and _failed_unspent(*ended[0]):
+                give_up_on_waiting(lambda _: MODEL_UNREACHED_MESSAGE)
+        while waiting:
+            start_next()
     except Exception:  # each run settles itself; this only guards the starts
         traceback.print_exc(file=sys.stderr)
     finally:
-        for run in runs:
-            run.join()
-        emit(EndEvent(unavailable=_model_unreachable(search, ended)))
-        emit(None)
+        try:
+            for run in runs:
+                run.join()
+            give_up_on_waiting(_on_our_side)
+        finally:
+            emit(EndEvent(unavailable=_model_unreachable(search, ended)))
+            emit(None)
+
+
+def _start_run(
+    search: _Search,
+    planned: PlannedItem,
+    slot_id: int,
+    services: Services,
+    clock: _Clock,
+    emit: Callable[[ResearchEvent | None], None],
+    ended: list[_EndedRun],
+) -> threading.Thread | None:
+    """Start one reserved run on its own thread. A thread that cannot start costs that run only:
+    nothing was spent on it, and the search goes on without it."""
+    run = threading.Thread(
+        target=_run_item,
+        args=(search, planned, slot_id, services, clock.for_item(planned.key), emit, ended),
+        name=f"live-search-{search.id}-{planned.key}",
+    )
+    try:
+        run.start()
+    except RuntimeError as error:
+        print(f"live search {search.id}: {planned.key} not started: {error}", file=sys.stderr)
+        _give_up(planned, slot_id, _on_our_side(planned), services, emit, ended)
+        return None
+    return run
+
+
+def _give_up(
+    planned: PlannedItem,
+    slot_id: int,
+    message: str,
+    services: Services,
+    emit: Callable[[ResearchEvent | None], None],
+    ended: list[_EndedRun],
+) -> None:
+    """End a reserved run that never started: nothing was spent on it."""
+    _settle(services, slot_id, 0.0, "failed", None)
+    ended.append((0.0, "failed"))
+    emit(MissedEvent(key=planned.key, reason="failed", message=message))
+
+
+def _on_our_side(planned: PlannedItem) -> str:
+    return f"Something went wrong with {planned.label} on our side."
 
 
 def _run_item(
@@ -764,7 +819,7 @@ def _run_item(
             MissedEvent(
                 key=planned.key,
                 reason="failed",
-                message=f"Something went wrong with {planned.label} on our side.",
+                message=_on_our_side(planned),
             )
         )
     finally:
