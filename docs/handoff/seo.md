@@ -121,6 +121,11 @@ The checks above pass and main's review has no open findings.
   - Checked against the live bank, read-only: 38 topics, 42 pages.
   - Also changed, for the build: `tsconfig.json` (includes `scripts`, allows `.ts` imports) and `package.json` (`engines` node `>=22.18`).
 
+- Astronomy-quiz audit (2026-11-02): /quiz now has real text (what the quiz is, levels, run
+  lengths, where questions come from). Structured data kept only where Google has a feature:
+  `WebSite` on the home page. Removed `LearningResource` and `CollectionPage` from the other
+  pages. Robots, meta and headers checked: nothing blocks crawling or snippets.
+
 ## Next
 
 1. Per-topic preview images (1200 x 630, made by media with Pillow). Then a per-topic `og:image` and `twitter:image` in `scripts/prerender/render.ts`.
