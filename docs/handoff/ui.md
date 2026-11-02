@@ -129,6 +129,8 @@ The checks above pass and main's review has no open findings.
   - States: waiting ("Starting", whole estimate), running (stage, status, time left), loading from the bank, ready (all four stages filled), left out (rust bar, "Left out").
 - Unavailable agent message: `ExplorePage` handles latency's `end` event (cherry-picked b6c1dd5; it drops out at the next rebase). A search that made nothing and ended with `unavailable: true` says "The agent is unavailable just now. This search was not counted. Topics in the bank are still free to play." Other cases keep their text. Logic and test in `src/outcome.ts`, `src/outcome.test.ts`.
 
+- Monday work (2 Nov): the progress panel is now three bars (Easy, Medium, Hard) with one word each and an "Explanations: n of 3 ready" line, under the question card (`37b74fb`). `QuestionStrip` is gone. The agent log and the Mission Control link sit behind Show details; the panel shrinks to one line when every item has ended. The first question's card scrolls to the top once. Next reads "Medium question on the way" until ready. A result card follows the last question of a web search (`fbe48bc`, `src/webResults.ts`). Hint text says a minute or two (`0f386f2`). Explanations still open only after the questions are answered (`explanationLock` in `search.ts`). The Quiz setup screen has a "How the quiz works" card; its words are in `src/quizAbout.ts` for seo's prerender.
+
 ## Next
 
 1. When main says seo's step 2 is on `main`: in `LearnPage.tsx`, when the topics have loaded and `/learn/<slug>` matches no topic, render `<NotFoundPage topics={topics} />` (on `session/seo`, 86b984e).

@@ -3,6 +3,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import { ApiError, fetchItem } from "../api";
 import { HeaderSettings } from "../components/HeaderSettings";
 import { ProfileStrip } from "../components/ProfileStrip";
+import { QuizAbout } from "../components/QuizAbout";
 import { QuizCard } from "../components/QuizCard";
 import { RunHud } from "../components/RunHud";
 import { RunResults } from "../components/RunResults";
@@ -253,7 +254,9 @@ export function QuizPage({
           and +25% for answering within 15 seconds.
         </p>
 
-        <div className="pixel-border mt-14 w-full max-w-xl rounded-sm bg-surface px-5 py-5">
+        <QuizAbout />
+
+        <div className="pixel-border mt-10 w-full max-w-xl rounded-sm bg-surface px-5 py-5">
           <ProfileStrip profile={profile} />
         </div>
       </div>
