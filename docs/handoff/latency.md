@@ -7,7 +7,64 @@ Last update: 2026-11-02. On `origin/main` at `2435f0c`. Parallel search is
 live since 2026-11-01 21:32 UTC. The reports below replace "Where things stand", "Next" and
 "Blockers" further down, which are kept as the record of 2026-10-30.
 
-## Report, 2026-11-02
+## Report, 2026-11-02, the EASY question first
+
+### Done
+
+- `_run_search` in `agent/ondemand.py`: the EASY question goes first and alone when live, and the rest
+  start together when it ends. See "The EASY question first" in `docs/PLAN.md` for each case.
+- `CHANGELOG.md`: this order, and lines for free failed searches and the red daily run.
+- Main's decisions recorded in `docs/SESSIONS.md`. The cause of the first-call cost stays "inferred".
+
+### In progress
+
+- Nothing.
+
+### Left
+
+- After a real search: measure this order, the time and the first question, and update the changelog.
+- Today's daily Curator run: both modes? Are later first calls fast? It has not run yet (the 06:17 UTC
+  cron has been running at 12:23 to 13:18).
+- The fill, on main's word. Per-account limits, when accounts are set up.
+
+### Blocked on
+
+- Nothing.
+
+### Needs from Vedant
+
+- One real search, through main.
+
+### Files changed
+
+- `agent/ondemand.py`, `tests/test_ondemand.py`, `CHANGELOG.md`, `docs/DEVELOPMENT.md`, `docs/PLAN.md`,
+  `docs/SESSIONS.md`, `docs/handoff/latency.md`.
+
+### Checks run
+
+All pass before commit: pytest, ruff check, ruff format, mypy --strict, pnpm typecheck, pnpm test, pnpm
+build. No paid call and no dev server.
+
+### For main
+
+- **The flaky test.** `test_runs_finishing_out_of_order_each_send_their_own_item`, which ui also saw
+  fail, relied on 50 ms gaps between threads. It was timing, not the search. The slow run now waits
+  until the other five have settled, so no gap is involved.
+- **Time limit.** `vercel.json` gives `api/*.py` 300 s; about 90 s fits. `SEARCH_SECONDS` stays 280:
+  two batches at the agent's 120 s budget are about 240 s plus the verifiers. One gap stays: the budget
+  is checked before each model call, and a call can run to its 60 s timeout. A search in which both
+  batches hit that could pass 300 s, so Vercel ends it and those runs stay unsettled, and they count
+  as stale reservations do today. The longest run stored so far took 61.8 s, so this is not changed.
+- **A player leaving.** The second batch still starts if the player left during the EASY question. A
+  reserved run is paid for and stored, so the cost is the same as before.
+- **Progress rows, for ui.** `timeLeft` shows a waiting run's whole estimate. The five later rows say
+  "About N s left" while they wait for the EASY question, and their own clock starts at their first
+  progress.
+- **Stub.** No edit needed. Main's newest stub, as read on 2026-11-02, replaces `run_learn`, `run_quiz`
+  and `verify_and_decide` and goes through the real `research`, so the new order comes with the code.
+  It has not been run with this change, as no dev server may start.
+
+## Report, 2026-11-02, the after time
 
 ### Done
 
@@ -99,6 +156,10 @@ Ruled out:
 The rest of the gap is this topic: it made more calls and wrote more. Its slowest run made 8 calls, so
 without the first-call cost it would still have taken about 41 s, not 30 s. One verifier was slow too
 (quiz-easy, 8.0 s against a usual 4.2 s), which may be its own schema compiling.
+
+**Main's decision (2026-11-02).** No warm-up now, `strict: true` stays, no `max_tokens` test now. The
+daily run is checked for both modes and fast first calls. The run order changed for other reasons, on
+Vedant's word (see the report above). The recommendation as sent:
 
 **Recommendation.** Change no code in the search: not the threads, the retries or the client.
 

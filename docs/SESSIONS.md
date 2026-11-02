@@ -309,6 +309,13 @@ entry; record a reversal as a new one.
   the model." The ui text stays as Vedant chose it, and the rare failed write is accepted. The
   cost while the model is out of reach (one on-topic check per try) is accepted. Vedant pastes 013
   and runs its check; main deploys the code after "CHECK PASSED".
+- 2026-11-02, latency: The EASY question goes first and alone (Vedant, relayed by main). The other
+  runs start when it ends, unless it failed with nothing spent, when they settle unstarted and the
+  search does not count. With it in the bank, every live run starts together. Reservations and caps
+  are unchanged. See "The EASY question first" in `docs/PLAN.md`.
+- 2026-11-02, latency: Main's decisions on search 86's first-call cost, whose cause stays stated as
+  inferred: no warm-up now, `strict: true` stays, no `max_tokens` test now. The daily run is checked
+  for both modes and fast first calls.
 
 ---
 
