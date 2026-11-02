@@ -6,7 +6,13 @@ release. Everything before that, session by session with its decisions, checks a
 
 ## 2026-11-02
 
-- **A live search makes its items at once.** A new topic's six items used to run one after another:
+- **The EASY question goes first.** A search now makes the EASY question alone, and starts its other
+  items when it ends. With that question already in the bank, every live item starts together. If the
+  first run fails with nothing spent, the model is out of reach, so the others never start and the
+  search does not count. Reservations and caps are unchanged. Expect a new topic to take up to about
+  90 s; this order has not been measured yet.
+- **Every item at once, measured.** Before the change above, this was the time with every item
+  started together. A new topic's six items used to run one after another:
   a median of 145.2 s (118.9 to 171.6 s, 4 searches, 2026-10-28 to 2026-10-30, last run finished
   less first run started). The first search to succeed since the change took 61.3 s, with its first
   item at 35 s and its first question at 49 s. That is one search (n=1), "Light speed", not a median.
@@ -14,6 +20,16 @@ release. Everything before that, session by session with its decisions, checks a
   than a day without a run took about 20 s, once for each kind of item, which fits the API compiling
   the strict tool schemas again. Without those first calls this search would have taken about 41 s,
   but no search has yet been measured that way.
+
+## 2026-11-01
+
+- **A search the model never answered is free.** A search counts against the daily limits unless
+  every run of it failed with nothing spent, as a refused key or an outage leaves it. The dollar caps
+  are unchanged. The page says the agent is unavailable, and each run says it could not reach the
+  model. (Migration 013, `55fc118`, `e2ed90f`, `6a4c6eb`)
+- **A daily run that never reached the model fails.** When every job of the daily Curator ended with
+  no item and nothing spent, the workflow now goes red. A refused key had left that day's run green.
+  (`c55ba49`)
 
 ## 2026-10-30
 
