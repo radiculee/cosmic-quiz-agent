@@ -316,6 +316,11 @@ entry; record a reversal as a new one.
 - 2026-11-02, latency: Main's decisions on search 86's first-call cost, whose cause stays stated as
   inferred: no warm-up now, `strict: true` stays, no `max_tokens` test now. The daily run is checked
   for both modes and fast first calls.
+- 2026-11-02, Vedant (via main): the site title is "Astronomy Quiz: Test Your Space Knowledge -
+  Curiosity" (`src/brand.ts`). Reason: a search for "astronomy quiz" should find the site; the
+  title leads with that phrase and ends with the short brand, as Google's title guidance advises.
+- 2026-11-02, Vedant (via main): the `package.json` build change is approved:
+  `tsc --noEmit && vite build && node scripts/prerender.mjs`, with `engines.node` at `>=22.18`.
 
 ---
 

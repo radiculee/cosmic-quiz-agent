@@ -3,8 +3,8 @@
 
 export const NAME = "Curiosity";
 
-/** The page title on the home page and in search results (placeholder until Vedant picks it). */
-export const TITLE = "Curiosity: Astronomy Quiz on the Wonders Beyond Earth";
+/** The page title on the home page and in search results. */
+export const TITLE = "Astronomy Quiz: Test Your Space Knowledge - Curiosity";
 
 export const DESCRIPTION =
   "An astronomy and space quiz written by an AI agent that checks every answer against the pages it read.";
