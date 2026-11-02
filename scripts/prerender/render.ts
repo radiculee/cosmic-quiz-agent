@@ -139,9 +139,6 @@ const NAV =
 export function topicPage(topic: PageTopic): PageSpec {
   const path = `/learn/${topic.slug}`;
   const description = describe(topic.explanation);
-  const citations = topic.sources
-    .filter((source) => isWebAddress(source.url))
-    .map((source) => ({ "@type": "WebPage", url: source.url, name: source.site }));
   return {
     path,
     title: pageTitle(topic.name),
@@ -150,19 +147,7 @@ export function topicPage(topic: PageTopic): PageSpec {
     body:
       `<main>${NAV}<p><a href="/learn">All topics</a></p><h1>${escapeHtml(topic.name)}</h1>` +
       `${paragraphs(topic.explanation)}${sourceList(topic.sources)}</main>`,
-    data: [
-      {
-        "@type": "LearningResource",
-        name: topic.name,
-        description,
-        url: `${ORIGIN}${path}`,
-        inLanguage: "en",
-        learningResourceType: "Explanation",
-        about: { "@type": "Thing", name: topic.name },
-        isPartOf: SITE,
-        ...(citations.length ? { citation: citations } : {}),
-      },
-    ],
+    data: [],
   };
 }
 
@@ -180,28 +165,7 @@ function learnPage(topics: readonly PageTopic[]): PageSpec {
     body:
       `<main>${NAV}<h1>Learn astronomy and space</h1><p>${escapeHtml(description)}</p>` +
       `${links ? `<ul>${links}</ul>` : ""}</main>`,
-    data: [
-      {
-        "@type": "CollectionPage",
-        name: "Learn astronomy and space topics",
-        description,
-        url: `${ORIGIN}/learn`,
-        isPartOf: SITE,
-        ...(topics.length
-          ? {
-              mainEntity: {
-                "@type": "ItemList",
-                itemListElement: topics.map((topic, index) => ({
-                  "@type": "ListItem",
-                  position: index + 1,
-                  url: `${ORIGIN}/learn/${topic.slug}`,
-                  name: topic.name,
-                })),
-              },
-            }
-          : {}),
-      },
-    ],
+    data: [],
   };
 }
 
@@ -218,26 +182,30 @@ function homePage(): PageSpec {
   };
 }
 
-function quizPage(): PageSpec {
+function quizPage(topicCount: number): PageSpec {
   const description =
-    "Play an astronomy quiz of 10, 30 or 60 four-option questions against the clock. Every answer comes with an explanation and the sources it was checked against.";
+    "Play an astronomy quiz of four-option questions against the clock, at easy, medium or hard. Every answer comes with an explanation and the sources it was checked against.";
+  const covered = topicCount
+    ? `<p>The question bank covers ${topicCount} astronomy and space topics, and each question is on a different topic.</p>`
+    : "";
   return {
     path: "/quiz",
-    title: pageTitle("Astronomy quiz: 10, 30 or 60 questions"),
+    title: pageTitle("Astronomy quiz against the clock"),
     description,
     ogType: "website",
-    body: `<main>${NAV}<h1>Astronomy quiz</h1><p>${escapeHtml(description)}</p></main>`,
-    data: [
-      {
-        "@type": "LearningResource",
-        name: "Astronomy quiz",
-        description,
-        url: `${ORIGIN}/quiz`,
-        inLanguage: "en",
-        learningResourceType: "Quiz",
-        isPartOf: SITE,
-      },
-    ],
+    body:
+      `<main>${NAV}<h1>Astronomy quiz</h1><p>${escapeHtml(description)}</p>` +
+      `<h2>How the quiz works</h2><ul>` +
+      `<li>Pick a difficulty: easy, medium or hard.</li>` +
+      `<li>Pick a run of 10, 30 or 60 questions. A length is offered once the question bank has that many topics at your difficulty.</li>` +
+      `<li>Every question has four options and is on a different topic, played against the clock.</li>` +
+      `<li>After each answer you see the explanation and the sources it was checked against.</li>` +
+      `</ul>${covered}` +
+      `<h2>Where the questions come from</h2>` +
+      `<p>An AI agent reads pages from sources such as NASA, ESA and Wikipedia and writes each question. ` +
+      `A separate check must find a passage in those pages that supports the correct answer before the question is published. ` +
+      `You can read every source on the topic's Learn page.</p></main>`,
+    data: [],
   };
 }
 
@@ -250,22 +218,14 @@ function explorePage(): PageSpec {
     description,
     ogType: "website",
     body: `<main>${NAV}<h1>Try a new topic</h1><p>${escapeHtml(description)}</p></main>`,
-    data: [
-      {
-        "@type": "WebPage",
-        name: "Try a new space topic",
-        description,
-        url: `${ORIGIN}/explore`,
-        isPartOf: SITE,
-      },
-    ],
+    data: [],
   };
 }
 
 /** Every page to build: the fixed ones, then one per topic. With no topics (no bank access at
  * build time) only the fixed pages are made, and a topic address is served by the app alone. */
 export function pagesFor(topics: readonly PageTopic[]): PageSpec[] {
-  return [homePage(), learnPage(topics), quizPage(), explorePage(), ...topics.map(topicPage)];
+  return [homePage(), learnPage(topics), quizPage(topics.length), explorePage(), ...topics.map(topicPage)];
 }
 
 /** sitemap.xml for the pages. No dates: nothing here knows when a page last changed. */

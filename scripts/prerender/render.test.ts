@@ -78,15 +78,8 @@ suite("renderPage", () => {
     expect(html).not.toContain("javascript:");
   });
 
-  it("describes the topic in structured data, citing the same sources", () => {
-    const [data] = jsonLd(html);
-    expect(data).toMatchObject({
-      "@context": "https://schema.org",
-      "@type": "LearningResource",
-      name: TOPIC.name,
-      url: `${ORIGIN}/learn/europas-hidden-ocean`,
-      citation: [{ "@type": "WebPage", url: "https://science.nasa.gov/europa" }],
-    });
+  it("adds no structured data to a topic page, as Google has no feature for it", () => {
+    expect(jsonLd(html)).toEqual([]);
   });
 
   it("stops if the shell is not the one it expects", () => {
@@ -109,8 +102,17 @@ suite("pagesFor", () => {
     for (const page of pages) {
       const html = renderPage(SHELL, page);
       expect(html).toContain(`<link rel="canonical" href="${ORIGIN}${page.path}" />`);
-      expect(jsonLd(html).length).toBeGreaterThan(0);
     }
+  });
+
+  it("makes the quiz page say what the quiz is, its levels, run lengths and sources", () => {
+    const quiz = renderPage(SHELL, pagesFor([TOPIC])[2]!);
+    expect(quiz).toContain("<h1>Astronomy quiz</h1>");
+    expect(quiz).toContain("easy, medium or hard");
+    expect(quiz).toContain("10, 30 or 60 questions");
+    expect(quiz).toContain("sources");
+    expect(quiz).toContain("covers 1 astronomy and space topics");
+    expect(jsonLd(quiz)).toEqual([]);
   });
 
   it("adds a page per topic and lists each on the Learn page and in the sitemap", () => {
