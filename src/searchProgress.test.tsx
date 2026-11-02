@@ -2,69 +2,91 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
 import { SearchProgress } from "./components/SearchProgress";
-import type { Slot } from "./search";
+import type { Search, Slot } from "./search";
 import type { Item } from "./types";
 
-const slots: Slot[] = [
-  {
-    key: "quiz-easy",
-    mode: "quiz",
-    difficulty: "easy",
-    source: "live",
-    estimate_seconds: 20,
-    state: {
+const item = { id: 1 } as Item;
+const slot = (
+  key: Slot["key"],
+  difficulty: Slot["difficulty"],
+  state: Slot["state"],
+): Slot => ({
+  key,
+  mode: key.startsWith("learn") ? "learn" : "quiz",
+  difficulty,
+  source: "live",
+  state,
+});
+
+const working: Search = {
+  id: 1,
+  topic: "Pulsars",
+  runs: [],
+  ended: false,
+  slots: [
+    slot("quiz-easy", "easy", {
       kind: "researching",
       progress: { stage: "read", status: "Reading nasa.gov", startedAt: 0, at: 4 },
-    },
-  },
-  {
-    key: "quiz-medium",
-    mode: "quiz",
-    difficulty: "medium",
-    source: "live",
-    estimate_seconds: 25,
-    state: { kind: "waiting" },
-  },
-  {
-    key: "learn-easy",
-    mode: "learn",
-    difficulty: "easy",
-    source: "bank",
-    state: { kind: "ready", item: { id: 1 } as Item },
-  },
-];
+    }),
+    slot("quiz-medium", "medium", { kind: "waiting" }),
+    slot("quiz-hard", "hard", { kind: "waiting" }),
+    slot("learn-easy", "easy", { kind: "ready", item }),
+    slot("learn-medium", "medium", { kind: "waiting" }),
+    slot("learn-hard", "hard", { kind: "waiting" }),
+  ],
+};
 
-function render(detailsOpen = false): string {
+function render(search: Search, detailsOpen = false, message: string | null = null): string {
   return renderToStaticMarkup(
-    <SearchProgress slots={slots} detailsOpen={detailsOpen} onToggleDetails={() => {}} />,
+    <SearchProgress
+      search={search}
+      message={message}
+      detailsOpen={detailsOpen}
+      onToggleDetails={() => {}}
+      details={<p>THE LOG</p>}
+    />,
   );
 }
 
 describe("SearchProgress", () => {
-  it("has one row per item, in the order given, each with its label", () => {
-    const html = render();
-    expect(html.match(/<li class="py-3/g)).toHaveLength(3);
-    expect(html.indexOf("EASY question")).toBeLessThan(html.indexOf("MEDIUM question"));
-    expect(html.indexOf("MEDIUM question")).toBeLessThan(html.indexOf("EASY explanation"));
+  it("has three bars, Easy, Medium and Hard, each with one word", () => {
+    const html = render(working);
+    expect(html.match(/<li /g)).toHaveLength(3);
+    expect(html.indexOf("Easy")).toBeLessThan(html.indexOf("Medium"));
+    expect(html.indexOf("Medium")).toBeLessThan(html.indexOf("Hard"));
+    expect(html).toContain("Researching");
+    expect(html.match(/Waiting/g)).toHaveLength(2);
   });
 
-  it("names the real work a run reported and the step it is on", () => {
-    const html = render();
-    expect(html).toContain("Reading nasa.gov");
+  it("gives a screen reader the step as text, and has no status line or countdown", () => {
+    const html = render(working);
     expect(html).toContain("step 2 of 4");
+    expect(html).not.toContain("Reading nasa.gov");
+    expect(html).not.toContain(" left");
   });
 
-  it("shows the time left from the estimate, and a bank item has none", () => {
-    const html = render();
-    expect(html).toContain("About 20 s left");
-    expect(html).toContain("About 25 s left");
-    expect(html).toContain("Ready, from the bank");
+  it("counts the explanations ready below the bars", () => {
+    expect(render(working)).toContain("Explanations: 1 of 3 ready");
   });
 
   it("puts the log behind a Show details button that reports its state", () => {
-    expect(render(false)).toContain('aria-expanded="false"');
-    expect(render(false)).toContain("Show details");
-    expect(render(true)).toContain('aria-expanded="true"');
-    expect(render(true)).toContain("Hide details");
+    expect(render(working, false)).toContain('aria-expanded="false"');
+    expect(render(working, false)).toContain("Show details");
+    expect(render(working, true)).toContain('aria-expanded="true"');
+    expect(render(working, true)).toContain("Hide details");
+    expect(render(working, false)).toMatch(/id="search-details" hidden=""/);
+    expect(render(working, true)).not.toMatch(/id="search-details" hidden/);
+  });
+
+  it("shrinks to one line, with the outcome text, once every item has ended", () => {
+    const done: Search = {
+      ...working,
+      ended: true,
+      slots: working.slots.map((s) => ({ ...s, state: { kind: "missed" as const, message: "x" } })),
+    };
+    const html = render(done, false, "The agent is unavailable just now.");
+    expect(html).not.toContain("<li ");
+    expect(html).toContain("The agent is unavailable just now.");
+    expect(html).toContain("Show details");
   });
 });

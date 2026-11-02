@@ -135,6 +135,7 @@ export function ExplorePage({
   const viewRef = useRef<HTMLDivElement>(null);
   const questionsRef = useRef<HTMLElement>(null);
   const explanationRef = useRef<HTMLElement>(null);
+  const scrolledFor = useRef<number | null>(null);
   // What the player just asked to see, brought into view once it is on the page.
   const reveal = useRef<"question" | "explanation" | null>(null);
   // Trophies wait while a question is waiting for its answer, so no pop-up covers it.
@@ -217,6 +218,16 @@ export function ExplorePage({
       target.scrollIntoView({ behavior: scrollBehavior(), block: "start" });
     }
   }, [current, explanationOpen]);
+
+  // The first question, the moment it is ready: its card goes to the top. Once for each search,
+  // so the page never moves again on its own.
+  const searchId = search?.id ?? null;
+  useEffect(() => {
+    if (searchId !== null && currentQuestion && scrolledFor.current !== searchId) {
+      scrolledFor.current = searchId;
+      questionsRef.current?.scrollIntoView({ behavior: scrollBehavior(), block: "start" });
+    }
+  }, [searchId, currentQuestion]);
 
   function award(awards: readonly Award[]) {
     if (awards.length === 0) {
@@ -454,6 +465,7 @@ export function ExplorePage({
   const logOutcome: LogOutcome | null = log
     ? (log.outcome ?? (search?.ended ? searchOutcome(search, unavailable) : { kind: "running" }))
     : null;
+  const hasLive = search !== null && search.slots.some((slot) => slot.source === "live");
   const showItems =
     search !== null &&
     (!search.ended ||
@@ -529,46 +541,17 @@ export function ExplorePage({
       </button>
 
       <div ref={viewRef} className="mt-10 w-full scroll-mt-32" aria-live="polite">
-        {log && logOutcome && (
-          <div className="mb-8">
-            {search && search.slots.some((slot) => slot.source === "live") && (
-              <SearchProgress
-                key={log.id}
-                slots={search.slots}
-                detailsOpen={detailsOpen}
-                onToggleDetails={() => setDetailsOpen((open) => !open)}
-              />
-            )}
-            <AgentLog
-              key={log.id}
-              topic={log.topic}
-              lines={log.lines}
-              outcome={logOutcome}
-              open={detailsOpen}
-            />
-            {search && search.runs.length > 0 && (
-              <p className="scene-note mt-3 text-sm">
-                What each run cost and did:{" "}
-                <button
-                  type="button"
-                  onClick={openStats}
-                  className="text-teal underline underline-offset-4 hover:text-ink"
-                >
-                  this search in Mission Control
-                </button>
-              </p>
-            )}
-          </div>
+        {!search && log && logOutcome && (
+          <AgentLog key={log.id} topic={log.topic} lines={log.lines} outcome={logOutcome} />
         )}
 
-        {search && showItems && (
+        {search && (showItems || hasLive) && (
           <div className="space-y-10">
             <section ref={questionsRef} aria-label="Questions" className="scroll-mt-32">
-              <QuestionStrip slots={questions} current={current} answered={answered} />
-              {currentSlot && current !== null ? (
-                <div className="mt-4">
-                  <SlotTag slot={currentSlot} />
-                  {currentQuestion ? (
+              {showItems &&
+                (currentQuestion && currentSlot && current !== null ? (
+                  <div className="mb-4">
+                    <SlotTag slot={currentSlot} />
                     <QuizCard
                       key={currentSlot.key}
                       question={currentQuestion}
@@ -585,24 +568,53 @@ export function ExplorePage({
                         startOver,
                       )}
                     />
-                  ) : (
-                    <SlotNote slot={currentSlot} />
-                  )}
-                </div>
-              ) : (
-                <p className="mt-6 text-center">
-                  <button
-                    type="button"
-                    onClick={startOver}
-                    className={`${PRIMARY_BUTTON} px-6 py-3.5 text-[10px]`}
-                  >
-                    Another new topic
-                  </button>
-                </p>
+                  </div>
+                ) : (
+                  current === null && (
+                    <p className="mb-4 text-center">
+                      <button
+                        type="button"
+                        onClick={startOver}
+                        className={`${PRIMARY_BUTTON} px-6 py-3.5 text-[10px]`}
+                      >
+                        Another new topic
+                      </button>
+                    </p>
+                  )
+                ))}
+              {hasLive && log && logOutcome && (
+                <SearchProgress
+                  key={log.id}
+                  search={search}
+                  message={search.ended && logOutcome.kind !== "running" ? logOutcome.message : null}
+                  detailsOpen={detailsOpen}
+                  onToggleDetails={() => setDetailsOpen((open) => !open)}
+                  details={
+                    <>
+                      <AgentLog
+                        topic={log.topic}
+                        lines={log.lines}
+                        outcome={logOutcome}
+                      />
+                      {search.runs.length > 0 && (
+                        <p className="scene-note mt-3 text-sm">
+                          What each run cost and did:{" "}
+                          <button
+                            type="button"
+                            onClick={openStats}
+                            className="text-teal underline underline-offset-4 hover:text-ink"
+                          >
+                            this search in Mission Control
+                          </button>
+                        </p>
+                      )}
+                    </>
+                  }
+                />
               )}
             </section>
 
-            {lock && (
+            {showItems && lock && (
               <section ref={explanationRef} aria-label="Explanations" className="scroll-mt-32">
                 <h2 className="on-scene font-heading text-xl font-bold">Explanations</h2>
                 <div className="mt-4">
@@ -651,11 +663,6 @@ export function ExplorePage({
   );
 }
 
-/** Why an item is not shown yet: "loading" from the bank, or "researching" live. */
-function coming(slot: Slot): string {
-  return slot.state.kind === "loading" ? "loading" : "researching";
-}
-
 /** The question card's next button: the next question once it is ready; after the last one,
  * the explanations once they open; else a new topic. */
 function nextButton(
@@ -673,7 +680,8 @@ function nextButton(
     if (slot.state.kind === "ready") {
       return { nextLabel: `Next: ${label}`, onNext: onNextQuestion, nextDisabled: false };
     }
-    return { nextLabel: `${label}: ${coming(slot)}`, onNext: onNextQuestion, nextDisabled: true };
+    const level = slot.difficulty.charAt(0).toUpperCase() + slot.difficulty.slice(1);
+    return { nextLabel: `${level} question on the way`, onNext: onNextQuestion, nextDisabled: true };
   }
   if (lock && lock.kind !== "missed") {
     if (lock.kind === "open") {
@@ -756,50 +764,6 @@ function ExplanationGate({ lock, onOpen }: { lock: ExplanationLock; onOpen: () =
           Read the explanations
         </button>
       )}
-    </div>
-  );
-}
-
-/** The three questions, in the order they are played, and where each one is. */
-function QuestionStrip({
-  slots,
-  current,
-  answered,
-}: {
-  slots: readonly Slot[];
-  current: number | null;
-  answered: ReadonlySet<number>;
-}) {
-  function state(slot: Slot): string {
-    switch (slot.state.kind) {
-      case "ready":
-        return answered.has(slot.state.item.id) ? "answered" : "ready";
-      case "missed":
-        return "left out";
-      case "loading":
-        return "loading";
-      case "researching":
-        return "researching";
-      case "waiting":
-        return "waiting";
-    }
-  }
-  return (
-    <div className="on-scene flex flex-wrap items-baseline gap-x-5 gap-y-2">
-      <h2 className="font-heading text-xl font-bold">Questions</h2>
-      <ol className="flex flex-wrap gap-x-4 gap-y-1">
-        {slots.map((slot, index) => (
-          <li
-            key={slot.key}
-            aria-current={index === current ? "step" : undefined}
-            className={`pixel-bullet font-pixel text-[8px] uppercase ${
-              index === current ? "text-teal" : "text-ink"
-            }`}
-          >
-            {slot.difficulty} <span className="text-ink/80">{state(slot)}</span>
-          </li>
-        ))}
-      </ol>
     </div>
   );
 }

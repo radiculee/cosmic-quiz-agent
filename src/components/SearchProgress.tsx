@@ -1,122 +1,91 @@
-import { useEffect, useRef, useState } from "react";
+import type { ReactNode } from "react";
 
-import {
-  currentStage,
-  STAGE_LABELS,
-  stagesDone,
-  statusLine,
-  stillWorking,
-  timeLeft,
-  timeLeftText,
-} from "../progress";
-import { itemLabel, type Slot } from "../search";
+import { explanationLine, finishedLine, questionBars, stillWorking, type Bar } from "../progress";
+import type { Search } from "../search";
 import { STAGES } from "../types";
 
-/** Seconds since the search began, ticking once a second while any item is still on its way. */
-function useElapsed(running: boolean): number {
-  const started = useRef(performance.now());
-  const [elapsed, setElapsed] = useState(0);
-  useEffect(() => {
-    if (!running) return;
-    const timer = window.setInterval(
-      () => setElapsed((performance.now() - started.current) / 1000),
-      1000,
-    );
-    return () => window.clearInterval(timer);
-  }, [running]);
-  return elapsed;
-}
+const BUTTON =
+  "rounded-sm border border-white/15 px-3 py-2.5 font-pixel text-[9px] uppercase text-ink hover:border-white/40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal";
+const DETAILS_ID = "search-details";
 
-function Steps({ slot }: { slot: Slot }) {
-  const done = stagesDone(slot);
-  const current = currentStage(slot);
-  const missed = slot.state.kind === "missed";
+function Row({ bar }: { bar: Bar }) {
+  const fill = bar.state === "left out" ? 0 : (bar.done / STAGES.length) * 100;
   return (
-    <ol className="mt-2 grid grid-cols-4 gap-1.5" aria-hidden="true">
-      {STAGES.map((stage, index) => {
-        const finished = index < done;
-        const active = stage === current;
-        return (
-          <li key={stage}>
-            <div
-              className={`h-1.5 rounded-sm ${
-                missed
-                  ? "bg-rust/50"
-                  : finished
-                    ? "bg-teal"
-                    : active
-                      ? "bg-teal/50 motion-safe:animate-pulse"
-                      : "bg-white/10"
-              }`}
-            />
-            <span
-              className={`mt-1 block font-pixel text-[8px] uppercase ${
-                finished || active ? "text-ink" : "text-slate/70"
-              }`}
-            >
-              {STAGE_LABELS[stage]}
-            </span>
-          </li>
-        );
-      })}
-    </ol>
-  );
-}
-
-function Row({ slot, elapsed }: { slot: Slot; elapsed: number }) {
-  const stage = currentStage(slot);
-  const left = timeLeftText(timeLeft(slot, elapsed));
-  const status = statusLine(slot);
-  return (
-    <li className="py-3 first:pt-0 last:pb-0">
-      <div className="flex items-baseline justify-between gap-3">
-        <p className="font-pixel text-[9px] uppercase text-teal">{itemLabel(slot.key)}</p>
-        {left && <p className="text-xs tabular-nums text-slate">{left}</p>}
+    <li className="grid grid-cols-[4.5rem_1fr_auto] items-center gap-3 py-2 sm:grid-cols-[5.5rem_1fr_7rem]">
+      <span className="font-pixel text-[9px] uppercase text-teal">{bar.level}</span>
+      <div
+        aria-hidden="true"
+        className={`h-2 overflow-hidden rounded-sm ${
+          bar.state === "left out" ? "bg-rust/40" : "bg-white/10"
+        }`}
+      >
+        <div
+          className={`h-full bg-teal motion-safe:transition-[width] motion-safe:duration-500 ${
+            bar.state === "researching" ? "motion-safe:animate-pulse" : ""
+          }`}
+          style={{ width: `${fill}%` }}
+        />
       </div>
-      <Steps slot={slot} />
-      <p className="mt-2 text-sm text-ink/90">
-        {status}
-        {stage && <span className="sr-only"> (step {STAGES.indexOf(stage) + 1} of 4)</span>}
-      </p>
+      <span className="text-right text-sm text-ink/90">
+        {bar.word}
+        {bar.step && <span className="sr-only"> ({bar.step})</span>}
+      </span>
     </li>
   );
 }
 
 /**
- * One row for each item of a live search, questions first and then the explanations: the four
- * stages of its work (search, read, write, verify), a status line naming what it is doing, and
- * about how long it has left. The stage and the status line come from the stream's real
- * progress events, so a row moves only when its run does. The agent's log sits behind "Show
- * details": the page owns the toggle and gives the log `detailsOpen`.
+ * The progress of a live search: a bar for the question at each level (Easy, Medium, Hard), each
+ * filled by the real stage its run has reached, with one word beside it, and a line counting the
+ * explanations ready. When every item has ended it shrinks to one line, the outcome text. The
+ * agent's log and anything else for the curious go in `details`, behind "Show details": the page
+ * owns the toggle.
  */
 export function SearchProgress({
-  slots,
+  search,
+  message,
   detailsOpen,
   onToggleDetails,
+  details,
 }: {
-  slots: readonly Slot[];
+  search: Search;
+  /** The search's outcome text, shown as the one line once everything has ended. */
+  message: string | null;
   detailsOpen: boolean;
   onToggleDetails: () => void;
+  details: ReactNode;
 }) {
-  const elapsed = useElapsed(stillWorking(slots));
+  const finished = !stillWorking(search.slots);
+  const explanations = explanationLine(search.slots);
   return (
     <section
       aria-label="Search progress"
-      className="pixel-border mb-4 w-full rounded-sm bg-surface px-4 py-5 sm:px-6"
+      className="pixel-border w-full rounded-sm bg-surface px-4 py-4 sm:px-6"
     >
-      <ol className="divide-y divide-white/5">
-        {slots.map((slot) => (
-          <Row key={slot.key} slot={slot} elapsed={elapsed} />
-        ))}
-      </ol>
+      {finished ? (
+        <p className="text-sm text-ink/90">{message ?? finishedLine(search.slots)}</p>
+      ) : (
+        <>
+          <ul className="divide-y divide-white/5">
+            {questionBars(search.slots).map((bar) => (
+              <Row key={bar.key} bar={bar} />
+            ))}
+          </ul>
+          {explanations && <p className="mt-2 text-sm text-slate">{explanations}</p>}
+        </>
+      )}
       <button
         type="button"
         aria-expanded={detailsOpen}
+        aria-controls={DETAILS_ID}
         onClick={onToggleDetails}
-        className="mt-4 rounded-sm border border-white/15 px-3 py-2.5 font-pixel text-[9px] uppercase text-ink hover:border-white/40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal"
+        className={`${BUTTON} mt-4`}
       >
         {detailsOpen ? "Hide details" : "Show details"}
       </button>
+      <div id={DETAILS_ID} hidden={!detailsOpen} className="mt-4">
+        {details}
+      </div>
     </section>
   );
 }

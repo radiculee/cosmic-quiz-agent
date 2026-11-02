@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  currentStage,
+  barState,
+  explanationLine,
+  finishedLine,
+  questionBars,
   stagesDone,
-  statusLine,
   stillWorking,
-  timeLeft,
-  timeLeftText,
 } from "./progress";
 import type { Slot } from "./search";
 import type { Item } from "./types";
@@ -23,8 +23,9 @@ function slot(state: Slot["state"], extra: Partial<Slot> = {}): Slot {
   };
 }
 
-const running = (stage: "search" | "read" | "write" | "verify", startedAt = 2, at = 5): Slot =>
-  slot({ kind: "researching", progress: { stage, status: `At ${stage}`, startedAt, at } });
+const item = { id: 1 } as Item;
+const running = (stage: "search" | "read" | "write" | "verify"): Slot =>
+  slot({ kind: "researching", progress: { stage, status: `At ${stage}`, startedAt: 2, at: 5 } });
 
 describe("stagesDone", () => {
   it("moves with the stage the run reports, and not with time", () => {
@@ -37,85 +38,86 @@ describe("stagesDone", () => {
   });
 
   it("is all four once the item is ready, and none for one left out", () => {
-    const item = { id: 1 } as Item;
     expect(stagesDone(slot({ kind: "ready", item }))).toBe(4);
     expect(stagesDone(slot({ kind: "missed", message: "x" }))).toBe(0);
   });
 });
 
-describe("currentStage", () => {
-  it("is the reported stage of a running item, else none", () => {
-    expect(currentStage(running("write"))).toBe("write");
-    expect(currentStage(slot({ kind: "researching" }))).toBeNull();
-    expect(currentStage(slot({ kind: "waiting" }))).toBeNull();
+describe("barState", () => {
+  it("names the four states", () => {
+    expect(barState(slot({ kind: "waiting" }))).toBe("waiting");
+    expect(barState(running("read"))).toBe("researching");
+    expect(barState(slot({ kind: "ready", item }))).toBe("ready");
+    expect(barState(slot({ kind: "missed", message: "x" }))).toBe("left out");
+  });
+
+  it("counts a bank item as ready, even while it loads", () => {
+    expect(barState(slot({ kind: "loading" }, { source: "bank" }))).toBe("ready");
   });
 });
 
-describe("statusLine", () => {
-  it("shows the real work the run reported", () => {
-    expect(statusLine(running("read"))).toBe("At read");
+describe("questionBars", () => {
+  const slots = [
+    slot({ kind: "ready", item }, { key: "quiz-easy", difficulty: "easy" }),
+    slot({ kind: "waiting" }, { key: "quiz-medium", difficulty: "medium" }),
+    slot({ kind: "waiting" }, { key: "quiz-hard", difficulty: "hard" }),
+    slot({ kind: "waiting" }, { key: "learn-easy", mode: "learn", difficulty: "easy" }),
+  ];
+
+  it("has one bar for each question and none for an explanation", () => {
+    expect(questionBars(slots).map((bar) => bar.level)).toEqual(["Easy", "Medium", "Hard"]);
   });
 
-  it("says where an item stands when it has no work to name", () => {
-    expect(statusLine(slot({ kind: "waiting" }))).toBe("Starting");
-    expect(statusLine(slot({ kind: "researching" }))).toBe("Starting");
-    expect(statusLine(slot({ kind: "loading" }, { source: "bank" }))).toBe("Loading from the bank");
-    expect(statusLine(slot({ kind: "missed", message: "x" }))).toBe("Left out");
+  it("gives each its word and its fill from the real stage", () => {
+    const [easy, medium] = questionBars(slots);
+    expect(easy).toMatchObject({ word: "Ready", done: 4, step: null });
+    expect(medium).toMatchObject({ word: "Waiting", done: 0 });
+    const [midway] = questionBars([running("write")]);
+    expect(midway).toMatchObject({ word: "Researching", done: 2, step: "step 3 of 4" });
   });
 
-  it("tells a bank item from a made one when ready", () => {
-    const item = { id: 1 } as Item;
-    expect(statusLine(slot({ kind: "ready", item }, { source: "bank" }))).toBe(
-      "Ready, from the bank",
+  it("fills a ready bank item and empties one left out", () => {
+    const [bank] = questionBars([slot({ kind: "loading" }, { source: "bank" })]);
+    expect(bank).toMatchObject({ word: "Ready", done: 4 });
+    const [left] = questionBars([slot({ kind: "missed", message: "x" })]);
+    expect(left).toMatchObject({ word: "Left out", done: 0 });
+  });
+});
+
+describe("explanationLine", () => {
+  const explanation = (state: Slot["state"], difficulty: Slot["difficulty"]): Slot =>
+    slot(state, { key: `learn-${difficulty}`, mode: "learn", difficulty });
+
+  it("counts the explanations ready out of those this search has", () => {
+    const slots = [
+      explanation({ kind: "ready", item }, "easy"),
+      explanation({ kind: "waiting" }, "medium"),
+      explanation({ kind: "waiting" }, "hard"),
+    ];
+    expect(explanationLine(slots)).toBe("Explanations: 1 of 3 ready");
+    expect(explanationLine(slots.slice(0, 2))).toBe("Explanations: 1 of 2 ready");
+  });
+
+  it("is null when the search has no explanation", () => {
+    expect(explanationLine([slot({ kind: "waiting" })])).toBeNull();
+  });
+});
+
+describe("finishedLine", () => {
+  it("says how much of the search is ready", () => {
+    const slots = [
+      slot({ kind: "ready", item }),
+      slot({ kind: "missed", message: "x" }, { key: "quiz-medium", difficulty: "medium" }),
+      slot({ kind: "ready", item }, { key: "learn-easy", mode: "learn" }),
+    ];
+    expect(finishedLine(slots)).toBe(
+      "Search finished: 1 of 2 questions and 1 of 1 explanations ready.",
     );
-    expect(statusLine(slot({ kind: "ready", item }))).toBe("Ready");
-  });
-});
-
-describe("timeLeft", () => {
-  it("gives a waiting item its whole estimate", () => {
-    expect(timeLeft(slot({ kind: "waiting" }, { estimate_seconds: 20.2 }), 7)).toEqual({
-      kind: "left",
-      seconds: 21,
-    });
-  });
-
-  it("counts down from the run's first progress", () => {
-    expect(timeLeft(running("read", 2), 2)).toEqual({ kind: "left", seconds: 20 });
-    expect(timeLeft(running("read", 2), 12.5)).toEqual({ kind: "left", seconds: 10 });
-  });
-
-  it("starts the count when the item is seen running if no progress came yet", () => {
-    expect(timeLeft(slot({ kind: "researching" }), 9)).toEqual({ kind: "left", seconds: 20 });
-  });
-
-  it("says a run is over its usual time instead of showing zero or less", () => {
-    expect(timeLeft(running("verify", 2), 22)).toEqual({ kind: "over" });
-    expect(timeLeft(running("verify", 2), 40)).toEqual({ kind: "over" });
-  });
-
-  it("shows nothing for a bank item, a finished item or a level with no estimate", () => {
-    const item = { id: 1 } as Item;
-    expect(timeLeft(slot({ kind: "loading" }, { source: "bank" }), 3)).toBeNull();
-    expect(timeLeft(slot({ kind: "ready", item }), 3)).toBeNull();
-    expect(timeLeft(running("read", 2, 3), 3)).not.toBeNull();
-    expect(timeLeft({ ...running("read"), estimate_seconds: null }, 3)).toBeNull();
-    const { estimate_seconds: _unused, ...bare } = running("read");
-    expect(timeLeft(bare, 3)).toBeNull();
-  });
-});
-
-describe("timeLeftText", () => {
-  it("words each case", () => {
-    expect(timeLeftText({ kind: "left", seconds: 12 })).toBe("About 12 s left");
-    expect(timeLeftText({ kind: "over" })).toBe("Taking longer than usual");
-    expect(timeLeftText(null)).toBe("");
   });
 });
 
 describe("stillWorking", () => {
   it("is true while any item is waiting, running or loading", () => {
-    const item = { id: 1 } as Item;
     const done = slot({ kind: "ready", item });
     expect(stillWorking([done, slot({ kind: "waiting" })])).toBe(true);
     expect(stillWorking([done, running("read")])).toBe(true);
