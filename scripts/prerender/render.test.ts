@@ -1,6 +1,7 @@
 import { describe as suite, expect, it } from "vitest";
 
 import { NAME, ORIGIN, TITLE } from "../../src/brand.ts";
+import { QUIZ_HOW_HEADING, QUIZ_HOW_STEPS, QUIZ_SOURCES_TEXT } from "../../src/quizAbout.ts";
 import type { PageTopic } from "./bank.ts";
 import {
   describe,
@@ -108,10 +109,11 @@ suite("pagesFor", () => {
   it("makes the quiz page say what the quiz is, its levels, run lengths and sources", () => {
     const quiz = renderPage(SHELL, pagesFor([TOPIC])[2]!);
     expect(quiz).toContain("<h1>Astronomy quiz</h1>");
-    expect(quiz).toContain("easy, medium or hard");
-    expect(quiz).toContain("10, 30 or 60 questions");
-    expect(quiz).toContain("sources");
-    expect(quiz).toContain("covers 1 astronomy and space topics");
+    expect(quiz).toContain(`<h2>${QUIZ_HOW_HEADING}</h2>`);
+    for (const step of QUIZ_HOW_STEPS) {
+      expect(quiz).toContain(`<li>${step}</li>`);
+    }
+    expect(quiz).toContain(`<p>${QUIZ_SOURCES_TEXT}</p>`);
     expect(jsonLd(quiz)).toEqual([]);
   });
 

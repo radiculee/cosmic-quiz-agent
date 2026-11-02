@@ -14,6 +14,12 @@ import {
   TAGLINE,
   TITLE,
 } from "../../src/brand.ts";
+import {
+  QUIZ_HOW_HEADING,
+  QUIZ_HOW_STEPS,
+  QUIZ_SOURCES_HEADING,
+  QUIZ_SOURCES_TEXT,
+} from "../../src/quizAbout.ts";
 import type { PageSource, PageTopic } from "./bank.ts";
 
 export interface PageSpec {
@@ -182,12 +188,9 @@ function homePage(): PageSpec {
   };
 }
 
-function quizPage(topicCount: number): PageSpec {
+function quizPage(): PageSpec {
   const description =
     "Play an astronomy quiz of four-option questions against the clock, at easy, medium or hard. Every answer comes with an explanation and the sources it was checked against.";
-  const covered = topicCount
-    ? `<p>The question bank covers ${topicCount} astronomy and space topics, and each question is on a different topic.</p>`
-    : "";
   return {
     path: "/quiz",
     title: pageTitle("Astronomy quiz against the clock"),
@@ -195,15 +198,10 @@ function quizPage(topicCount: number): PageSpec {
     ogType: "website",
     body:
       `<main>${NAV}<h1>Astronomy quiz</h1><p>${escapeHtml(description)}</p>` +
-      `<h2>How the quiz works</h2><ul>` +
-      `<li>Pick a difficulty: easy, medium or hard.</li>` +
-      `<li>Pick a run of 10, 30 or 60 questions. A length is offered once the question bank has that many topics at your difficulty.</li>` +
-      `<li>Every question has four options and is on a different topic, played against the clock.</li>` +
-      `<li>After each answer you see the explanation and the sources it was checked against.</li>` +
-      `</ul>${covered}` +
-      `<h2>Where the questions come from</h2>` +
-      `<p>An AI agent reads pages from sources such as NASA, ESA and Wikipedia and writes each question. ` +
-      `A separate check must find a passage in those pages that supports the correct answer before the question is published.</p></main>`,
+      `<h2>${escapeHtml(QUIZ_HOW_HEADING)}</h2><ul>` +
+      QUIZ_HOW_STEPS.map((step) => `<li>${escapeHtml(step)}</li>`).join("") +
+      `</ul>` +
+      `<h2>${escapeHtml(QUIZ_SOURCES_HEADING)}</h2><p>${escapeHtml(QUIZ_SOURCES_TEXT)}</p></main>`,
     data: [],
   };
 }
@@ -224,7 +222,7 @@ function explorePage(): PageSpec {
 /** Every page to build: the fixed ones, then one per topic. With no topics (no bank access at
  * build time) only the fixed pages are made, and a topic address is served by the app alone. */
 export function pagesFor(topics: readonly PageTopic[]): PageSpec[] {
-  return [homePage(), learnPage(topics), quizPage(topics.length), explorePage(), ...topics.map(topicPage)];
+  return [homePage(), learnPage(topics), quizPage(), explorePage(), ...topics.map(topicPage)];
 }
 
 /** sitemap.xml for the pages. No dates: nothing here knows when a page last changed. */
