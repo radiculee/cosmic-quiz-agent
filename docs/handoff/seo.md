@@ -130,6 +130,10 @@ The checks above pass and main's review has no open findings.
 - a6fa07e: site title set to "Astronomy Quiz: Test Your Space Knowledge - Curiosity"; title and
   build-change decisions added to Decisions in `docs/SESSIONS.md`. Head of the branch.
 
+- Rebased onto origin/main (fa23eda, with ui's `src/quizAbout.ts`). The /quiz prerender now reads
+  its headings and text from that file, so the page and the prerender cannot differ. Removed the
+  prerender-only "covers N topics" sentence, which the visible screen does not show.
+
 ## Next
 
 1. Per-topic preview images (1200 x 630, made by media with Pillow). Then a per-topic `og:image` and `twitter:image` in `scripts/prerender/render.ts`.
