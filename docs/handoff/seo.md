@@ -126,6 +126,10 @@ The checks above pass and main's review has no open findings.
   `WebSite` on the home page. Removed `LearningResource` and `CollectionPage` from the other
   pages. Robots, meta and headers checked: nothing blocks crawling or snippets.
 
+- 2e6bbce: removed the Learn-page sources sentence from the /quiz text (main's review).
+- a6fa07e: site title set to "Astronomy Quiz: Test Your Space Knowledge - Curiosity"; title and
+  build-change decisions added to Decisions in `docs/SESSIONS.md`. Head of the branch.
+
 ## Next
 
 1. Per-topic preview images (1200 x 630, made by media with Pillow). Then a per-topic `og:image` and `twitter:image` in `scripts/prerender/render.ts`.
