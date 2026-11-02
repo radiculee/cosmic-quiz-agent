@@ -203,8 +203,7 @@ function quizPage(topicCount: number): PageSpec {
       `</ul>${covered}` +
       `<h2>Where the questions come from</h2>` +
       `<p>An AI agent reads pages from sources such as NASA, ESA and Wikipedia and writes each question. ` +
-      `A separate check must find a passage in those pages that supports the correct answer before the question is published. ` +
-      `You can read every source on the topic's Learn page.</p></main>`,
+      `A separate check must find a passage in those pages that supports the correct answer before the question is published.</p></main>`,
     data: [],
   };
 }
