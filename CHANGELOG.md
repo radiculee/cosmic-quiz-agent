@@ -4,6 +4,17 @@ What changed on the live site and in the repo since the README was rewritten for
 release. Everything before that, session by session with its decisions, checks and costs, is in
 [`docs/PLAN.md`](docs/PLAN.md).
 
+## 2026-11-02
+
+- **A live search makes its items at once.** A new topic's six items used to run one after another:
+  a median of 145.2 s (118.9 to 171.6 s, 4 searches, 2026-10-28 to 2026-10-30, last run finished
+  less first run started). The first search to succeed since the change took 61.3 s, with its first
+  item at 35 s and its first question at 49 s. That is one search (n=1), "Light speed", not a median.
+  About 20 s of it looks like a one-time cost, not the search itself: the first model call after more
+  than a day without a run took about 20 s, once for each kind of item, which fits the API compiling
+  the strict tool schemas again. Without those first calls this search would have taken about 41 s,
+  but no search has yet been measured that way.
+
 ## 2026-10-30
 
 - **November's budget for the launch.** Live research gets $20 for the calendar month of
