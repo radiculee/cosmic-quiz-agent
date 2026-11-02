@@ -23,8 +23,9 @@ interface QuizCardProps {
   /** Called once per answer with the seconds taken and the option picked (0 to 3); returns the
    * points it earned, if scored. */
   onAnswered: (correct: boolean, seconds: number, choice: number) => AnswerScore | null;
-  nextLabel: string;
-  onNext: () => void;
+  /** Without them there is no next button (the web page, once its result card takes over). */
+  nextLabel?: string | undefined;
+  onNext?: (() => void) | undefined;
   /** The next question is not ready yet (the web page, while it is researched). */
   nextDisabled?: boolean;
 }

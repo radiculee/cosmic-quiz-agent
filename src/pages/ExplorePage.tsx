@@ -7,6 +7,7 @@ import { LearnCard } from "../components/LearnCard";
 import { Link } from "../components/Link";
 import { QuizCard } from "../components/QuizCard";
 import { SearchProgress } from "../components/SearchProgress";
+import { type ExplanationsAction, WebResults } from "../components/WebResults";
 import { SegmentedControl } from "../components/SegmentedControl";
 import { HeaderSettings } from "../components/HeaderSettings";
 import { TopicInput } from "../components/TopicInput";
@@ -45,6 +46,7 @@ import {
 import { scrollBehavior } from "../useBrowserState";
 import { useQuota } from "../useQuota";
 import { loadedTopics, type TopicsState } from "../useTopics";
+import { resultsDue, webScore } from "../webResults";
 import {
   loadError,
   MAX_TOPIC_CHARS,
@@ -125,6 +127,8 @@ export function ExplorePage({
   const [streaming, setStreaming] = useState(false);
   const [questionAt, setQuestionAt] = useState(0);
   const [answered, setAnswered] = useState<ReadonlySet<number>>(new Set());
+  // Of those, the questions answered right, for the result card.
+  const [right, setRight] = useState<ReadonlySet<number>>(new Set());
   const [explanationOpen, setExplanationOpen] = useState(false);
   // The agent log sits behind "Show details" in the progress rows; each search starts it closed.
   const [detailsOpen, setDetailsOpen] = useState(false);
@@ -204,6 +208,7 @@ export function ExplorePage({
   const explanations = search ? explanationSlots(search) : [];
   const shownExplanation = explanations.find((slot) => slot.difficulty === explanationLevel);
   const lock = search ? explanationLock(search, answered) : undefined;
+  const resultsShown = resultsDue(questions, answered);
 
   // The next question, once the player moves on, if it starts off screen (after a long answer it
   // starts above it); the explanation, once opened.
@@ -284,6 +289,7 @@ export function ExplorePage({
     setSearch(null);
     setQuestionAt(0);
     setAnswered(new Set());
+    setRight(new Set());
     setExplanationOpen(false);
     setExplanationLevel("easy");
     setDetailsOpen(false);
@@ -412,6 +418,9 @@ export function ExplorePage({
       }),
     );
     setAnswered((ids) => new Set(ids).add(question.id));
+    if (correct) {
+      setRight((ids) => new Set(ids).add(question.id));
+    }
     awaitingAnswer.current = false;
     celebrate([...deferred.current, ...awards]);
     deferred.current = [];
@@ -559,14 +568,16 @@ export function ExplorePage({
                       onAnswered={(correct, seconds, choice) =>
                         onAnswered(currentQuestion, correct, seconds, choice)
                       }
-                      {...nextButton(
-                        questions,
-                        current,
-                        () => nextQuestion(current + 1),
-                        lock,
-                        openExplanation,
-                        startOver,
-                      )}
+                      {...(resultsShown
+                        ? {}
+                        : nextButton(
+                            questions,
+                            current,
+                            () => nextQuestion(current + 1),
+                            lock,
+                            openExplanation,
+                            startOver,
+                          ))}
                     />
                   </div>
                 ) : (
@@ -582,6 +593,13 @@ export function ExplorePage({
                     </p>
                   )
                 ))}
+              {resultsShown && (
+                <WebResults
+                  score={webScore(answered, right)}
+                  explanations={explanationsAction(lock, openExplanation)}
+                  onNewTopic={startOver}
+                />
+              )}
               {hasLive && log && logOutcome && (
                 <SearchProgress
                   key={log.id}
@@ -661,6 +679,19 @@ export function ExplorePage({
       <StatsPanel open={statsOpen} onClose={closeStats} search={search} running={streaming} />
     </div>
   );
+}
+
+/** The result card's button for the explanations; none if the search made none. */
+function explanationsAction(
+  lock: ExplanationLock | undefined,
+  onOpen: () => void,
+): ExplanationsAction | null {
+  if (!lock || lock.kind === "missed") {
+    return null;
+  }
+  return lock.kind === "open"
+    ? { label: "Read the explanations", disabled: false, onClick: onOpen }
+    : { label: "Explanations: researching", disabled: true, onClick: onOpen };
 }
 
 /** The question card's next button: the next question once it is ready; after the last one,
