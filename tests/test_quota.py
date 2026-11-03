@@ -429,7 +429,9 @@ def test_endpoint_answers_with_the_visitors_quota_and_is_never_cached(
 
     assert response.status == 200
     assert isinstance(response.body, dict)
-    assert response.body["remaining"] == 1 and response.body["global_open"] is True
+    # The endpoint reads the real clock, so the limit is whichever window is open today.
+    assert response.body["remaining"] == limits_at(datetime.now(UTC)).user_searches_per_day - 1
+    assert response.body["global_open"] is True
     assert response.headers["Cache-Control"] == "no-store"
     assert store.asked == [visitor]
     assert visitor not in json.dumps(response.body)
