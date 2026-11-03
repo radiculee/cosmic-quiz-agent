@@ -80,11 +80,19 @@ together when it ends. If it fails with nothing spent, the others never start, s
 costs one model call, not six. The log tags each line with its item, so the lines of runs at once
 interleave.
 
-The picture shows a search's progress panel with its log open. It comes from a local test stub with
-no model and no paid call, so a real search was not spent on it: the page and the log are the site's
-own code, but the topic, the pages, the scores and the clock are made up.
+These pictures are from a real search on the launch day, 3 November 2026. "Neutron star collisions
+and kilonovae" made all six items in 32.4 s for $0.1258. Four were published and two went to review.
 
-![The progress panel of a search, from a test stub with made-up data: the Easy bar ready, the Medium and Hard bars researching, "Explanations: 2 of 3 ready", and the open agent log with lines tagged by item, showing page fetches, the code checks, the Haiku verifier, a Jev check, the publish gate and the save to the bank](docs/images/agent-log.webp)
+<table>
+  <tr>
+    <td width="50%" valign="top"><img src="docs/images/search-easy.webp" alt="The easy question on Neutron star collisions and kilonovae, answered correctly, with a Not fully verified tag and the reason: the verifier's supporting quote is not on a cited page"><br>Easy: the verifier had doubts, so the question is marked and shown only to the visitor who searched until a person reviews it.</td>
+    <td width="50%" valign="top"><img src="docs/images/search-medium.webp" alt="The medium question, answered wrong: the chosen option marked, the right option marked as the answer, and the buttons Read the explanation, Sources (1) and Next: hard question"><br>Medium: a wrong answer, with the right one marked and the next question ready.</td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top"><img src="docs/images/search-hard.webp" alt="The hard question, how often binary neutron stars merge somewhere in the Universe, answered correctly: approximately every 10 seconds, worth 375 points"><br>Hard: the answer comes from the sentence the question cites, on one arXiv page.</td>
+    <td width="50%" valign="top"><img src="docs/images/search-explanation.webp" alt="The easy explanation of neutron star collisions and kilonovae, with the buttons Sources (3) and Another new topic"><br>An explanation, which opens once the questions are answered.</td>
+  </tr>
+</table>
 
 ### The publish gate
 
@@ -151,7 +159,7 @@ How long a new topic takes:
 |---|---|---|
 | One after another (measured 28 to 30 October 2026) | median 145.2 s, range 118.9 to 171.6 s (n=4) | not measured |
 | All at once (from 1 November 2026) | 61.3 s (n=1) | 49 s (n=1) |
-| Easy question first (since 2 November 2026) | 50.0 to 97.0 s (n=3; one of the searches made 5 items, not 6) | 21.6 to 41.2 s (n=3) |
+| Easy question first (since 2 November 2026) | 32.4 to 97.0 s (n=4; one of the searches made 5 items, not 6) | 14.1 to 41.2 s (n=4) |
 
 About 20 s of the n=1 search looks like a one-time cost, inferred from timing: the first model call
 after more than a day without a run took about 20 s. The site tells a visitor to expect the first
@@ -180,8 +188,9 @@ question in under a minute and the whole topic in a minute or two.
   takes 20.1 s (95% within 42.7 s), and prompt caching has saved $2.87, about a quarter of what the
   agent would otherwise have cost.
 - A live search of six items costs about $0.17, an estimate from what one item usually costs. The
-  one all-at-once search measured above cost $0.20 (n=1), and the two six-item easy-first searches
-  cost $0.1561 and $0.1511. The daily Curator, paid from 1 November, about $0.17, capped at $0.40.
+  one all-at-once search measured above cost $0.20 (n=1), and the three six-item easy-first searches
+  cost $0.1561, $0.1511 and $0.1258. The daily Curator, paid from 1 November, about $0.17, capped at
+  $0.40.
 - Every model call's tokens and cost are logged, and Mission Control shows them:
 
 ![Mission Control on the live site on 3 November 2026: 42% published, 163 of 391 runs; $0.062 per published item; median run 20.1 s; November spend $0.908 of the $32.00 Anthropic limit](docs/images/analytics.webp)

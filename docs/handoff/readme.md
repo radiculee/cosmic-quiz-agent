@@ -59,7 +59,9 @@ Nothing.
 
 ## Left
 
-- Replace the stub picture with a shot from a real search.
+- Done by main on 3 November: Vedant's four screenshots of a real search replace the stub picture.
+  `agent-log.webp` is removed, so the README no longer pictures the open agent log. The timing row
+  and the costs now include that search (run ids 121 to 126). Needs-from-Vedant item 1 below is closed.
 - Mission Control's figures move every day. The README dates them to 3 November 2026.
 
 ## Blocked on
