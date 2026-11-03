@@ -3,7 +3,132 @@
 Notes for the media session (`docs/SESSIONS.md`). They replace `docs/NEXT_SESSION.md` for this
 session. Update them before finishing, and commit them on `session/media`.
 
-Last update: 2026-10-30 (media session: built, tested, dry run done, committed; waiting on Vedant)
+Last update: 2026-11-03 (media agent: square cards committed, final picture list ready for main)
+
+## Report, 2026-11-03: square cards and the final picture list
+
+Branch `session/media`, rebased on `c23560f`. Nothing is pushed or merged. Main reviews it.
+
+### Done
+
+**The notes commit.** `0ae1d60` keeps the reasons for turned-down pictures in `notes`. The rebase
+had no conflict.
+
+**The code change.** `afcf09e` changes `curator/images.py` and `tests/test_images.py`.
+
+- `render` cuts the card directly from the source to a centred 320 x 320 WebP.
+- The 1200 x 630 link preview still comes from the source. Its code is unchanged, and a new test
+  covers it.
+- Minimum source size: the shorter side must be at least 320 px (`CARD_SIZE`), so a card is never
+  enlarged.
+- Card target 20 KB, limit 32 KB. I started at 30 KB, but the approved Planck map needs 30.9 KB at
+  the lowest quality.
+- New tests: a square source keeps its whole width, and a wide source gives a centred square.
+- No front-end change is necessary. `TopicGrid.tsx` reads width and height from the row, and
+  `THUMB` with `object-cover` is already square, on this branch and on `session/ui`. The 640 x 360
+  values in `src/` tests are only fixtures.
+
+**The final picture list.**
+
+- 56 cards are rendered, not 55. The bank now has a new topic, Neutron star collisions and
+  kilonovae. The fill chooses its picture by itself, so it has no override. Its licence and creator
+  match the API, and its card looks good.
+- Total bytes for all cards: 672,430 (661,814 without the new topic). The largest card is 30,862
+  bytes. 44 of the 56 also get a preview.
+- Three cards are over the 20 KB target and under the limit: Skylab and the two CMB maps.
+- Light speed: `File:V838_Mon_HST.jpg` is public domain, with no restrictions or non-free flag in
+  the Commons API. The Artist field matches the planned credit. Its card looks good.
+- `overrides.json` has 27 objects: 11 approved replacements, Light speed, 8 credit corrections,
+  6 swaps from step 3 and Red Dwarfs. Each credit is built by `credit_line`, and a script confirms
+  that the last match of the licence name is the real licence, so the split in `session/ui` works.
+
+**Cards marked poor at 192 px: 7.** All are swapped. Each swap needs Vedant's approval, because his
+plan did not name them.
+
+| Topic | Problem | Now |
+|---|---|---|
+| The Drake equation | Both ends of the equation cut, captions unreadable | Voyager Golden Record cover, NASA/JPL, public domain. It shows a message to other civilisations, not the equation. The Allen Telescope Array (CC BY-SA 2.0) is the alternative. |
+| Types of galaxies | Tiny galaxies, cut caption | PIA14098, 3 x 3 WISE galaxies, NASA/JPL-Caltech/UCLA. All nine survive a square. This is the fill's own choice, so it has no override. It has no elliptical galaxy. |
+| The life cycle of a Sun-like star | Heading cut, clutter | ESO "The life cycle of a Sun-like star", ESO/M. Kornmesser, CC BY 4.0 |
+| The Big Bang (a keep) | Timeline labels cut | Hubble Ultra Deep Field, NASA and others, public domain. It shows early galaxies, not the Big Bang itself. |
+| The Habitable Zone | Kepler-47 diagram labels cut | PIA17999, Kepler-186f artist concept, NASA/Ames/SETI Institute/JPL-Caltech |
+| White dwarf planets in second-generation systems | White dwarf lost, only a crescent left | NASA record GSFC_20171208_Archive_e001500, a white dwarf with debris from its planetary system, NASA, ESA, and G. Bacon (STScI). It shows debris, not a planet. |
+| Fast radio bursts and their cosmic origins | Nearly all black, thin line | ESO artist's impression that keeps the host galaxy, ESO/M. Kornmesser, CC BY 4.0. It is better but still dark, and the weakest card that is left. |
+
+Titan's lakes and Redshift are less clear than the others, but the subject can still be seen, so I
+kept them as planned.
+
+**Credit corrections, read from the Commons API.**
+
+- Meteoroids: ESO/C. Malin
+- Event horizons and black hole structure: Event Horizon Telescope/ESO
+- Venus's runaway greenhouse effect: JAXA/ISAS/DARTS/Kevin M. Gill (from the file description; the
+  Artist field has only Kevin M. Gill)
+- Binary star systems: ESA/Hubble & NASA
+- Magnetars: ESO/L. Calçada
+- Sagittarius A*: EHT Collaboration/ESO
+- Quasars: ESO/M. Kornmesser
+- Gravitational lensing: ESA/Hubble & NASA, derivative work by Bulwersator
+
+For the two EHT files I kept ESO, because the Attribution field names it and the Artist field names
+the EHT.
+
+**Effect of the lower minimum.** Sources under 640 px wide now pass, so the fill's own choice changes
+for 2 topics: Planetary nebulae (PIA14443 instead of a fact) and Red Dwarfs (a 604 x 592 Proxima
+Centauri picture instead of PIA21473). The overrides cover both. A full dry run shows no other
+change.
+
+### In progress
+
+Nothing.
+
+### Left
+
+Main applies the overrides. When you apply them:
+
+1. Render from `download_url`, with the code on this branch.
+2. Set `locked` on the override rows. Otherwise `--refresh` replaces them with the fill's own choice.
+3. Fill the other topics with this code. The dry run without `--refresh` did not skip Auroras, so it
+   has no picture row yet. I did not check the other topics this way.
+
+### Blocked on
+
+Nothing.
+
+### Needs from Vedant
+
+1. Approve or reject the 7 swaps on the sheet. I recommend all 7.
+2. Black holes uses the same file as Event horizons, but its credit is still "ESO", because it was
+   not on the approved list. It has no override. I recommend the same correction, Event Horizon
+   Telescope/ESO. The two cards also show the same picture.
+3. The aspect rule is unchanged (0.8 to 2.5). A 2.5:1 source now keeps only 40% of its width in the
+   card. No final card is that wide, so I left it. Tell me if you want it tighter.
+
+### Files changed
+
+- `curator/images.py`
+- `tests/test_images.py`
+- `docs/SESSIONS.md` (the media row and one Decisions entry)
+- `docs/handoff/media.md`
+
+Scratch files, outside the repo:
+
+- `C:\Users\vedan\AppData\Local\Temp\claude\c--Users-vedan-cosmic-quiz-agent\9fca8f3d-8dcb-4aa0-968c-f15c813470bf\scratchpad\final\sheet.png`
+- `C:\Users\vedan\AppData\Local\Temp\claude\c--Users-vedan-cosmic-quiz-agent\9fca8f3d-8dcb-4aa0-968c-f15c813470bf\scratchpad\final\overrides.json`
+
+### Checks run
+
+All in `C:\Users\vedan\cqa-media`, on the code in `afcf09e`.
+
+- `pnpm install --frozen-lockfile`, `pnpm typecheck` and `pnpm build` pass. `pnpm test`: 278 pass.
+- `pytest -q`: exit 0, 546 tests collected. `ruff check .`, `ruff format --check .` and
+  `mypy --strict` pass.
+- `python -m curator.images --dry-run --topic Auroras`: exit 0, card 8.5 KB, preview 56.7 KB. The
+  worktree's `.env` has the bank keys. I read only their names.
+- `python -m curator.images --dry-run --refresh`, for all topics: 53 pictures and 3 facts, 0 not
+  reached. It writes nothing.
+- I looked at `sheet.png` and at each candidate card. No write to Supabase, no paid call, no server
+  started.
 
 ## Current goal
 

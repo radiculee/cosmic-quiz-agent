@@ -20,7 +20,7 @@ A new session: `dev/new-session.sh <name>` (Git Bash) or `dev/new-session.ps1 <n
 | data | `session/data` | `../cqa-data` | Accounts: see "data owns" | Active: migration 011 written; `agent/auth.py` next (`docs/handoff/data.md`) | 2026-10-30 |
 | ui | `session/ui` | `../cqa-ui` | Header, cards, progress rows, ranks: see "ui owns" | Briefed, not started (`docs/handoff/ui.md`) | 2026-10-30 |
 | seo | `session/seo` | `../cqa-seo` | The rename, metadata, prerendering, redirects: see "seo owns" | Briefed, not started (`docs/handoff/seo.md`) | 2026-10-30 |
-| media | `session/media` | `../cqa-media` | Topic images: see "media owns" | Built and tested; dry run for Vedant to read, then migration 012 and the real fill (`docs/handoff/media.md`) | 2026-10-30 |
+| media | `session/media` | `../cqa-media` | Topic images: see "media owns" | Square cards on `session/media`, for main to review; main applies the final picture list (`docs/handoff/media.md`) | 2026-11-03 |
 
 Both sessions were still running in the main folder on `main` when this file was written, so
 until they move, their uncommitted changes share one working tree ("Uncommitted work" below).
@@ -321,6 +321,11 @@ entry; record a reversal as a new one.
   title leads with that phrase and ends with the short brand, as Google's title guidance advises.
 - 2026-11-02, Vedant (via main): the `package.json` build change is approved:
   `tsc --noEmit && vite build && node scripts/prerender.mjs`, with `engines.node` at `>=22.18`.
+- 2026-11-03, media: This replaces the 640 x 360 card in the 2026-10-30 media entry. A topic card
+  is now a centred 320 x 320 WebP, cut directly from the source (target 20 KB, limit 32 KB). A
+  source needs a shorter side of at least 320 px. Reason: the Learn card shows a square, so a
+  16:9 card was cut twice and a square photograph kept only its central 56%. The 1200 x 630 link
+  preview and the aspect rule (0.8 to 2.5) do not change.
 
 ---
 
