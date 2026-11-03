@@ -51,6 +51,11 @@ describe("TopicGrid", () => {
     ]);
   });
 
+  it("names the topic in the picture's alt text and leaves the credit to the line below", () => {
+    const html = render([topic("Jupiter", { image: IMAGE })]);
+    expect(html).toContain('alt="Jupiter"');
+  });
+
   it("keeps the topic link first, so the tab order is title, licence, file page", () => {
     const html = render([topic("Jupiter", { image: IMAGE })]);
     expect(html.indexOf("data-title")).toBeLessThan(html.indexOf("creativecommons.org"));

@@ -24,7 +24,7 @@ function Tick() {
 
 const THUMB = "h-24 w-24 shrink-0 rounded-sm sm:h-28 sm:w-28";
 const CREDIT_LINK =
-  "pointer-events-auto underline underline-offset-2 hover:text-teal focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal";
+  "pointer-events-auto whitespace-nowrap underline underline-offset-2 hover:text-teal focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal";
 
 function ExternalLink({ href, children }: { href: string; children: string }) {
   return (
@@ -100,7 +100,7 @@ export function TopicGrid({
                   src={visual.image.src}
                   width={visual.image.width}
                   height={visual.image.height}
-                  alt={`${topic.name}. ${visual.image.credit}`}
+                  alt={topic.name}
                   loading="lazy"
                   decoding="async"
                   className={`${THUMB} bg-void object-cover`}
@@ -111,11 +111,11 @@ export function TopicGrid({
                   <FactGlyph category={visual.category} />
                 </div>
               )}
-              <div className={`min-w-0 flex-1 ${read ? "pr-12" : ""}`}>
+              <div className={`min-w-0 flex-1 ${read ? "pr-14" : ""}`}>
                 {topic.kind !== "evergreen" && (
                   <span
                     className={`mb-1 block font-pixel text-[8px] uppercase ${
-                      topic.kind === "news" ? "text-gold" : "text-lavender"
+                      topic.kind === "news" ? "text-gold" : "text-slate"
                     }`}
                   >
                     {topic.kind === "news" ? "News" : "Web"}
@@ -124,7 +124,7 @@ export function TopicGrid({
                 <Link
                   to={learnTopicPath(topic.name)}
                   data-title
-                  className={`font-heading text-lg font-bold leading-snug after:absolute after:inset-0 after:content-[''] focus-visible:outline-none ${
+                  className={`break-words font-heading text-lg font-bold leading-snug after:absolute after:inset-0 after:content-[''] focus-visible:outline-none ${
                     read ? "text-ink/75" : "text-ink"
                   }`}
                 >
