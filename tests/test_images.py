@@ -599,6 +599,8 @@ def test_a_rejected_wikipedia_picture_falls_through_to_the_next_source() -> None
 
     assert chosen is not None
     assert chosen.media.source == "nasa"
+    assert "too small" in chosen.media.notes, "the rejected picture is kept with its reason"
+    assert "too small" in images.describe("Pillars of Creation", chosen)
 
 
 def test_the_fetcher_only_talks_to_known_hosts() -> None:

@@ -712,7 +712,7 @@ def choose_media(topic: TopicRow, fetcher: Fetcher) -> Chosen | None:
             unreachable = True
             notes.append(f"{label}: unreachable ({error})")
             return None
-        return _chosen(topic.name, candidate, rendered)
+        return _chosen(topic.name, candidate, rendered, "; ".join(notes))
 
     for title in wikipedia_titles(topic):
         found = attempt(f"wikipedia {title}", partial(wikipedia_candidate, fetcher, title))
@@ -762,7 +762,7 @@ def _ready(candidate: Candidate) -> Callable[[], Candidate]:
     return lambda: candidate
 
 
-def _chosen(topic: str, candidate: Candidate, rendered: Rendered) -> Chosen:
+def _chosen(topic: str, candidate: Candidate, rendered: Rendered, notes: str) -> Chosen:
     card_name = file_name(topic, rendered.card, "card")
     files = {card_name: rendered.card}
     preview_name: str | None = None
@@ -781,6 +781,7 @@ def _chosen(topic: str, candidate: Candidate, rendered: Rendered) -> Chosen:
         licence_url=candidate.licence_url,
         file_page_url=candidate.file_page_url,
         credit=candidate.credit,
+        notes=notes,
     )
     return Chosen(media=media, files=files)
 
@@ -914,6 +915,7 @@ def describe(topic: str, chosen: Chosen) -> str:
     return (
         f"{topic}\n    IMAGE  {media.source}  {media.licence_name}\n"
         f"    credit: {media.credit}\n    page:   {media.file_page_url}\n    files:  {sizes}"
+        + (f"\n    turned down first: {media.notes}" if media.notes else "")
     )
 
 
