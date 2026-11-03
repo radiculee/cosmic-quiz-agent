@@ -3,7 +3,70 @@
 Notes for the ui session (`docs/SESSIONS.md`). They replace `docs/NEXT_SESSION.md` for this
 session. Update them before finishing, and commit them on `session/ui`.
 
-Last update: 2026-11-02 (ui: all work live on main at fa23eda; idle)
+Last update: 2026-11-03 (ui: Learn card fixes on `session/ui`, waiting for main's review)
+
+## Learn card fixes (2026-11-03)
+
+Based on `c23560f`. Not pushed and not merged. The older notes below are unchanged.
+
+### Done
+
+All six faults are fixed, in `src/components/TopicGrid.tsx` and `src/topicGrid.test.tsx`.
+
+- `de932bc`, fault 1: a card names the licence once, for example "ESO, CC BY 4.0, via Wikimedia Commons · File page". The licence is linked if it has an address. A credit that does not name the licence keeps the old output. The split uses the last match in the credit, because `credit_line` puts the licence after the author. Each case has a test.
+- `adac808`, fault 2: `line-clamp-4` is removed, with a test. `_shorten` in `curator/images.py` cuts a long fact at a space and adds "...", so a fact cannot stop in the middle of a word.
+- `8b0ee8f`, faults 3 to 6, as one group because they are in one file:
+  - Credit links have `whitespace-nowrap`.
+  - The text beside a Read mark has `pr-14`, and the title has `break-words`.
+  - The WEB tag is `text-slate`. Contrast on the card goes from 3.89:1 to 6.64:1.
+  - The alt text is `topic.name`, with a test. No existing test read the old alt text.
+
+The square thumbnail and `index.html` are not changed.
+
+### In progress
+
+Nothing.
+
+### Left
+
+Main reviews the branch, then lands it.
+
+### Blocked on
+
+Nothing.
+
+### Needs from Vedant
+
+Nothing for these fixes. The thumbnail decision is still his. Faults found and not fixed:
+
+- `pr-14` also narrows the fact text on a read fact card, so a long read card is taller. "White dwarf planets in second-generation systems" takes 5 title lines and 5 fact lines at 1280 px.
+- The 170-character limit applies only to facts that the rules pick. I found no limit in `curator/images.py` for a fact replaced by hand (`locked`), and such a fact now shows in full. I did not read the whole `locked` path.
+- At 1280 px a card beside a card with a long credit stretches and has an empty area, for example "Binary star systems". The older note below describes a similar case for name-only cards.
+- `.venv` in this worktree did not have Pillow, so `pytest` and `mypy --strict` failed before they could run. I installed `pillow==13.0.0`, the version pinned in `requirements-media.txt`. CI installs it through `requirements-dev.txt`, so CI is not affected.
+
+### Files changed
+
+- `src/components/TopicGrid.tsx`
+- `src/topicGrid.test.tsx`
+- `docs/handoff/ui.md`
+
+### Checks run
+
+Run in `C:\Users\vedan\cqa-ui`, all passing:
+
+- `pnpm install --frozen-lockfile`, `pnpm typecheck`, `pnpm test` (283 tests), `pnpm build`.
+- `pytest -q`, `ruff check .`, `ruff format --check .`, `mypy --strict` (89 files).
+
+Headless Chrome on a built copy of the site at 1280, 390 and 320 px, with main's local preview data (40 topics: 36 with pictures, 4 with facts). The server answered `/api/topics` from that file and nothing reached the live site. At each width:
+
+- No sideways page scroll and no card overflow.
+- Each credit names the licence once, and all 36 picture credits contain their licence, so the old output was not seen in the browser. A test covers it.
+- Licence links match the data. No credit link breaks across two lines.
+- All 4 facts show in full. The title never touches the Read mark. All alt text equals the title.
+- A 57-letter word set in a read card's title by script gives no overflow.
+- No console errors.
+
+Not checked: a real phone, and the live bank's credits.
 
 ## Current goal
 
