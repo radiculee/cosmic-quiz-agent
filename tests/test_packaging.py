@@ -253,9 +253,9 @@ def test_the_privacy_page_states_the_retention_the_database_applies() -> None:
     assert "A daily clean-up removes the codes" in words
 
 
-# --- The link preview (public/og-v1.jpg, index.html) ------------------------------------------
+# --- The link preview (public/og-v2.jpg, index.html) ------------------------------------------
 
-OG_IMAGE = ROOT / "public" / "og-v1.jpg"
+OG_IMAGE = ROOT / "public" / "og-v2.jpg"
 
 
 def _jpeg_size(data: bytes) -> tuple[int, int]:

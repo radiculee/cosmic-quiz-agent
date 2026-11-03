@@ -18,12 +18,12 @@ export const ASTRONOMY_LINE = "An astronomy and space quiz.";
 /** The canonical origin, with no trailing slash. */
 export const ORIGIN = "https://curiosity.vedantgaikwad.ie";
 
-/** The link preview, on the site's own domain (1200 x 630). Switch to /og-v2.jpg when it lands. */
-export const SOCIAL_IMAGE = "/og-v1.jpg";
+/** The link preview, on the site's own domain (1200 x 630). */
+export const SOCIAL_IMAGE = "/og-v2.jpg";
 
 /** What the preview shows, for people who cannot see it. Change it with the image. */
 export const SOCIAL_IMAGE_ALT =
-  "COSMIC QUIZ and the tagline over a white observatory in a pink grass field under a navy sky";
+  "The Curiosity home page: the title, the tagline and three ways in, over a white observatory under a navy sky";
 
 export const THEME_COLOR = "#021a3d";
 
