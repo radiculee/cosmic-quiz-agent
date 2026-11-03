@@ -36,15 +36,28 @@ function ExternalLink({ href, children }: { href: string; children: string }) {
 }
 
 /** Who made the picture and on what licence, as the licence requires, with the licence and the
- * file's page linked. It sits above the card's stretched link so each link is its own target. */
+ * file's page linked. It sits above the card's stretched link so each link is its own target.
+ * The Curator's credit already names the licence (`credit_line` in curator/images.py), so the
+ * licence is shown in that place. A hand-written credit does not, so the licence follows it. */
 function Credit({ image }: { image: TopicImage }) {
+  const licence = image.licence_url ? (
+    <ExternalLink href={image.licence_url}>{image.licence}</ExternalLink>
+  ) : (
+    image.licence
+  );
+  const at = image.credit.lastIndexOf(image.licence);
   return (
     <p className="pointer-events-none relative z-10 border-t border-white/5 px-3 py-2 text-[11px] leading-relaxed text-slate">
-      {image.credit},{" "}
-      {image.licence_url ? (
-        <ExternalLink href={image.licence_url}>{image.licence}</ExternalLink>
+      {at < 0 ? (
+        <>
+          {image.credit}, {licence}
+        </>
       ) : (
-        image.licence
+        <>
+          {image.credit.slice(0, at)}
+          {licence}
+          {image.credit.slice(at + image.licence.length)}
+        </>
       )}
       {" · "}
       <ExternalLink href={image.page_url}>File page</ExternalLink>

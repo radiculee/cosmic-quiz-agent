@@ -15,6 +15,18 @@ const IMAGE: TopicImage = {
   source: "wikipedia",
 };
 
+/** A picture as the Curator writes it: the credit already names the licence. */
+const CURATOR_IMAGE: TopicImage = {
+  ...IMAGE,
+  credit: "ESO, CC BY 4.0, via Wikimedia Commons",
+  licence: "CC BY 4.0",
+  licence_url: "https://creativecommons.org/licenses/by/4.0",
+};
+
+function visibleText(html: string): string {
+  return html.replace(/<[^>]*>/g, "");
+}
+
 function topic(name: string, extra: Partial<BankTopic> = {}): BankTopic {
   return { name, kind: "evergreen", learn: ["easy"], quiz: ["easy"], ...extra };
 }
@@ -49,6 +61,41 @@ describe("TopicGrid", () => {
     const html = render([topic("Mars", { image: bare })]);
     expect(html).toContain("CC BY-SA 4.0");
     expect(anchors(html)).toEqual(["/learn/mars", IMAGE.page_url]);
+  });
+
+  it("names the licence once, linked in its place, when the credit already names it", () => {
+    const html = render([topic("Jupiter", { image: CURATOR_IMAGE })]);
+    expect(html).toContain("ESO, <a ");
+    expect(html).toContain("CC BY 4.0<span");
+    expect(html).toContain("</a>, via Wikimedia Commons · ");
+    expect(anchors(html)).toEqual([
+      "/learn/jupiter",
+      "https://creativecommons.org/licenses/by/4.0",
+      IMAGE.page_url,
+    ]);
+    expect(visibleText(html).match(/CC BY 4\.0/g) ?? []).toHaveLength(1);
+  });
+
+  it("names the licence once, with no link, when the credit names it and it has no address", () => {
+    const image: TopicImage = {
+      src: "/media/moon.jpg",
+      width: 640,
+      height: 360,
+      credit: "NASA, Public domain, via Wikimedia Commons",
+      licence: "Public domain",
+      page_url: "https://commons.wikimedia.org/wiki/File:Moon.jpg",
+      source: "wikipedia",
+    };
+    const html = render([topic("Moon", { image })]);
+    expect(html).toContain("NASA, Public domain, via Wikimedia Commons · ");
+    expect(visibleText(html).match(/Public domain/g) ?? []).toHaveLength(1);
+    expect(anchors(html)).toEqual(["/learn/moon", image.page_url]);
+  });
+
+  it("adds the licence after a hand-written credit that does not name it", () => {
+    const html = render([topic("Jupiter", { image: IMAGE })]);
+    expect(html).toContain("Photo: Jane Q. Astronomer, <a ");
+    expect(visibleText(html).match(/CC BY-SA 4\.0/g) ?? []).toHaveLength(1);
   });
 
   it("shows the fact and a glyph, and no credit, where there is no picture", () => {
