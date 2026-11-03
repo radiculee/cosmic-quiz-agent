@@ -15,11 +15,12 @@ and costs nothing. For each topic in the bank it looks for a picture, in this or
 3. Otherwise a fact card: a category for the card's art and one sentence from the topic's
    published explanation, chosen by rules in code. A fact can be replaced by hand (set `locked`).
 
-A picture is cut to 16:9, resized and saved as WebP, once at 640 px wide for the card (about
-40 KB) and, when the source is big enough, once at 1200 x 630 for link previews. The files go into
-the public Storage bucket `topic-images` under names that contain a hash of their content. The
-site serves them from its own address (`/media/*`, vercel.json), so a visitor's browser never
-contacts Wikimedia, NASA or Supabase for a picture.
+Each output is cut straight from the source and saved as WebP: a centred 320 x 320 square for the
+card (about 20 KB) and, when the source is big enough, 1200 x 630 for link previews. The card is
+square because the topic card shows a square thumbnail, so a square photograph of a planet keeps
+its whole width. The files go into the public Storage bucket `topic-images` under names that
+contain a hash of their content. The site serves them from its own address (`/media/*`,
+vercel.json), so a visitor's browser never contacts Wikimedia, NASA or Supabase for a picture.
 
 --dry-run reads the bank and the picture sources and prints each choice (picture, licence,
 credit, sizes) without uploading or writing anything. A topic that already has a picture is
@@ -56,17 +57,17 @@ BUCKET = "topic-images"
 
 # --- Sizes ------------------------------------------------------------------------------------
 
-CARD_WIDTH = 640
-CARD_HEIGHT = 360  # 16:9
+# A square: the Learn card's thumbnail is 112 CSS px at most, so this covers it at about 3x.
+CARD_SIZE = 320
 PREVIEW_WIDTH = 1200
 PREVIEW_HEIGHT = 630  # the shape link previews use
-CARD_TARGET_BYTES = 40_000
-CARD_MAX_BYTES = 60_000
+CARD_TARGET_BYTES = 20_000
+CARD_MAX_BYTES = 32_000
 PREVIEW_MAX_BYTES = 120_000
 MIN_QUALITY = 40
 QUALITY_STEP = 5
 START_QUALITY = 85
-# A source that is much taller or wider than the card would lose most of itself to the crop.
+# A source that is much taller or wider than this would lose most of itself to the crops.
 MIN_ASPECT = 0.8
 MAX_ASPECT = 2.5
 MAX_DOWNLOAD_BYTES = 15_000_000
@@ -471,7 +472,8 @@ def _webp(image: Image.Image, target: int, limit: int) -> bytes:
 
 
 def render(data: bytes) -> Rendered:
-    """Cut a picture to 16:9 and save the card (and, if it is big enough, the preview) as WebP."""
+    """Save the card and, if the source is big enough, the preview as WebP. Each is cut from the
+    source itself. The card is a centred square, and its source must fill it without enlarging."""
     try:
         with Image.open(io.BytesIO(data)) as source:
             if source.format not in ("JPEG", "PNG", "WEBP"):
@@ -481,7 +483,7 @@ def render(data: bytes) -> Rendered:
     except (UnidentifiedImageError, OSError, ValueError, Image.DecompressionBombError) as error:
         raise ImageRejectedError(f"cannot read the file ({type(error).__name__})") from error
     width, height = picture.size
-    if width < CARD_WIDTH or height < CARD_HEIGHT:
+    if min(width, height) < CARD_SIZE:
         raise ImageRejectedError(f"too small ({width} x {height})")
     if not MIN_ASPECT <= width / height <= MAX_ASPECT:
         raise ImageRejectedError(f"shape {width} x {height} would lose too much to the crop")
@@ -493,7 +495,7 @@ def render(data: bytes) -> Rendered:
     else:
         picture = picture.convert("RGB")
     card = _webp(
-        ImageOps.fit(picture, (CARD_WIDTH, CARD_HEIGHT), Image.Resampling.LANCZOS),
+        ImageOps.fit(picture, (CARD_SIZE, CARD_SIZE), Image.Resampling.LANCZOS),
         CARD_TARGET_BYTES,
         CARD_MAX_BYTES,
     )
@@ -772,8 +774,8 @@ def _chosen(topic: str, candidate: Candidate, rendered: Rendered, notes: str) ->
     media = TopicMedia(
         kind="image",
         card_path=card_name,
-        card_width=CARD_WIDTH,
-        card_height=CARD_HEIGHT,
+        card_width=CARD_SIZE,
+        card_height=CARD_SIZE,
         preview_path=preview_name,
         source=candidate.source,
         author=candidate.author,

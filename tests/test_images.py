@@ -343,26 +343,86 @@ def webp_size(data: bytes) -> tuple[int, int]:
         return image.size
 
 
-def test_a_large_picture_gives_a_16_9_card_and_a_link_preview() -> None:
+def split_picture(width: int, height: int) -> bytes:
+    """A left half of black and a right half of white, with a red band at each side edge."""
+    image = Image.new("RGB", (width, height), (0, 0, 0))
+    image.paste((255, 255, 255), (width // 2, 0, width, height))
+    band = width // 10
+    image.paste((255, 0, 0), (0, 0, band, height))
+    image.paste((255, 0, 0), (width - band, 0, width, height))
+    buffer = io.BytesIO()
+    image.save(buffer, "PNG")
+    return buffer.getvalue()
+
+
+def colours_across(data: bytes, xs: tuple[int, ...]) -> list[tuple[int, int, int]]:
+    """The colour at each of these columns, halfway down the picture."""
+    with Image.open(io.BytesIO(data)) as image:
+        middle = image.height // 2
+        row = image.convert("RGB").crop((0, middle, image.width, middle + 1)).tobytes()
+    return [(row[3 * x], row[3 * x + 1], row[3 * x + 2]) for x in xs]
+
+
+def is_red(colour: tuple[int, int, int]) -> bool:
+    return colour[0] > 150 and colour[1] < 100 and colour[2] < 100
+
+
+def test_a_large_picture_gives_a_square_card_and_a_link_preview() -> None:
     rendered = images.render(picture(1600, 1000))
 
-    assert webp_size(rendered.card) == (640, 360)
+    assert webp_size(rendered.card) == (320, 320)
     assert len(rendered.card) <= images.CARD_TARGET_BYTES
     assert rendered.preview is not None
     assert webp_size(rendered.preview) == (1200, 630)
     assert len(rendered.preview) <= images.PREVIEW_MAX_BYTES
 
 
+def test_a_square_source_keeps_its_whole_width_in_the_card() -> None:
+    rendered = images.render(split_picture(1000, 1000))
+
+    assert webp_size(rendered.card) == (320, 320)
+    left_edge, right_edge = colours_across(rendered.card, (6, 313))
+    assert is_red(left_edge), "the left edge of the source is still in the card"
+    assert is_red(right_edge), "the right edge of the source is still in the card"
+
+
+def test_a_wide_source_gives_a_centred_square() -> None:
+    rendered = images.render(split_picture(1600, 800))
+
+    assert webp_size(rendered.card) == (320, 320)
+    left_edge, left_of_centre, right_of_centre, right_edge = colours_across(
+        rendered.card, (6, 150, 170, 313)
+    )
+    assert not is_red(left_edge), "the side edges of a wide source are cut off"
+    assert not is_red(right_edge), "the side edges of a wide source are cut off"
+    assert max(left_of_centre) < 60, "the source's centre line stays at the card's centre"
+    assert min(right_of_centre) > 200, "the source's centre line stays at the card's centre"
+
+
+def test_the_preview_is_cut_from_the_source_and_not_from_the_card() -> None:
+    rendered = images.render(split_picture(2000, 1050))
+
+    assert rendered.preview is not None
+    assert webp_size(rendered.preview) == (1200, 630)
+    left_edge, right_edge = colours_across(rendered.preview, (6, 1193))
+    assert is_red(left_edge), "the preview has this source's shape, so it keeps the left edge"
+    assert is_red(right_edge), "the preview has this source's shape, so it keeps the right edge"
+
+
 def test_a_picture_too_small_for_the_preview_gives_a_card_only() -> None:
     rendered = images.render(picture(800, 500))
 
-    assert webp_size(rendered.card) == (640, 360)
+    assert webp_size(rendered.card) == (320, 320)
     assert rendered.preview is None
+
+
+def test_a_source_that_just_fills_the_card_is_accepted() -> None:
+    assert webp_size(images.render(picture(320, 320)).card) == (320, 320)
 
 
 @pytest.mark.parametrize(
     ("size", "reason"),
-    [((500, 400), "too small"), ((900, 1500), "shape"), ((3000, 600), "shape")],
+    [((400, 319), "too small"), ((900, 1500), "shape"), ((3000, 600), "shape")],
 )
 def test_pictures_that_are_small_or_badly_shaped_are_rejected(
     size: tuple[int, int], reason: str
@@ -377,7 +437,7 @@ def test_transparent_and_palette_pictures_are_laid_on_the_card_colour() -> None:
     with Image.open(io.BytesIO(rendered.card)) as card:
         assert card.mode == "RGB"
     palette = images.render(picture(900, 600, mode="P", fmt="PNG"))
-    assert webp_size(palette.card) == (640, 360)
+    assert webp_size(palette.card) == (320, 320)
 
 
 def test_a_picture_too_detailed_for_the_size_limit_is_rejected() -> None:
@@ -541,8 +601,8 @@ def test_a_topic_with_a_wikipedia_picture_gets_an_image_row_and_two_files() -> N
     media = chosen.media
     assert media.kind == "image"
     assert media.source == "wikipedia"
-    assert media.card_width == 640
-    assert media.card_height == 360
+    assert media.card_width == 320
+    assert media.card_height == 320
     assert media.card_path is not None
     assert media.preview_path is not None
     assert set(chosen.files) == {media.card_path, media.preview_path}
@@ -814,8 +874,8 @@ AURORAS = BankTopic(name="Auroras", kind="evergreen", learn=list(LEVELS), quiz=l
 IMAGE_ROW: dict[str, Any] = {
     "kind": "image",
     "card_path": "auroras-0123456789-card.webp",
-    "card_width": 640,
-    "card_height": 360,
+    "card_width": 320,
+    "card_height": 320,
     "preview_path": "auroras-abcdef0123-preview.webp",
     "source": "wikipedia",
     "licence_name": "CC BY 4.0",
@@ -846,7 +906,7 @@ def test_an_image_row_adds_a_picture_served_from_this_site() -> None:
     assert topic.image is not None
     assert topic.image.src == "/media/auroras-0123456789-card.webp"
     assert topic.image.preview == "/media/auroras-abcdef0123-preview.webp"
-    assert (topic.image.width, topic.image.height) == (640, 360)
+    assert (topic.image.width, topic.image.height) == (320, 320)
     assert topic.image.credit == "Jane Doe, CC BY 4.0, via Wikimedia Commons"
     assert topic.image.licence == "CC BY 4.0"
     assert topic.image.page_url.startswith("https://commons.wikimedia.org/")
