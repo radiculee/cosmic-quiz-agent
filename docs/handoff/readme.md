@@ -1,7 +1,8 @@
 # Handoff: readme
 
 Launch day, Tuesday 3 November 2026. Branch `worktree-agent-ad519171765432cf2`, from `e4ed271`.
-Work commits: `18b91e9` (images), `10d9ff7` (README). The head is the commit that adds this file.
+Work commits: `18b91e9` (images), `10d9ff7` (README), `6ed5e54` (this file). The head is the commit
+that makes main's two review fixes (2 findings on `6ed5e54`).
 Not pushed, not merged.
 
 ## Done
@@ -32,7 +33,9 @@ Not pushed, not merged.
 | 2 searches, 300 requests, 10 reports; launch 5, 14, $3.25; November $20 | `agent/limits.py`; live `/api/quota` says limit 5 |
 | A search reserves all its runs when it starts, up to $1.02 | `agent/limits.py`, `agent/config.py` ($0.10 + $0.07 a run), 6 runs |
 | A search with every run failed and nothing spent does not count | `CHANGELOG.md` 2026-11-01, migration 013 |
-| 145.2 s (118.9 to 171.6 s, n=4); 61.3 s and 49 s (n=1); about 90 s an estimate, easy-first order not measured | `CHANGELOG.md` 2026-11-02, `docs/handoff/latency.md` |
+| 145.2 s (118.9 to 171.6 s, n=4); 61.3 s and 49 s (n=1) | `CHANGELOG.md` 2026-11-02, `docs/handoff/latency.md` |
+| Easy-first order: first question 21.6 to 41.2 s, whole search 50.0 to 97.0 s (n=3; one search made 5 items) | Main's read of `on_demand_runs`, 3 November (searches 104, 110, 115). I did not query the table |
+| The two six-item easy-first searches cost $0.1561 and $0.1511 | The same read (searches 104 and 115) |
 | About 20 s one-time cost, inferred | `CHANGELOG.md`, `docs/handoff/latency.md` |
 | "Under a minute" and "a minute or two" | Live `/explore` |
 | Prerendered pages with their own tags and text; 43 sitemap addresses | Live `/sitemap.xml`, `/learn/antimatter`; `scripts/prerender/` |
@@ -56,8 +59,7 @@ Nothing.
 
 ## Left
 
-- After the first real search of the easy-first order: replace the "not measured yet" row and the
-  stub picture. Latency's handoff has the measuring rule.
+- Replace the stub picture with a shot from a real search.
 - Mission Control's figures move every day. The README dates them to 3 November 2026.
 
 ## Blocked on
@@ -68,7 +70,10 @@ Nothing.
 
 1. **The search picture.** It is from the stub, and the README says so beside it. The topic, the
    `science.nasa.gov/universe/exomoons` address, the scores and the clock are made up. If you want
-   a real one, shoot it from a launch search. I recommend this.
+   a real one, shoot it from a launch search. I recommend this. I also changed the scratch stub's
+   Haiku line: its fake record said "borderline" beside "Publish gate passed", which the real gate
+   cannot do, so the guarded copy makes that line say "pass". The change is in the scratchpad only,
+   not in the repo.
 2. **The published share went down.** The README used to say 54%, and today's figure is 42%, because
    it agrees with Mission Control. It is the truth, and a recruiter who opens the site sees it.
 3. **A wrong sentence on the live site.** The ISS EASY item's explanation says 1 January 1998 is when
@@ -92,12 +97,14 @@ Nothing.
   4 runs, one at a time". Latency's handoff has drafts for some of these. The file is Vedant's.
 - `CLAUDE.md` describes sign-in as part of v1, with no note that it is off for the launch.
 - `docs/handoff/seo.md` says the redirects are 301. They are 308.
-- `CHANGELOG.md` has no line for this README rewrite.
+- `CHANGELOG.md` has no line for this README rewrite, and its 2026-11-02 entry still says the
+  easy-first order "has not been measured yet", with "up to about 90 s".
 
 ## Checks run
 
 - Rendered with `gh api -X POST markdown --input req.json`, `"mode": "markdown"`, and looked at a
   screenshot of every part, with the diagram drawn. All five images load. No console errors.
+- After main's two fixes: rendered the same way again and looked at the table and the Cost section.
 - Every relative link and image path exists. Live site, `/sitemap.xml`, `/privacy` and
   vedantgaikwad.ie answer 200.
 - Search for "cosmic.", "Cosmic Quiz", "COSMIC QUIZ", "sign in", "account", "image": each hit is
@@ -116,7 +123,8 @@ The stub at `6aee6f91-.../scratchpad/stub_api.py` removes the paid keys, then `l
 `load_dotenv()`, which searches up from `agent/`. A `.claude/worktrees/` worktree sits inside the main
 folder, so from such a worktree that search should find the main `.env` and bring the keys back. I
 read this from the code and did not run the old copy to test it. Its fakes make no paid call, but use
-the guarded copy (`9fca8f3d-.../scratchpad/make_stub.py` shows the two changes).
+the guarded copy (`9fca8f3d-.../scratchpad/make_stub.py` shows the two changes that keep the keys out,
+and `fix3.py` beside it the Haiku line).
 
 The premise "the Live line links to cosmic." was already fixed at `e4ed271`.
 
@@ -126,7 +134,7 @@ The premise "the Live line links to cosmic." was already fixed at `e4ed271`.
   neither feature, which agrees.
 - The Anthropic Console limit is really $32. Mission Control's $32 is a dated number in the code, not
   a read of the Console.
-- The easy-first order is live since 2 November: from `docs/handoff/latency.md`. It runs in the stub
-  from this commit's code; the live function was not run.
+- The easy-first figures and costs: from main's read of `on_demand_runs`. I have no access to that
+  table and did not run a search.
 - The explanation text in the Apollo 11 screenshot (such as "600 million viewers") comes from the bank.
   I did not check it against a source.

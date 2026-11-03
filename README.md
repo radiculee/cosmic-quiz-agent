@@ -151,7 +151,7 @@ How long a new topic takes:
 |---|---|---|
 | One after another (measured 28 to 30 October 2026) | median 145.2 s, range 118.9 to 171.6 s (n=4) | not measured |
 | All at once (from 1 November 2026) | 61.3 s (n=1) | 49 s (n=1) |
-| Easy question first (since 2 November 2026) | not measured yet; an estimate of up to about 90 s | not measured yet |
+| Easy question first (since 2 November 2026) | 50.0 to 97.0 s (n=3; one of the searches made 5 items, not 6) | 21.6 to 41.2 s (n=3) |
 
 About 20 s of the n=1 search looks like a one-time cost, inferred from timing: the first model call
 after more than a day without a run took about 20 s. The site tells a visitor to expect the first
@@ -180,8 +180,8 @@ question in under a minute and the whole topic in a minute or two.
   takes 20.1 s (95% within 42.7 s), and prompt caching has saved $2.87, about a quarter of what the
   agent would otherwise have cost.
 - A live search of six items costs about $0.17, an estimate from what one item usually costs. The
-  one all-at-once search measured above cost $0.20 (n=1). The daily Curator, paid from 1 November,
-  about $0.17, capped at $0.40.
+  one all-at-once search measured above cost $0.20 (n=1), and the two six-item easy-first searches
+  cost $0.1561 and $0.1511. The daily Curator, paid from 1 November, about $0.17, capped at $0.40.
 - Every model call's tokens and cost are logged, and Mission Control shows them:
 
 ![Mission Control on the live site on 3 November 2026: 42% published, 163 of 391 runs; $0.062 per published item; median run 20.1 s; November spend $0.908 of the $32.00 Anthropic limit](docs/images/analytics.webp)
