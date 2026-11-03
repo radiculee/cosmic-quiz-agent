@@ -6,7 +6,7 @@ An astronomy quiz written by an AI agent that checks every answer against the pa
 
 **Live:** [curiosity.vedantgaikwad.ie](https://curiosity.vedantgaikwad.ie)
 
-![COSMIC QUIZ over a white observatory in a pink grass field under a navy sky](public/og-v1.jpg)
+![The Curiosity home page: the title CURIOSITY, the line "An astronomy and space quiz", and three ways in (Read a topic, Play a run, Try a new topic) over a white observatory in a pink grass field under a blue sky](docs/images/home.webp)
 
 - **It checks itself.** The agent may cite only pages it fetched in that run, a rule enforced in
   code rather than trusted to the prompt, and everything it writes passes three separate checks
@@ -24,19 +24,31 @@ GitHub Actions.
 Built by [Vedant Gaikwad](https://www.vedantgaikwad.ie). "I love astronomy, so I built the quiz
 I wanted to play, and made the agent that writes it prove every answer."
 
+The site was called Cosmic Quiz until 30 October 2026, when it was renamed after the Mars rover.
+The repo keeps the name `cosmic-quiz-agent`.
+
 ## What you can do
 
 - **Learn:** pick a topic for a plain-language explanation at one of three levels, with the
-  pages it is based on.
-- **Quiz:** runs of 10, 30 or 60 questions against the clock, each on a different topic. After
-  each answer you see the explanation, the sources, and a source check: what a second model
-  found in the cited pages for every option.
-- **Try a new topic:** type any astronomy topic and the agent researches it live, streaming each
-  step, including every claim it checks. Two searches a day per visitor (five in the launch
-  week, 3 to 9 November 2026).
+  pages it is based on. There are 39 topics today, each at its own address, and the ones you have
+  read are marked.
+- **Quiz:** runs of 10 or 30 questions against the clock, each on a different topic. A run of 60
+  opens when the bank has that many topics at the level. After each answer you see right or wrong
+  at once, then a row of buttons: "Read the explanation", "Sources (n)" (the cited pages and a
+  source check: what a second model found in them for every option) and the next question. The
+  two panels start closed and stay as you last left them.
+- **Try a new topic:** type any astronomy topic, or press Surprise me, and the agent researches it
+  live. The easy question arrives first and the other items after it. Three bars (Easy, Medium,
+  Hard) and an explanations line follow the agent's real steps, and "Show details" opens the
+  streamed log, including every claim it checks. A results card follows the last question, and
+  then the explanations open. Two searches a day per visitor (five in the launch week, 3 to 9
+  November 2026).
 - **Mission Control:** what the agent costs, how long it takes and how its checks judge it,
   from live data.
-- Ranks, streaks and tiered trophies, kept in your browser.
+- Ranks named after Mars rovers, from Sojourner to Perseverance, each with one fact and its source
+  page in the code; streaks and tiered trophies. All of it is kept in your browser.
+
+A sticky header on every page holds the navigation and that page's settings.
 
 ## How it works
 
@@ -62,12 +74,17 @@ flowchart TB
 - **The citation rule is enforced in code, not trusted to the prompt** (`agent/verify.py`): a
   source can only be a URL fetched in that run. Anything else is dropped.
 
-A live search on the site, 19 seconds in: the on-topic check, the budget reserved for the run,
-then the model choosing its own searches and pages, and the first of the checks. The whole
-search, on "James Webb Space Telescope" on 13 October 2026, made all four items it set out to
-make, in 86 seconds of agent and checks, for $0.097.
+A live search makes up to six items, a question and an explanation at each level, each on a thread
+of its own (`agent/ondemand.py`). The easy question goes first and alone, and the others start
+together when it ends. If it fails with nothing spent, the others never start, so a refused API key
+costs one model call, not six. The log tags each line with its item, so the lines of runs at once
+interleave.
 
-![The agent log of a live search on James Webb Space Telescope: an on-topic check, a budget of up to $0.17 reserved, the model choosing search_wikipedia and search_nasa_images, a fetch of the Wikipedia page, the question written and the code checks passed](docs/images/agent-log.webp)
+The picture shows a search's progress panel with its log open. It comes from a local test stub with
+no model and no paid call, so a real search was not spent on it: the page and the log are the site's
+own code, but the topic, the pages, the scores and the clock are made up.
+
+![The progress panel of a search, from a test stub with made-up data: the Easy bar ready, the Medium and Hard bars researching, "Explanations: 2 of 3 ready", and the open agent log with lines tagged by item, showing page fetches, the code checks, the Haiku verifier, a Jev check, the publish gate and the save to the bank](docs/images/agent-log.webp)
 
 ### The publish gate
 
@@ -96,14 +113,16 @@ with 40 planted faults ([`docs/EVALS.md`](docs/EVALS.md)):
 | **All** | **38 of 40** |
 
 The two misses are planted sentences the sources arguably do support. The cost of that
-strictness: on the live site, 115 of 213 runs (54%) published directly by 13 October 2026; 80
-went to review and 17 were discarded.
+strictness: on the live site, 163 of 391 runs (42%) published directly by 3 November 2026; 166
+went to review, 34 were discarded and 28 ended with no answer to check. A Jev check that ends in an
+error also sends an item to review, and 70 of those runs had one. After human review the bank holds
+295 published items.
 
-What a player sees after answering: the explanation, Jev's verdict on every option, and the
-quote each source was cited for.
+What a player sees after answering, with both panels open: the explanation, Jev's verdict on every
+option, and the quote each source was cited for.
 
 <p align="center">
-  <img src="docs/images/quiz-answer.webp" width="560" alt="A quiz answer on The Big Bang: the right option marked, the explanation, a source check in which Jev finds the right option supported and the three others contradicted at confidence 1.00, and the cited Wikipedia sentence">
+  <img src="docs/images/quiz-answer.webp" width="560" alt="A quiz answer on The Apollo Moon landings: the right option marked, the points, the buttons Read the explanation, Sources (1) and Next question, then the explanation, a source check in which Jev finds the right option supported and the three others contradicted at confidence 1.00, and the cited Wikipedia sentence">
 </p>
 
 ### Live research, behind guardrails
@@ -113,15 +132,41 @@ quote each source was cited for.
   below, so a refused search costs nothing.
 - **Per visitor** (a salted hash of the IP address, never the address): 2 searches a day, 300
   API requests an hour, 10 reports a day.
-- **For everyone:** 4 searches and $0.50 a day, $4 a month. Each run reserves the most it can
-  cost ($0.17) until it ends, so the caps hold even when searches start at the same moment.
+- **For everyone:** 4 searches and $1.55 a day, $4 a month. Each run reserves the most it can
+  cost ($0.17) until it ends, and a search reserves all its runs when it starts, up to $1.02, so
+  the caps hold even when searches start at the same moment.
 - **November 2026,** the launch month: $20 a month for live research, so the launch cannot use up
   the month in its first days.
 - **Launch week** (the UTC days 3 to 9 November 2026): 5 searches a day per visitor, and 14
   searches and $3.25 a day for everyone. At about $0.17 a search, the whole week at full use
   costs about $17, inside November's $20. The dates are in code, so the usual limits come back
   by themselves, and the $4 month on 1 December.
+- A search the model never answered is free: when every run of it fails with nothing spent, it
+  does not count against the daily limits.
 - Over a limit, the visitor keeps everything the bank already has.
+
+How long a new topic takes:
+
+| How the items run | Whole search | First question |
+|---|---|---|
+| One after another (measured 28 to 30 October 2026) | median 145.2 s, range 118.9 to 171.6 s (n=4) | not measured |
+| All at once (from 1 November 2026) | 61.3 s (n=1) | 49 s (n=1) |
+| Easy question first (since 2 November 2026) | not measured yet; an estimate of up to about 90 s | not measured yet |
+
+About 20 s of the n=1 search looks like a one-time cost, inferred from timing: the first model call
+after more than a day without a run took about 20 s. The site tells a visitor to expect the first
+question in under a minute and the whole topic in a minute or two.
+
+### The site
+
+- `pnpm build` prerenders the home page, `/learn`, `/quiz`, `/explore` and one page for each
+  complete Learn topic, each with its own title, description, canonical link, preview tags and
+  text, so a crawler can read them with no script (`scripts/prerender/`). React takes over in the
+  browser. The [sitemap](https://curiosity.vedantgaikwad.ie/sitemap.xml) lists 43 addresses today.
+- The old address `cosmic.vedantgaikwad.ie`, six typo and short addresses (such as
+  `curiousity.vedantgaikwad.ie` and `quiz.vedantgaikwad.ie`) and the `.vercel.app` address redirect
+  permanently to the live site and keep the path. A misspelt path such as `/lern` goes to the
+  nearest page (`src/closeMatch.ts`), and the 404 page suggests near matches.
 
 ## Cost
 
@@ -130,26 +175,39 @@ quote each source was cited for.
   research, about $5 for the daily Curator, $5 to fill the bank with 30 likely topics, and $2
   spare. Jev runs on a prepaid TypeSafe balance ($0.042 per million input tokens).
   Everything else is on a free tier: Vercel Hobby, Supabase and GitHub Actions.
-- Measured on the live site by 13 October 2026: 213 runs for $5.89, all checks included, which
-  is about $0.028 a run and $0.051 for each item published directly. A median run takes 19.2 s
-  (95% within 36.2 s), and prompt caching cut the agent's cost by about a quarter.
-- A live search of four items costs about $0.12. The daily Curator, paid from 1 November, about
-  $0.17, capped at $0.40.
+- Measured on the live site on 3 November 2026: 391 runs since 2 October for $10.05, all checks
+  included, which is about $0.026 a run and $0.062 for each item published directly. A median run
+  takes 20.1 s (95% within 42.7 s), and prompt caching has saved $2.87, about a quarter of what the
+  agent would otherwise have cost.
+- A live search of six items costs about $0.17, an estimate from what one item usually costs. The
+  one all-at-once search measured above cost $0.20 (n=1). The daily Curator, paid from 1 November,
+  about $0.17, capped at $0.40.
 - Every model call's tokens and cost are logged, and Mission Control shows them:
 
-![Mission Control on the live site: 54% published, 115 of 213 runs; $0.051 per published item; median run 19.2 s; October spend $5.84 of the $10.00 Anthropic limit](docs/images/analytics.webp)
+![Mission Control on the live site on 3 November 2026: 42% published, 163 of 391 runs; $0.062 per published item; median run 20.1 s; November spend $0.908 of the $32.00 Anthropic limit](docs/images/analytics.webp)
 
 ## Security and privacy
 
 Audited before the repo went public ([`docs/SECURITY_AUDIT.md`](docs/SECURITY_AUDIT.md)): 19
 findings, none High; the five Medium ones are fixed, each with a test, and every other finding is
 recorded with what was done about it. The site sends a Content-Security-Policy that allows only
-itself, the API refuses requests from other sites' pages, the browser-safe database key can read
-only published items, and the git history was scanned for secrets.
+itself, plus connections to the project's Supabase address; the API refuses requests from other
+sites' pages, the browser-safe database key can read only published items, and the git history was
+scanned for secrets.
 
 No accounts, cookies, ads or tracking: progress stays in your browser. An IP address is never
 stored; it becomes a salted hash, kept for about a day (30 days with a report). The full text is at
 [/privacy](https://curiosity.vedantgaikwad.ie/privacy).
+
+## In the code, not on the site
+
+Two things in this repo are not live, and `CLAUDE.md` and `docs/DESIGN.md` describe them as
+decided work:
+
+- **Optional sign-in** is off for the launch (the build flag `VITE_ACCOUNTS`), and its migration
+  (011) is not applied.
+- **Pictures on the Learn cards:** the pipeline is written, but its migration (012) is not applied
+  and no image is uploaded, so a card shows the topic's name.
 
 ## Run it yourself
 
