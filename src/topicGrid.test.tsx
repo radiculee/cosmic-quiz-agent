@@ -107,6 +107,13 @@ describe("TopicGrid", () => {
     expect(anchors(html)).toEqual(["/learn/quasar"]);
   });
 
+  it("shows the whole fact, with no line limit that could cut it", () => {
+    const text = `${"Quasars outshine whole galaxies across the observable universe. ".repeat(3)}End.`;
+    const html = render([topic("Quasar", { fact: { category: "galaxy", text } })]);
+    expect(html).toContain(text);
+    expect(html).not.toContain("line-clamp");
+  });
+
   it("shows only the name for a topic with neither", () => {
     const html = render([topic("Comet")]);
     expect(html).toContain("Comet");

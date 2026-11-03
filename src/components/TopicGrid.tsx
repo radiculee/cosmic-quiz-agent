@@ -131,9 +131,7 @@ export function TopicGrid({
                   {topic.name}
                 </Link>
                 {visual.kind === "fact" && (
-                  <p className="mt-1.5 line-clamp-4 text-xs leading-relaxed text-slate">
-                    {visual.fact.text}
-                  </p>
+                  <p className="mt-1.5 text-xs leading-relaxed text-slate">{visual.fact.text}</p>
                 )}
               </div>
             </div>
