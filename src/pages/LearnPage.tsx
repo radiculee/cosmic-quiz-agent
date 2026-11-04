@@ -53,6 +53,9 @@ function LearnIndex({ topicsState, retryTopics, profile, difficulty, setDifficul
   const available = filterTopics(topics, "", "learn", difficulty);
   const shown = filterTopics(topics, query, "learn", difficulty);
   const read = available.filter((topic) => learned.has(topic.name)).length;
+  // A typed search puts its match count above the grid, where it answers the search; otherwise the
+  // progress line goes below the grid, so the grid is the first thing under the controls.
+  const searching = query.trim() !== "";
 
   function pickRandom() {
     const topic = randomTopic(topics, "learn", difficulty, "", Math.random, profile.learned);
@@ -107,15 +110,20 @@ function LearnIndex({ topicsState, retryTopics, profile, difficulty, setDifficul
         <TopicsNotice state={topicsState} onRetry={retryTopics} />
         {topicsState.kind === "loaded" && (
           <>
-            <p aria-live="polite" className="scene-note mb-4 text-sm">
-              {query.trim()
-                ? `${shown.length} of ${available.length} topics match.`
-                : `${read} of ${available.length} read at ${difficulty.toUpperCase()}.`}
-            </p>
+            {searching && (
+              <p aria-live="polite" className="scene-note mb-4 text-sm">
+                {shown.length} of {available.length} topics match.
+              </p>
+            )}
             {shown.length > 0 ? (
               <TopicGrid topics={shown} learned={learned} />
             ) : (
               <NoMatch query={query} topics={topics} difficulty={difficulty} />
+            )}
+            {!searching && (
+              <p aria-live="polite" className="scene-note mt-6 text-sm">
+                {read} of {available.length} read at {difficulty.toUpperCase()}.
+              </p>
             )}
           </>
         )}
