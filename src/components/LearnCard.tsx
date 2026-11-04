@@ -17,7 +17,13 @@ export function LearnCard({
 }) {
   const paragraphs = item.explanation.split(/\n+/).filter((text) => text.trim());
   return (
-    <CardFrame mode="learn" difficulty={item.difficulty} topic={item.topic} status={item.status}>
+    <CardFrame
+      mode="learn"
+      difficulty={item.difficulty}
+      topic={item.topic}
+      status={item.status}
+      beingChecked={item.being_checked === true}
+    >
       <div className="mt-5 space-y-4 text-lg leading-relaxed text-ink/90">
         {paragraphs.map((text, index) => (
           <p key={index}>{text}</p>

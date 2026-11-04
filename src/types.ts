@@ -69,6 +69,8 @@ export interface QuizQuestion {
   question: string;
   options: string[];
   status: ShownStatus;
+  /** A person has not finished checking this item (migration 014). Absent means false. */
+  being_checked?: boolean;
 }
 
 export interface QuizAnswer {
@@ -91,6 +93,8 @@ export interface LearnItem {
   source_check: SourceCheck;
   status: ShownStatus;
   doubts: string[];
+  /** A person has not finished checking this item (migration 014). Absent means false. */
+  being_checked?: boolean;
 }
 
 export type Item = QuizQuestion | LearnItem;

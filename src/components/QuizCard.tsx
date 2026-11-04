@@ -88,6 +88,7 @@ export function QuizCard({
       difficulty={question.difficulty}
       topic={question.topic}
       status={question.status}
+      beingChecked={question.being_checked === true}
     >
       <p className="mt-4 text-xl leading-relaxed font-medium">{question.question}</p>
 
