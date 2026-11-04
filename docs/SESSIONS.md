@@ -326,6 +326,9 @@ entry; record a reversal as a new one.
   source needs a shorter side of at least 320 px. Reason: the Learn card shows a square, so a
   16:9 card was cut twice and a square photograph kept only its central 56%. The 1200 x 630 link
   preview and the aspect rule (0.8 to 2.5) do not change.
+- 2026-11-04, Vedant (via main): yes to the 7 picture swaps and to the Black holes credit, "Event
+  Horizon Telescope/ESO". Main saved 28 rows as `locked` (the 27 overrides and Black holes), then
+  ran the fill for the other 27. Auroras keeps its row. 41 Wormholes stays as it is.
 
 ---
 
