@@ -74,6 +74,10 @@ const SURPRISE_TOPIC = "Surprise me";
 const MADE_OVERNIGHT =
   "The agent tries again overnight, and the topic joins Learn and Quiz once every level is ready.";
 
+/** Under the landing page's buttons: what a search does and how long it takes. */
+const HOW_IT_WORKS =
+  "It reads NASA, ESA, arXiv and Wikipedia live, writes a question and an explanation at each level, and checks each against the pages it read. The first question usually takes under a minute, and the whole topic a minute or two. The explanations open once you have answered the questions.";
+
 const ENDED_EARLY = "The search ended before this was made.";
 const UNAVAILABLE = "Live research is not available right now.";
 
@@ -480,44 +484,61 @@ export function ExplorePage({
     (!search.ended ||
       search.slots.some((slot) => slot.source === "bank" || slot.state.kind === "ready"));
 
+  // Before a search the page has one job, so the topic box sits in the page right above GO. Once a
+  // search or its log is on the page, the box goes back to the sticky header (with the short
+  // quota), so the next search starts without a scroll to the top. Only one box exists at a time.
+  const landing = search === null && log === null;
+  const topicBox = (
+    <TopicInput
+      value={query}
+      suggestions={suggestions}
+      disabled={topicsState.kind !== "loaded"}
+      placeholder="A new topic, e.g. Pulsars"
+      onChange={setQuery}
+      onSubmit={go}
+      small={!landing}
+    />
+  );
+  const quotaNote = quota?.global_open && (
+    <p role="status" className="scene-note mt-6 max-w-md text-center text-sm">
+      {quotaLine(quota)}
+    </p>
+  );
+
   return (
     <div className="flex flex-col items-center">
       <PageHeading title="Explore">
-        Research a topic that is not in the bank yet, or let the agent pick one. It reads NASA,
-        ESA, arXiv and Wikipedia live, writes a question and an explanation at each level, and
-        checks each against the pages it read. The explanations open once you have answered the
-        questions.
+        Research any astronomy or space topic that is not in the bank yet.
       </PageHeading>
 
-      <HeaderSettings>
-        <div className="flex items-center gap-3">
-          <TopicInput
-            value={query}
-            suggestions={suggestions}
-            disabled={topicsState.kind !== "loaded"}
-            placeholder="A new topic, e.g. Pulsars"
-            onChange={setQuery}
-            onSubmit={go}
-            small
+      {landing ? (
+        <div className="mt-8 w-full max-w-xl">{topicBox}</div>
+      ) : (
+        <HeaderSettings>
+          <div className="flex items-center gap-3">
+            {topicBox}
+            {quota && (
+              <span className="shrink-0 font-pixel text-[8px] uppercase text-slate">
+                {quotaShort(quota)}
+              </span>
+            )}
+          </div>
+        </HeaderSettings>
+      )}
+
+      {/* The hint explains what GO will do, so it stays beside GO; it says nothing for an empty box. */}
+      {status.kind !== "empty" || typed > MAX_TOPIC_CHARS || topicsState.kind !== "loaded" ? (
+        <div className="mt-3 w-full max-w-xl">
+          <Hint
+            state={topicsState}
+            status={status}
+            tooLong={typed > MAX_TOPIC_CHARS}
+            onRetry={retryTopics}
           />
-          {quota && (
-            <span className="shrink-0 font-pixel text-[8px] uppercase text-slate">
-              {quotaShort(quota)}
-            </span>
-          )}
         </div>
-      </HeaderSettings>
+      ) : null}
 
-      <div className="mt-10 w-full max-w-xl">
-        <Hint
-          state={topicsState}
-          status={status}
-          tooLong={typed > MAX_TOPIC_CHARS}
-          onRetry={retryTopics}
-        />
-      </div>
-
-      <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
+      <div className="mt-6 flex flex-col items-center gap-1">
         <button
           type="button"
           onClick={go}
@@ -531,14 +552,14 @@ export function ExplorePage({
           onClick={surprise}
           disabled={!canSurprise}
           title="The agent picks a topic the bank does not have yet. Uses one search."
-          className={`${SECONDARY_BUTTON} px-5 py-4 text-[10px]`}
+          className="on-scene min-h-11 px-4 font-pixel text-[9px] uppercase underline underline-offset-4 hover:no-underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal disabled:opacity-60 disabled:no-underline"
         >
           Surprise me
         </button>
       </div>
-      {quota && (
-        <p role="status" className="scene-note mt-4 max-w-md text-center text-sm">
-          {quota.global_open ? quotaLine(quota) : GLOBAL_CAP_NOTICE}
+      {quota && !quota.global_open && (
+        <p role="status" className="scene-note mt-3 max-w-md text-center text-sm">
+          {GLOBAL_CAP_NOTICE}
         </p>
       )}
       <button
@@ -548,6 +569,10 @@ export function ExplorePage({
       >
         Mission Control
       </button>
+      {landing && quotaNote}
+      {landing && (
+        <p className="scene-note mt-6 max-w-xl text-center text-sm leading-relaxed">{HOW_IT_WORKS}</p>
+      )}
 
       <div ref={viewRef} className="mt-10 w-full scroll-mt-32" aria-live="polite">
         {!search && log && logOutcome && (
@@ -675,6 +700,8 @@ export function ExplorePage({
         {search?.ended && !showItems && logOutcome?.kind !== "rejected" && <BankLinks />}
         {!search && logOutcome?.kind === "fallback" && <BankLinks />}
       </div>
+
+      {!landing && quotaNote}
 
       <StatsPanel open={statsOpen} onClose={closeStats} search={search} running={streaming} />
     </div>
@@ -823,9 +850,9 @@ interface HintProps {
   onRetry: () => void;
 }
 
-/** One line under the topic box: what GO will do, or why it is not available. */
+/** One line under the topic box: what GO will do, or why it is not available. Nothing for an empty box. */
 function Hint({ state, status, tooLong, onRetry }: HintProps) {
-  const base = "scene-note mt-3 min-h-5 text-sm";
+  const base = "scene-note text-sm";
   if (state.kind === "loading") {
     return <p className={base}>Loading topics...</p>;
   }
@@ -849,13 +876,7 @@ function Hint({ state, status, tooLong, onRetry }: HintProps) {
   }
   switch (status.kind) {
     case "empty":
-      return (
-        <p className={base}>
-          Any astronomy or space topic. The agent writes a question and an explanation at each
-          level. The first question usually takes under a minute, and the whole topic a minute or
-          two.
-        </p>
-      );
+      return null;
     case "new":
       return (
         <p className={base}>
