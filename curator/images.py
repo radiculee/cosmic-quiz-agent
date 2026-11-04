@@ -547,8 +547,44 @@ MIN_FACT_CHARS = 50
 MAX_FACT_CHARS = 170
 IDEAL_FACT_CHARS = 100
 _SENTENCES = re.compile(r"(?<=[.!?])\s+(?=[A-Z0-9])")
-_DANGLING_START = re.compile(
-    r"^(it|its|this|these|those|that|they|their|he|she|such)\b", re.IGNORECASE
+# A sentence that leans on one we are not showing, or that is not a whole sentence, is never a
+# fact. Each pattern below names one way it can lean or break; `_stands_alone` applies them all.
+_POINTS_BACK = re.compile(
+    r"\b(?:it|its|they|their|them|he|she|his|him|this|these|those|such)\b", re.IGNORECASE
+)
+_DISCOURSE = re.compile(
+    r"\b(?:however|also|additionally|furthermore|moreover|meanwhile|instead|therefore|thus|"
+    r"hence|consequently|similarly|likewise|equally|conversely|otherwise|nevertheless|"
+    r"nonetheless|despite|for example|for instance|in addition|in contrast|by contrast|"
+    r"as a result|on the other hand|in turn|in fact)\b",
+    re.IGNORECASE,
+)
+_STARTS_RELATIVE = re.compile(
+    r"^\W*(?:\w+\s+)?(?:more|another|other|additional|further|earlier|later|previous|following|"
+    r"same|similar|remaining|secondary|examples?)\b|^\W*\w+ly,|^\W*(?:that|which|where|when|but|and|"
+    r"so|yet|or|because|although|while|whereas|if|once)\b",
+    re.IGNORECASE,
+)
+# "The planet is tilted": a common noun after "the" at the start names something an earlier
+# sentence introduced. A capital ("The Sun") or a specific name makes it stand alone.
+_GENERIC_NOUN = re.compile(
+    r"^(?:[^,]{0,40},\s*)?the\s+(?:[\w%.-]+\s+){0,2}(?:idea|concept|planet|moon|star|telescope|"
+    r"radiation|signal|value|figure|result|probe|spacecraft|mission|observation|galaxy|process|"
+    r"effect|phenomenon|object|example|case|study|finding|discovery|instrument|event|"
+    r"technique|method|reason|answer|option|population|group|majority)\b",
+    re.IGNORECASE,
+)
+# A sentence cut at a name's initial or an abbreviation ("... with Charles W.") is only half.
+_CUT_SHORT = re.compile(r"(?:[a-z] [A-Z]|\b(?:Dr|Mr|Mrs|Ms|St|vs|approx|Inc|No|Jr|Sr))\.$")
+_FRAGMENT_START = re.compile(
+    r"(?i)^(?:\w+ed\s+(?:\w+ly\s+)?(?:in|by|at|on|from|during|as|to)\b|"
+    r"a\s+(?:\w+,?\s+){0,2}(?:case|example|instance|study|finding|result|discovery)\b|"
+    r"[\w\s]{1,25}:\s|[\(\[]?[A-Da-d1-9][\)\.\]]\s|[-*•])"
+)
+_QUIZ_TALK = re.compile(
+    r"\b(?:distract\w*|incorrect|wrong|tempting|misconception|correct answer|the answer|"
+    r"this option|rather than)\b|, not (?!even|only|just)",
+    re.IGNORECASE,
 )
 _STRIKING = re.compile(
     r"\b(largest|smallest|first|hottest|coldest|fastest|brightest|oldest|densest|only|most|"
@@ -582,35 +618,40 @@ def _fact_score(sentence: str, topic_words: Sequence[str]) -> float:
         score += 2
     if any(word in sentence.lower() for word in topic_words):
         score += 1
-    if _DANGLING_START.match(sentence):
-        score -= 3
     if "(" in sentence or ";" in sentence:
         score -= 1
     return score - abs(len(sentence) - IDEAL_FACT_CHARS) / 50
 
 
+def _stands_alone(sentence: str) -> bool:
+    """True if the sentence reads as a whole statement without the sentences around it."""
+    if not sentence[:1].isupper() or not sentence.endswith(".") or _CUT_SHORT.search(sentence):
+        return False
+    if sentence.count("(") != sentence.count(")") or sentence.count('"') % 2:
+        return False
+    if _POINTS_BACK.search(sentence) or _DISCOURSE.search(sentence):
+        return False
+    if _STARTS_RELATIVE.match(sentence) or _GENERIC_NOUN.match(sentence):
+        return False
+    return not (_FRAGMENT_START.match(sentence) or _QUIZ_TALK.search(sentence))
+
+
 def pick_fact(topic: str, texts: Sequence[str]) -> str | None:
     """One sentence that stands alone, taken word for word from the explanations (best first).
 
-    A sentence of a sensible length wins on a number, a superlative or the topic's own words, and
-    loses if it opens with a pronoun that points back to a sentence we are not showing. If none
-    has a sensible length, the first sentence is cut at a word. None only if there is no text.
+    Only a sentence of a sensible length that makes sense without the one before it is allowed
+    (see `_stands_alone`); among those, a number, a superlative or the topic's own words win. If
+    no sentence passes, None: a weak fact is worse than none, so a cut sentence is not offered.
     """
     words = significant_words(topic)
     best: tuple[float, str] | None = None
     for text in texts:
         for sentence in _SENTENCES.split(_SPACES.sub(" ", text).strip()):
-            if MIN_FACT_CHARS <= len(sentence) <= MAX_FACT_CHARS:
+            if MIN_FACT_CHARS <= len(sentence) <= MAX_FACT_CHARS and _stands_alone(sentence):
                 score = _fact_score(sentence, words)
                 if best is None or score > best[0]:
                     best = (score, sentence)
-    if best is not None:
-        return best[1]
-    for text in texts:
-        flat = _SPACES.sub(" ", text).strip()
-        if flat:
-            return _shorten(_SENTENCES.split(flat)[0], MAX_FACT_CHARS)
-    return None
+    return best[1] if best is not None else None
 
 
 # --- What is stored ---------------------------------------------------------------------------

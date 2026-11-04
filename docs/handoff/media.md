@@ -3,7 +3,78 @@
 Notes for the media session (`docs/SESSIONS.md`). They replace `docs/NEXT_SESSION.md` for this
 session. Update them before finishing, and commit them on `session/media`.
 
-Last update: 2026-11-03 (media agent: square cards committed, final picture list ready for main)
+Last update: 2026-11-04 (media agent: fact-picking rule)
+
+## Report, 2026-11-04: the fact-picking rule
+
+Branch `session/media`, rebased on `57771af`. Nothing is pushed or merged. Main reviews it.
+
+### Done
+
+- Measured the old rule: `pick_fact` for each of the 56 topics with published items (bank read
+  with GET only, no model call). I read each result and marked it good or bad. These are my own
+  judgements. A sentence is bad if it needs the sentence before it, is broken, or talks like a
+  quiz explanation. **Before: 33 good, 23 bad.** Bad ones: Sun and solar flares, Europa, Titan,
+  Uranus, Neptune and Triton, Binary stars, Planetary nebulae, Galaxy collisions, Apollo, Radio
+  telescopes, Light-years, Drake equation, Tidal locking, White dwarf planets, Wormholes, Solar
+  eclipses, Event horizons, Habitable zone, CMB (two), Fast radio bursts, Kilonovae, Gravitational
+  waves ("The signal ...").
+- New rule in `curator/images.py`. `_stands_alone` rejects a sentence that: is not a capital
+  start with a full stop; ends on a name initial or abbreviation ("... Charles W."); has an
+  unbalanced bracket or quote; has a pointer word anywhere (it, its, they, their, he, she, this,
+  these, those, such); has a link word (however, also, despite, for example, instead ...); starts
+  with more, another, other, earlier, same, examples, an "-ly," adverb, or a link word such as
+  that, which, if, once; starts "the" plus a common noun (the planet, the signal, the most famous
+  example); starts with a participle fragment ("Discovered in ...") or "A case ..."; is a label,
+  list or bullet; or has quiz talk (distractor, tempting, incorrect, rather than, ", not").
+  The old -3 pronoun penalty and `_DANGLING_START` are gone (now a hard rule).
+- `pick_fact` now returns None when no sentence of 50 to 170 characters passes. The old fallback
+  that cut the first sentence at a word is removed (it showed weak facts).
+- **After: 55 good, 1 bad (Wormholes: "Bronnikov first demonstrated ... but Thorne and Morris's
+  work was independent and came later." It is whole but vague.)** One more is borderline: James
+  Webb, "To detect the faint infrared glow ..., the telescope must be kept extremely cold, below
+  50 K." (the topic name makes "the telescope" clear). None of the 56 returned None.
+- What the caller does with None: `choose_media` returns None when `pick_fact` gives None, and
+  `fill` then counts the topic as `unreachable` and prints "left as it was: a source could not
+  be reached". So the topic keeps its old row (or has none), nothing is written, and the next run
+  tries again. That is safe, but the message is wrong for this case. I did not change it, because
+  it is outside the fact-picking part. Suggest main decides: a separate "no usable fact" line.
+- Tests: the old cut-sentence test became "no fact when nothing stands alone". Added 22 real
+  leaning sentences (each must give None, and must lose to a clean sentence next to it), 7 real
+  standing sentences, and 4 broken ones. One existing fixture sentence ("... nothing escapes it,
+  not even light ...") was reworded because it used "it".
+
+### In progress
+
+Nothing.
+
+### Left
+
+- The strict pointer rule also rejects a good sentence that uses "it" for something named in
+  the same sentence. This costs choice, not truth. With 5 or more explanations per topic it still
+  found a fact for all 56.
+- The "no usable fact" message (see above).
+
+### Blocked on
+
+Nothing.
+
+### Needs from Vedant
+
+Nothing. No fact card is live (all topics have a picture), so no live row changes.
+
+### Files changed
+
+`curator/images.py` (fact part only), `tests/test_images.py`, `docs/handoff/media.md`.
+
+### Checks run
+
+`pytest -q` (all pass), `ruff check .`, `ruff format --check .`, `mypy --strict`: all clean.
+Not checked: the live bank was not written, and `python -m curator.images` was not run at all
+(not even with --dry-run). Marks of good and bad are by one reader.
+
+CHANGELOG line: "Fact cards: the fact-picking rule now rejects sentences that need the sentence
+before them, and gives no fact when none stands alone."
 
 ## Report, 2026-11-03: square cards and the final picture list
 
