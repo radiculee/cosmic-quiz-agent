@@ -7,6 +7,53 @@ Last update: 2026-11-04. On `main` at `e1aa661`. Parallel search is
 live since 2026-11-01 21:32 UTC. The reports below replace "Where things stand", "Next" and
 "Blockers" further down, which are kept as the record of 2026-10-30.
 
+## The "Being checked" label (2026-11-04)
+
+Vedant chose to show a small label on items no person has read one by one: 86 review items were
+decided in 56 seconds on 2026-11-04 and 60 are published. Main sets the flag on those 60 rows.
+
+**Deploy order (main controls it).** 1. Vedant pastes `supabase/migrations/014_being_checked.sql`
+and runs its check query. 2. Main sets `being_checked = true` on the 60 rows. 3. This code lands
+and deploys. The code must not reach production before step 1: `agent/bank.py` names the column in
+its select, and a select of a missing column is refused, so every item read would fail. The other
+way round is safe (old code ignores the column). Rollback: `alter table public.items drop column
+being_checked;` after the code is rolled back.
+
+**Done**
+
+- Migration 014 and `supabase/schema.sql`: `being_checked boolean not null default false`, safe to
+  run twice, with a read-only check query as a comment. Browser roles already read every column of
+  `items`, so no grant is needed.
+- `agent/bank.py`: in `_ITEM_SELECT`, on `_ItemRow`, `QuizQuestion` and `LearnItem` (default false).
+  Every item path (random item, live result by id) goes through `question_of`, so a live search
+  serves it too; a new live item is unflagged. The reveal reply does not carry it.
+- `src/types.ts`: `being_checked?: boolean` on `QuizQuestion` and `LearnItem`. Absent means false.
+- `src/components/CardFrame.tsx` draws the label (Learn and quiz cards share it); `LearnCard` and
+  `QuizCard` pass the field. Text is exactly `Being checked`, Press Start 2P 8 px, gold outline on
+  `--bg-void` inside the card, in the existing tag row beside "mode / level" and "Not fully
+  verified". Screen readers get `A person has not finished checking this item.`; the visible text
+  is `aria-hidden` so it is not read twice. No hover, no `title`. The row already exists, so the
+  question and actions do not move. `WebResults.tsx` shows no item (score and buttons only), so it
+  needed no change.
+- Tests: `src/components/CardFrame.test.tsx` (flagged, not flagged, false, quiz and Learn, no
+  `title`), and two in `tests/test_api.py` (the select names the column; the field is served, a
+  row without it reads false, and a quiz question still carries no answer).
+- Screenshots at 1280 and 390 px, from the built site on a stub API (no live bank, no paid call).
+  No horizontal overflow at either width.
+
+**Left**
+
+- Prerendered pages (`scripts/prerender/bank.ts`, `render.ts`) show the easiest Learn explanation of
+  each topic as crawler text. They select no flag, and show no label. These files belong to seo and
+  are outside the files this task allowed, so I left them. See "Needs from Vedant".
+
+**Needs from Vedant**
+
+- Whether the prerendered Learn pages need the label. The text is replaced by the app once it
+  mounts, but a crawler and a no-JavaScript reader see the explanation without it. The change would
+  be small (select `being_checked`, add the word to the page), but it makes the build select the
+  column too, so it has the same deploy order.
+
 ## The gate: a sentence labelled `contradicts` goes to review (2026-11-04)
 
 Vedant approved this change. It affects new items only. No item in the bank was re-gated.
