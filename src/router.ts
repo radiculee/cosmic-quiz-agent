@@ -4,8 +4,9 @@
  * Forward, and the slug that gives each LEARN topic its own address.
  *
  * The rules are pure and the history is passed in (`createHistoryRouter`), so both are unit-tested
- * without a browser (router.test.ts). Vercel serves index.html for every path outside /api
- * (vercel.json), so a shared link opens the right page.
+ * without a browser (router.test.ts). Vercel serves a built page for each prerendered
+ * address and the app shell for the app's other addresses (the rewrites in vercel.json), so a
+ * shared link opens the right page. Any other address answers 404 with dist/404.html.
  */
 import { useEffect, useSyncExternalStore } from "react";
 
