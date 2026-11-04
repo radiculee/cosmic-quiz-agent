@@ -165,6 +165,7 @@ class QuizQuestion(BaseModel):
     question: str
     options: list[str]
     status: ShownStatus = "published"
+    being_checked: bool = False
 
 
 class QuizAnswer(BaseModel):
@@ -194,6 +195,7 @@ class LearnItem(BaseModel):
     source_check: SourceCheck
     status: ShownStatus = "published"
     doubts: list[str] = []
+    being_checked: bool = False
 
 
 class _Check(BaseModel):
@@ -220,6 +222,7 @@ class _ItemRow(BaseModel):
     options: list[str] | None = None
     correct_index: int | None = None
     explanation: str
+    being_checked: bool = False
     topics: _TopicColumns
     sources: list[_SourceRow] = []
     claim_checks: list[_Check] = []
@@ -228,7 +231,7 @@ class _ItemRow(BaseModel):
 _ITEM_ROWS = TypeAdapter(list[_ItemRow])
 _ITEM_SELECT = (
     "id,mode,difficulty,status,haiku_reasons,jev_reasons,question,options,correct_index,"
-    "explanation,topics!inner(name,kind),"
+    "explanation,being_checked,topics!inner(name,kind),"
     "sources(ordinal,url,quote),claim_checks(kind,claim,verdict,confidence)"
 )
 _ANSWER_MARK = " is: "
@@ -281,6 +284,7 @@ def question_of(row: _ItemRow) -> QuizQuestion | LearnItem:
             source_check=source_check_of(row),
             status=row.status,
             doubts=doubts_of(row),
+            being_checked=row.being_checked,
         )
     return QuizQuestion(
         id=row.id,
@@ -289,6 +293,7 @@ def question_of(row: _ItemRow) -> QuizQuestion | LearnItem:
         question=row.question or "",
         options=row.options or [],
         status=row.status,
+        being_checked=row.being_checked,
     )
 
 

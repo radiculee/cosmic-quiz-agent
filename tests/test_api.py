@@ -12,7 +12,7 @@ from wsgiref.util import setup_testing_defaults
 import httpx2
 import pytest
 
-from agent.bank import BankReader, BankTopic, _ItemIndexRow, summarize, topic_key
+from agent.bank import BankReader, BankTopic, LiveResults, _ItemIndexRow, summarize, topic_key
 from agent.limits import LIMITS, REPORTS_MESSAGE, RequestCount
 from agent.rest import PAGE_SIZE, RestClient, StoreError
 from agent.store import SupabaseStore
@@ -92,6 +92,65 @@ def test_topic_names_reads_every_visible_topic_whatever_its_levels() -> None:
     assert names == [("Wormholes", "custom"), ("Auroras", "news")]
     assert seen[0].url.path == "/rest/v1/topics"
     assert seen[0].url.params["select"] == "name,kind"
+
+
+def _item_row(item_id: int, **extra: object) -> dict[str, object]:
+    return {
+        "id": item_id,
+        "mode": "learn",
+        "difficulty": "easy",
+        "status": "published",
+        "explanation": "A magnetar is a neutron star with a very strong magnetic field.",
+        "topics": {"name": "Magnetars", "kind": "custom"},
+        "sources": [],
+        "claim_checks": [],
+        **extra,
+    }
+
+
+def test_item_reads_name_being_checked_and_serve_it() -> None:
+    seen: list[httpx2.Request] = []
+    rows = [_item_row(1, being_checked=True), _item_row(2, being_checked=False), _item_row(3)]
+
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        seen.append(request)
+        wanted = int(request.url.params["id"].removeprefix("eq."))
+        return httpx2.Response(200, json=[row for row in rows if row["id"] == wanted])
+
+    client = httpx2.Client(transport=httpx2.MockTransport(handler))
+    rest = RestClient(BASE, "sb_publishable_test", client=client, retry_backoff_seconds=0.0)
+    results = LiveResults(rest)
+
+    flagged, cleared, absent = (results.item(i) for i in (1, 2, 3))
+
+    assert "being_checked" in seen[0].url.params["select"].split(",")
+    assert flagged is not None and flagged.being_checked is True
+    assert cleared is not None and cleared.being_checked is False
+    # A row from before migration 014 has no value, so the item is not labelled.
+    assert absent is not None and absent.being_checked is False
+    assert json.loads(flagged.model_dump_json())["being_checked"] is True
+
+
+def test_quiz_question_carries_being_checked_without_the_answer() -> None:
+    row = _item_row(
+        4,
+        mode="quiz",
+        question="What is a magnetar?",
+        options=["A", "B", "C", "D"],
+        correct_index=2,
+        being_checked=True,
+    )
+    client = httpx2.Client(
+        transport=httpx2.MockTransport(lambda _: httpx2.Response(200, json=[row]))
+    )
+    rest = RestClient(BASE, "sb_publishable_test", client=client, retry_backoff_seconds=0.0)
+
+    question = LiveResults(rest).item(4)
+
+    assert question is not None
+    sent = json.loads(question.model_dump_json())
+    assert sent["being_checked"] is True
+    assert "correct_index" not in sent
 
 
 # The same cases as the topicKey test in src/topics.test.ts: the two rules must not drift apart.

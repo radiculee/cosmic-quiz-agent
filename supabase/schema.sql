@@ -142,6 +142,7 @@ create table if not exists public.items (
     published_at timestamptz,
     retired_at timestamptz,
     reviewed_at timestamptz,  -- when a person moved it out of review (migration 002)
+    being_checked boolean not null default false,  -- shown with a label until an audit clears it (migration 014)
     constraint items_quiz_fields check (
         (mode = 'quiz') = (question is not null and options is not null and correct_index is not null)
     ),
