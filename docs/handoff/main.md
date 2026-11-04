@@ -114,6 +114,11 @@ next prompt. Commit only, not pushed. Open: the 8 review items, latency's report
 land and push, the post. Claude Code's permission check refused a paid `curator complete` from main, so Vedant
 runs paid Curator commands in a terminal unless Vedant adds a permission rule.
 
+**Review of latency `9de100e`, about 17:05 UTC: approved.** Every check passes on it (325 frontend tests). Land with
+`git cherry-pick -x` of its 3 commits, because `main` has `66c7121`, and rerun the checks. Order: Vedant pastes 014;
+main sets the 60 rows; main lands and pushes on Vedant's word. Open: Vedant confirms whether a person read the 60,
+because the migration and CHANGELOG say none did, in a public repo.
+
 **Stopped about 02:50 UTC, Wed 4 Nov, on Vedant's word: usage at 95%.** No agent or Curator run was
 started by main. These edits to `docs/handoff/main.md` and `docs/SESSIONS.md` are NOT committed: commit
 them on Vedant's word. **Resume here:**

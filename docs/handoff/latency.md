@@ -9,8 +9,8 @@ live since 2026-11-01 21:32 UTC. The reports below replace "Where things stand",
 
 ## The "Being checked" label (2026-11-04)
 
-Vedant chose to show a small label on items no person has read one by one: 86 review items were
-decided in 56 seconds on 2026-11-04 and 60 are published. Main sets the flag on those 60 rows.
+Vedant chose to show a small label on items no person has read one by one: a review queue was
+cleared in bulk on 2026-11-04 and 60 of its items are published. Main sets the flag on those 60 rows.
 
 **Deploy order (main controls it).** 1. Vedant pastes `supabase/migrations/014_being_checked.sql`
 and runs its check query. 2. Main sets `being_checked = true` on the 60 rows. 3. This code lands

@@ -6,8 +6,8 @@ release. Everything before that, session by session with its decisions, checks a
 
 ## 2026-11-04
 
-- **A "Being checked" label on items no person has read yet.** On 2026-11-04, 86 review items were
-  decided in 56 seconds and 60 of them are published. Until an audit clears them, a Learn card or quiz
+- **A "Being checked" label on items no person has read yet.** On 2026-11-04, a review queue was
+  cleared in bulk, not read one by one, and 60 of those items are published. Until an audit clears them, a Learn card or quiz
   question for one of those items shows a small "Being checked" tag beside its mode and level. It needs
   migration 014 (`items.being_checked`), which Vedant pastes before this code goes live.
 - **One focus on each landing page.** Above a page's main action there is now only its title and

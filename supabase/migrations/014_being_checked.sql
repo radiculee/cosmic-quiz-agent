@@ -3,8 +3,8 @@
 -- Paste into the Supabase SQL editor and run it once; it is safe to run again. supabase/schema.sql
 -- already includes this for a fresh project.
 --
--- On 2026-11-04, 86 review items were decided in 56 seconds and 60 of them are published. No
--- person read them one by one, so the site shows a small "Being checked" label on an item with
+-- On 2026-11-04, a review queue was cleared in bulk, not read one by one, and 60 of those items
+-- are published, so the site shows a small "Being checked" label on an item with
 -- this flag set until an audit clears it. Main sets the flag on the 60 rows; this file only adds
 -- the column. New items start unflagged.
 --
