@@ -18,6 +18,7 @@ from agent.schemas import (
     HaikuReport,
     JevCheck,
     JevReport,
+    JevVerdict,
     QuizItem,
     Verification,
 )
@@ -278,6 +279,58 @@ def test_unsupported_sentences_are_only_flagged_on_request() -> None:
 
     assert jev_verdict(checks, 0.8)[0] == "pass"
     assert jev_verdict(checks, 0.8, flag_unsupported_sentences=True)[0] == "borderline"
+
+
+def sentence_check(verdict: JevVerdict, contradicts: float) -> JevCheck:
+    rest = (1.0 - contradicts) / 2
+    return JevCheck(
+        kind="sentence",
+        claim="Neutron stars are made of cheese.",
+        verdict=verdict,
+        confidence=contradicts,
+        probabilities={"supports": rest, "contradicts": contradicts, "says_nothing": rest},
+    )
+
+
+@pytest.mark.parametrize("contradicts", [0.09, 0.49, 0.50])
+def test_a_sentence_labelled_contradicts_goes_to_review_at_any_low_probability(
+    contradicts: float,
+) -> None:
+    checks = (sentence_check("contradicts", contradicts),)
+
+    assert jev_verdict(checks, 0.8) == (
+        "borderline",
+        (f"possibly contradicted ({contradicts:.2f}) sentence: Neutron stars are made of cheese.",),
+    )
+
+
+def test_a_sentence_labelled_contradicts_stops_an_item_publishing(settings: Settings) -> None:
+    low = {"supports": 0.3, "contradicts": 0.49, "says_nothing": 0.21}
+    jev = FakeJev({"sentence_1": low})
+
+    result = verify(ITEM, CODE_PASS, PAGES, FakeLLM(json_replies=[haiku_reply()]), jev, settings)
+
+    assert result.jev is not None and result.jev.verdict == "borderline"
+    assert decide(result) == "review"
+
+
+@pytest.mark.parametrize("contradicts", [0.8, 0.95])
+def test_a_contradicted_sentence_at_the_threshold_still_fails(contradicts: float) -> None:
+    assert jev_verdict((sentence_check("contradicts", contradicts),), 0.8)[0] == "fail"
+
+
+@pytest.mark.parametrize("verdict", ["supports", "says_nothing"])
+@pytest.mark.parametrize("contradicts", [0.09, 0.49])
+def test_another_label_under_the_doubt_level_keeps_its_result(
+    verdict: JevVerdict, contradicts: float
+) -> None:
+    assert jev_verdict((sentence_check(verdict, contradicts),), 0.8) == ("pass", ())
+
+
+@pytest.mark.parametrize("verdict", ["supports", "says_nothing"])
+def test_another_label_at_the_doubt_level_keeps_its_result(verdict: JevVerdict) -> None:
+    assert jev_verdict((sentence_check(verdict, 0.5),), 0.8)[0] == "borderline"
+    assert jev_verdict((sentence_check(verdict, 0.8),), 0.8)[0] == "fail"
 
 
 # --- The publish decision -------------------------------------------------------------------------

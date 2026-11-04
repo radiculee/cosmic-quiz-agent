@@ -55,9 +55,11 @@ def jev_verdict(
 
     Fail: the correct answer is contradicted, a distractor is supported, or a sentence is
     contradicted, each at or above the threshold. Borderline: the correct answer's support is
-    below the threshold, or any of those signals reaches the doubt level. Sentences Jev says
-    nothing about are ignored unless `flag_unsupported_sentences`, because explanations
-    legitimately paraphrase and connect facts.
+    below the threshold, any of those signals reaches the doubt level, or a sentence has the label
+    `contradicts` at any probability, so a person decides (changed 2026-11-04: under the doubt
+    level such a sentence used to pass and publish). Sentences Jev says nothing about are ignored
+    unless `flag_unsupported_sentences`, because explanations legitimately paraphrase and connect
+    facts.
     """
     fail: list[str] = []
     doubt: list[str] = []
@@ -79,7 +81,7 @@ def jev_verdict(
         else:
             if contradicts >= threshold:
                 fail.append(f"contradicted ({contradicts:.2f}) {label}")
-            elif contradicts >= JEV_DOUBT:
+            elif contradicts >= JEV_DOUBT or check.verdict == "contradicts":
                 doubt.append(f"possibly contradicted ({contradicts:.2f}) {label}")
             elif flag_unsupported_sentences and silent >= threshold:
                 doubt.append(f"unsupported ({silent:.2f}) {label}")
