@@ -341,7 +341,12 @@ entry; record a reversal as a new one.
   all the changes are committed and tested. Also yes to: landing the leading "The" fix and the fact
   rule, retiring topic 397 after the deploy, sending a contradicted label under 0.5 to review, the
   404 change after a Vercel preview, and the `docs/DESIGN.md` text. Main read "Run the curator and
-  I'll review them" as the 30-topic fill, which was already approved on 2026-11-01.
+  I'll review them" as the 30-topic fill, which was already approved on 2026-11-01. Main has not run
+  it, and asks him first.
+- 2026-11-04, main: all of the above except the fill and the wider audit is landed, pushed and live.
+  Topic 397 is retired by latency's plan (`docs/handoff/latency.md`). A `contradicts` label at any
+  probability now goes to review. An unknown topic address stays a soft 404, and a trailing slash on
+  a rewritten address answers 404, both accepted for now.
 
 ---
 

@@ -4,29 +4,92 @@ Notes for the main session (`docs/SESSIONS.md`), which plans, writes the other s
 and reviews their branches. It edits no code: only `docs/SESSIONS.md` and `docs/handoff/*.md`
 (and `docs/DESIGN.md` and `CLAUDE.md` when Vedant approves the exact text).
 
-Last update: 2026-11-02, 04:35 Dublin, on Windows, when Vedant ended the session and closed every
-worktree session. "Next session: start here" below is current. The sections after it are the
-record: where they differ, the newer one wins.
+Last update: 2026-11-04, about 02:10 Dublin, on Windows. "After launch day: start here" below is
+current. The sections after it are the record: where they differ, the newer one wins.
 
 ## Read first (a new main session)
 
-1. `CLAUDE.md`, then this file down to "How Vedant wants main to work".
-2. `docs/SESSIONS.md`: "The pre-launch overhaul (2026-10-30)" ownership, then the newest entries
-   under Decisions.
-3. Only when needed: `docs/handoff/<name>.md` on each session's branch. They hold the detail.
+1. `CLAUDE.md`, then "After launch day: start here" below.
+2. `docs/SESSIONS.md`: the newest entries under Decisions.
+3. Only when needed: `docs/handoff/<name>.md`. They hold the detail. `audit.md`, `latency.md`,
+   `seo.md`, `media.md`, `ui.md` and `docs.md` were all updated on 4 November.
 
 First message for a new main session on Windows:
 
-> You are the "main" session for Curiosity (repo cosmic-quiz-agent), the coordinator and reviewer
-> for the launch on Tuesday 3 November. Code freeze is Monday 2 November 18:00 Dublin. Read
-> CLAUDE.md, then docs/handoff/main.md from the top down to "How Vedant wants main to work", then
-> the newest Decisions in docs/SESSIONS.md. Also read your memory files planner-role and
-> agent-prompt-style. Run the commands under "Check first" in that handoff. Update the Curiosity
-> Launch Board (https://claude.ai/artifact/4jKPNn9EFeGssaVp8UshfX) if anything has changed. The
-> worktree sessions are closed, so start one only when its task is next. Then tell me in short:
-> where things stand, what you are waiting on, and the next thing I must do. We do DNS and HTTPS
-> for curiosity. first, together, using "Next session: start here". Do not push, land or start
-> anything until you have told me that.
+> You are the "main" session for Curiosity (repo cosmic-quiz-agent), the coordinator and reviewer.
+> The site is live on curiosity.vedantgaikwad.ie. My LinkedIn post is not out yet. Read CLAUDE.md,
+> then docs/handoff/main.md, section "After launch day: start here", then the newest Decisions in
+> docs/SESSIONS.md. Also read your memory files planner-role, agent-prompt-style,
+> test-keys-before-paid-runs and windows-shell-traps. Check that main and origin/main match and
+> are at the commit that section names, or newer. Check the Curiosity Launch Board
+> (https://claude.ai/artifact/4jKPNn9EFeGssaVp8UshfX). Then tell me in short: what changed since
+> that section was written, what you are waiting on, and the next thing I must do. The first open
+> question is whether "Run the curator" means the 30-topic fill. Do not run the fill, change the
+> bank, push or start an agent until I answer. After that, follow the steps in that section and
+> keep the board up to date.
+
+## After launch day: start here (written 2026-11-04, about 02:10 Dublin)
+
+**Live:** `main` and `origin/main` hold everything below; see `git log`. The last code commit is
+`d819d62`. GitHub Checks are green and Vercel is deployed. On the combined tree: pnpm typecheck, 321
+frontend tests, the build, pytest, ruff, ruff format and mypy --strict all pass. The live site
+answers as expected: every page 200, `/lern`, `/nope` and `/a/b/c` 404 with the CSP and `noindex`,
+`cosmic.` 308 with the path kept. Live at 1280 and 390 before the 404 push: no CSP violation, no page
+error, no sideways scroll on Home, Quiz, Learn and Web.
+
+**Done on 4 November, on Vedant's word:**
+- Landing pages (`ui`): one focus on each page. Home's cards are Quiz (solid teal), Learn, Web.
+- Bank corrections (`audit`): items 97, 100, 116, 154, 165, 309 and 361 corrected, and the text read
+  back. Items 156 and 61 moved to review. So The International Space Station and The life cycle of a
+  Sun-like star are off Learn and Quiz, and the live cards went from 39 to 37. They return when he
+  decides those two items.
+- The gate: a sentence labelled `contradicts` goes to review at any probability. New items only.
+- The leading "The" fix, including the Curator's news pick. Topic 397 is retired (5 items, the topic
+  stays with `retire_after`); both spellings now find 377.
+- 404 for unknown addresses, tested on the real preview. The fact rule. `TOPIC_IMAGES=on`.
+- Docs: `CHANGELOG.md`, `docs/DEVELOPMENT.md`, `docs/DESIGN.md` (his "do all the changes" was read as
+  covering the exact text; he opened the file first), `CLAUDE.md` line on Home.
+
+**Next, in this order:**
+1. **Ask him what "Run the curator and I'll review them" means.** Main read it as the 30-topic fill
+   (`python -m curator fill`, about $5, capped at $5, approved 2026-11-01), and has NOT run it. Check
+   first: he checks the rate-limit tier in the Console, then one cheap Anthropic and Jev call
+   (`test-keys-before-paid-runs`). Run it from the main folder, whose `.env` has the live key.
+   `FILL_TOPICS` has one name already in the bank (Space oceans), and none differs only by "The". It
+   leaves about 65 to 85 items for him. `VERCEL_DEPLOY_HOOK_URL` is not set, so deploy after the fill
+   and its review, or its topics have no prerendered page.
+2. **He works through the review queue:** `python -m curator review`, free, interactive. It held 22
+   items on 4 November, including 156 and 61 (audit's advice: rewrite or discard, because the marked
+   answers have no cited support). If he discards them, the Curator can remake those two levels.
+3. **Wider audit, after all of that is committed and tested** (his order). Read-only, no paid call.
+   Use `../cqa-audit` (its `.env` holds only the Supabase values). Scope, from `docs/handoff/audit.md`
+   "Left": the 104 Haiku explanation problems (about 15 compared so far), the near-miss sentences,
+   then a sample of the 217 items where both verifiers passed. Corrections wait for his word.
+4. **He posts:** Post Inspector first. `public/og-v2.jpg` and the README's first image still show the
+   old Home cards. He may want fresh ones. Hold nothing else for it.
+
+**Found on 4 November, still open:**
+- A trailing slash on a rewritten address now answers 404 (`/trophies/`, `/learn/x/`). The app still
+  shows the right page, so only the status changes. Nothing links to these. Accepted for now.
+- An unknown `/learn/<slug>` is a soft 404 until the deploy hook is set and the rewrite is dropped.
+- A second spelling can still make a second row if the first topic has only review or discarded items
+  (row-level security hides it). The unique index is on `lower(name)` only. See `docs/handoff/latency.md`.
+- The gate checks that a quote is on a page, not that it proves the answer (items 156 and 61). A person
+  can publish anything at review, and `curator review` shows Jev's sentences only as a count.
+- Vercel previews have no `SUPABASE_PUBLISHABLE_KEY`, so `/api/topics` answers 503 there and no topic
+  pages build. Harmless, but do not read a preview's 503 as a fault of the branch.
+- `vercel curl` creates a long-lived protection bypass token on the project. Main revoked the one it
+  made on 4 November (0 left). Do not use it without his word.
+- Worktree `.env` files hold a live Supabase secret key and a live Jev key; only `ANTHROPIC_API_KEY` is
+  dead. New agents share one system temp folder and can overwrite each other's files: give each brief a
+  unique scratch folder.
+- Still his, on the board: deploy hook, Search Console and Bing, the 013 screenshot, latency's $32 text,
+  the per-topic previews decision, accounts setup, the Console back to $10 on 1 December.
+
+**Scratch, not in the repo:** old item text `items-before.json`, 397's undo record
+`retire-397-before.json`, and the scripts, in
+`C:\Users\vedan\AppData\Local\Temp\claude\49a50dcdfe0361ef\983996c7-8a36-46eb-825a-3a7b5780f729\scratchpad\`.
+The old text of the corrected sentences is also in `docs/handoff/audit.md`.
 
 ## Launch day: start here (written 2026-11-03, 14:55 Dublin)
 
