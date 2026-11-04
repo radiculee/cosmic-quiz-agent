@@ -9,14 +9,38 @@ import {
 
 export const MAX_SUGGESTIONS = 8;
 
+const THE = "the ";
+
 function normalize(text: string): string {
   return text.trim().replace(/\s+/g, " ").toLowerCase();
 }
 
-/** The bank topic with this name, ignoring case and extra spaces, if there is one. */
+/**
+ * What two topic names are compared by: ignoring case, extra spaces and one leading "The", so
+ * "The Big Bang" and "Big Bang" are one topic. Stored and shown names keep their "The".
+ *
+ * `topic_key` in agent/bank.py is the same rule, and both test files hold the same cases. "The"
+ * alone has nothing after it, so it stays "the": it cannot become empty and match everything.
+ */
+export function topicKey(name: string): string {
+  const tidied = normalize(name);
+  return tidied.startsWith(THE) ? tidied.slice(THE.length) : tidied;
+}
+
+/**
+ * The bank topic with this name, by `topicKey`, if there is one. The name as typed wins if the
+ * bank has both spellings, as in `topic_named` (agent/bank.py).
+ */
 export function findTopic(topics: readonly BankTopic[], name: string): BankTopic | undefined {
-  const wanted = normalize(name);
-  return wanted ? topics.find((topic) => normalize(topic.name) === wanted) : undefined;
+  const typed = normalize(name);
+  const wanted = topicKey(name);
+  if (!wanted) {
+    return undefined;
+  }
+  return (
+    topics.find((topic) => normalize(topic.name) === typed) ??
+    topics.find((topic) => topicKey(topic.name) === wanted)
+  );
 }
 
 /** Whether a topic has a published item at this mode and difficulty. */
@@ -25,14 +49,18 @@ export function isPlayable(topic: BankTopic, mode: Mode, difficulty: Difficulty)
 }
 
 /** Topics whose name contains the query (every one for an empty query): those starting with it
- * first, then alphabetical. */
+ * first, then alphabetical. "Starting with it" ignores a leading "The" on either side, but the
+ * query keeps its "The" for "contains": "the m" finds "Mars" and "The Moon", not "Comets". */
 function matching(topics: readonly BankTopic[], query: string): BankTopic[] {
-  const wanted = normalize(query);
+  const typed = normalize(query);
+  const wanted = topicKey(query);
+  const starts = (name: string): boolean =>
+    normalize(name).startsWith(typed) || topicKey(name).startsWith(wanted);
   return topics
-    .filter((topic) => normalize(topic.name).includes(wanted))
+    .filter((topic) => normalize(topic.name).includes(typed) || starts(topic.name))
     .sort((a, b) => {
-      const aStarts = normalize(a.name).startsWith(wanted) ? 0 : 1;
-      const bStarts = normalize(b.name).startsWith(wanted) ? 0 : 1;
+      const aStarts = starts(a.name) ? 0 : 1;
+      const bStarts = starts(b.name) ? 0 : 1;
       return aStarts - bStarts || a.name.localeCompare(b.name);
     });
 }
@@ -79,9 +107,9 @@ export function randomTopic(
   avoid: readonly string[] = [],
 ): BankTopic | undefined {
   const playable = topics.filter((topic) => isPlayable(topic, mode, difficulty));
-  const others = playable.filter((topic) => normalize(topic.name) !== normalize(current));
-  const avoided = new Set(avoid.map(normalize));
-  const fresh = others.filter((topic) => !avoided.has(normalize(topic.name)));
+  const others = playable.filter((topic) => topicKey(topic.name) !== topicKey(current));
+  const avoided = new Set(avoid.map(topicKey));
+  const fresh = others.filter((topic) => !avoided.has(topicKey(topic.name)));
   const pool = fresh.length > 0 ? fresh : others.length > 0 ? others : playable;
   return pool[Math.floor(random() * pool.length)];
 }
