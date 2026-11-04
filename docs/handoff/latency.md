@@ -3,9 +3,172 @@
 Notes for the latency session (`docs/SESSIONS.md`). They replace `docs/NEXT_SESSION.md` for
 this session. Update them before finishing, and commit them on `session/latency`.
 
-Last update: 2026-11-02. On `origin/main` at `fa23eda`. Parallel search is
+Last update: 2026-11-04. On `main` at `57771af`. Parallel search is
 live since 2026-11-01 21:32 UTC. The reports below replace "Where things stand", "Next" and
 "Blockers" further down, which are kept as the record of 2026-10-30.
+
+## A leading "The" made a second, paid topic (2026-11-04)
+
+**Done**
+
+- `topic_key` in `agent/bank.py` and `topicKey` in `src/topics.ts` compare names ignoring case,
+  extra spaces and one leading "The". Stored and shown names do not change.
+- `topic_named` reads the name as typed. If that finds nothing, it reads the other spelling. The
+  name as typed wins if the bank has both. It compares each row by `topic_key`, so `%`, `_` and `*`
+  match nothing. An empty name sends no read.
+- I used two plain `ilike` reads, not one `or=(...)` filter. The form is the one that runs today, so
+  no new PostgREST syntax goes live untested. A new topic now costs two free reads, not one.
+- `findTopic` has the same order, so the free or paid hint on Explore and Learn agrees with the
+  server. `randomTopic` uses `topicKey` for the current and played topics.
+- Suggestions and the Learn filter (`matching`) find a name with or without "The". They do not use
+  `topicKey` alone: then "the m" would list every name with an "m", and "the" would lose "The Moon".
+- "The" alone stays "the". It matches only a topic named "The" or "The The". It never matches an
+  empty name or every topic.
+- Both test files hold the same 12 cases for the rule.
+
+**In progress**
+
+Nothing.
+
+**Left, each on main's word**
+
+1. Fix `curator/discover.py` lines 145 and 158. **This one makes the same duplicate**: a news pick
+   "The X" passes when the bank has "X", and the Curator pays for it. The file is not on my list, so
+   I did not edit it. The fix: compare with `topic_key` from `agent/bank.py` in both lines.
+2. Decide on the rest of the list under "Other places that compare names".
+3. Retire topic 397, after the fix is deployed. See the plan below.
+
+**Blocked on**
+
+Main's word on item 1, since `curator/discover.py` is not on my list. Nothing else.
+
+**Needs from Vedant**
+
+His word to retire topic 397, after main runs step 1 of the plan and shows him which topic has more
+items. The instruction assumes 397 is the one to drop. I could not confirm that without a bank read.
+
+**Files changed**
+
+`agent/bank.py`, `src/topics.ts`, `src/topics.test.ts`, `tests/test_api.py`,
+`docs/handoff/latency.md`.
+
+**Checks run**
+
+All on the worktree with the code commits, with no `SUPABASE_*` variable set, so the build made no
+bank read. All exit 0: `pnpm install --frozen-lockfile`, `pnpm typecheck`, `pnpm test` (306 tests in
+28 files), `pnpm build` (4 pages, no topic pages), `pytest -q`, `ruff check .`,
+`ruff format --check .`, `mypy --strict` (89 files).
+
+**Not checked**
+
+- The lookup has not run against real PostgREST. The tests use a stand-in for `ilike`. After the
+  deploy, type "Cosmic Microwave Background" on Explore: the plan must name the other spelling.
+- I did not measure the extra read's time.
+- I made no bank read, and I did not use a key from `.env`. The only live reads were
+  `/api/topics` and `/sitemap.xml` on the public site.
+- I did not drive the pages in a browser.
+
+### Other places that compare names
+
+Fix needed, same duplicate:
+
+- `curator/discover.py:145,158`: see "Left", item 1.
+- A topic with no visible item, only `review` or `discarded` ones. Row-level security hides it from
+  `topic_named`, so the other spelling makes a second row. The same spelling reuses the row, by
+  `lower(name)`. The fix needs the secret key or the database: `agent/ondemand.py` or a migration.
+- `supabase/schema.sql:30`: the unique index is on `lower(name)`, so the database allows both
+  spellings. An index on the new rule would make a duplicate impossible, but it cannot be built
+  while topics 377 and 397 both exist, because the retired row stays.
+- `agent/store.py:401` `job_key` and the fill list: a listed name that differs from a bank name by
+  "The" makes a second topic. Today none does: I compared `BUILD_TOPICS` and `FILL_TOPICS` with the
+  39 topics in `/api/topics`. Topics that are not complete are not in that list, so run the same
+  comparison with the secret key before the paid fill.
+
+No duplicate, left as they are:
+
+- `agent/topic_pick.py:116,124`: a Surprise me pick that differs by "The" now goes through
+  `topic_named`, so it finds the bank's topic. It costs the pick (about $0.003) and shows an existing
+  topic, with no second topic. Using `topic_key` here would stop that waste.
+- `curator/__main__.py:132` removes repeats inside one run's jobs. `curator/images.py:945` is an
+  operator's `--only` filter.
+- `agent/bank.py` `coverage` and `random_item` compare by `eq`, but they get the bank's own spelling.
+- `src/slug.ts`: "The X" and "X" have different addresses. This is correct while names are kept.
+- `agent/topic_check.py`, `scripts/prerender/bank.ts` and `src/closeMatch.ts` do not decide whether a
+  topic exists in the bank.
+
+Also found, no duplicate in the bank that I could check: the eval list breaks its held-out rule by
+"The". `evals/topics.py` has "The Andromeda Galaxy" and "The James Webb Space Telescope".
+`FILL_TOPICS` has "Andromeda Galaxy", and the live bank has "James Webb Space Telescope".
+`tests/test_curator.py:135,141` compares by casefold only, so it passes. I did not check whether the
+eval topics are in the bank.
+
+A small difference stays between the rules: Python uses `casefold`, TypeScript uses `toLowerCase`, so
+they differ on letters like "ß". This is older than this change. It has little effect, because `ilike`
+finds the candidates first.
+
+### Plan: retire topic 397 (not run)
+
+**Order.** Deploy this fix first. If 397 retires first, typing its name finds nothing, and the search
+is paid again. The store reuses row 397 by `lower(name)`, so the new items go on the retired row.
+
+**Step 1, read only.** Save the output in this file: it is the record for undoing the change.
+
+```sql
+select id, name, kind, retire_after, created_at from public.topics where id in (377, 397);
+select topic_id, id, mode, difficulty, status, report_count from public.items
+  where topic_id in (377, 397) order by topic_id, mode, difficulty, id;
+select topic_id, kind, card_path, preview_path, locked from public.topic_images
+  where topic_id in (377, 397);
+```
+
+Stop and ask Vedant if one of these is true:
+
+- The names are not the two spellings. I expect 397 to be "Cosmic Microwave Background", because it
+  is the later search, but that is inferred.
+- 377 has no published item with `report_count` under 2. Then row-level security hides 377 too, and
+  a typed search is paid again.
+- 397 has more published levels than 377. Neither name is in `/api/topics` or `/sitemap.xml` today,
+  so neither topic is complete. After the retirement, 377's gaps are filled by paid runs: a typed
+  search or the daily Curator (`missing_slots`, at most 6 jobs a day).
+
+**Step 2, write.** One transaction. Use the name from step 1.
+
+```sql
+begin;
+update public.topics set retire_after = now()
+  where id = 397 and lower(name) = lower('Cosmic Microwave Background');
+update public.items set status = 'retired'
+  where topic_id = 397 and status in ('published', 'review');
+commit;
+```
+
+Check that the first update changes 1 row. If not, roll back.
+
+| Rows | What happens | Why |
+| --- | --- | --- |
+| `topics` 397 | Stays, with `retire_after` set | `runs` and `items` point to it with no cascade, and it holds the cost record. `retire_stale()` then also retires an item that a run still in progress stores later. The Curator's name check still sees the name. |
+| `items`, `published` and `review` | `status = 'retired'`; the trigger sets `retired_at` | Row-level security hides them. Do not delete them: `player_answers.item_id` points to them. |
+| `items`, `discarded` | No change | They are never shown. |
+| `sources`, `claim_checks`, `reports`, `runs`, `cited_pages` | No change | Row-level security hides sources and checks with their item. |
+| `topic_images` 397 | No change | Row-level security hides it when the topic has no visible item. `curator/images.py` reads only topics with published items, so the fill skips it. |
+| Files in the `topic-images` bucket | No change | Names hold a content hash, so 377 can share a file. The extra cost is at most two files of 512 KB. |
+
+**The address.** `topicSlug` gives `/learn/cosmic-microwave-background` for 397 and
+`/learn/the-cosmic-microwave-background` for 377. On 2026-11-04 neither name was in `/api/topics` or
+`/sitemap.xml`, so neither address has a page, and nothing needs a redirect today. If 397 was listed
+when a build ran, its static page stays until the next deploy, and no deploy hook is set. If main
+finds the address shared or indexed, add a redirect in `vercel.json`, which is not on my list.
+
+**After it.** `/api/topics` is cached for up to 300 s. Then check with free reads:
+`BankReader.topic_named` returns 377's name for both spellings, and `missing_slots()` lists no slot
+for 397. Mission Control's published count falls and its retired count rises by the same number. A
+player who holds a question from 397 at that moment gets no answer from `/api/reveal`.
+
+**To undo.** Set `retire_after` back to null on 397, and set each item in the step 1 record back to
+its old status. `retired_at` stays set unless it is cleared by hand.
+
+**CHANGELOG line for main:** Typing a topic with or without a leading "The" now finds the same bank
+topic, so it no longer pays for a second one.
 
 ## Where this session stopped (2026-11-02)
 
