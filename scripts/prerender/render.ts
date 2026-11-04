@@ -88,7 +88,9 @@ export function renderPage(shell: string, page: PageSpec): string {
   html = setMeta(html, "twitter:title", page.title);
   html = setMeta(html, "twitter:description", page.description);
   const head = [
-    `<link rel="canonical" href="${escapeHtml(url)}" />`,
+    page.noindex
+      ? '<meta name="robots" content="noindex" />'
+      : `<link rel="canonical" href="${escapeHtml(url)}" />`,
     ...page.data.map(jsonLdBlock),
   ].join("\n    ");
   html = html.replace("</head>", () => `  ${head}\n  </head>`);

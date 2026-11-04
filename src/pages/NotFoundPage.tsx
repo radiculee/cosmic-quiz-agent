@@ -5,8 +5,10 @@ import { knownPaths, redirectFor, suggestionsFor } from "../closeMatch";
 import { navigate, PATHS, useLocation, usePageTitle } from "../router";
 import type { BankTopic } from "../types";
 
-/** Tells search engines this address is not a page, since the site answers every path with the
- * app (the status is 200). The tag is removed when the visitor moves on. */
+/** Tells search engines this address is not a page. An unknown address already answers 404 with
+ * a page that carries this tag (dist/404.html), but a topic address that matches no topic is
+ * answered with the app and status 200, so the tag is also set here. It is removed when the
+ * visitor moves on. */
 function useNoIndex(): void {
   useEffect(() => {
     const tag = document.createElement("meta");

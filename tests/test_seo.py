@@ -112,15 +112,20 @@ def test_the_policy_still_loads_images_only_from_this_site() -> None:
     assert SUPABASE_ORIGIN not in policy.replace(f"connect-src 'self' {SUPABASE_ORIGIN}", "")
 
 
-def test_the_build_prerenders_and_every_other_address_gets_the_plain_page() -> None:
+def test_the_build_prerenders_and_an_unknown_address_gets_status_404() -> None:
     package = json.loads((ROOT / "package.json").read_text(encoding="utf-8"))
     runner = (ROOT / "scripts" / "prerender.mjs").read_text(encoding="utf-8")
     rewrites = _config()["rewrites"]
 
     build = package["build"] if "build" in package else package["scripts"]["build"]
     assert build.endswith("vite build && node scripts/prerender.mjs"), build
-    # Vercel serves a built file before its rewrites, so each prerendered page wins its address
-    # and the catch-all, which names the untouched shell, answers the rest.
-    assert rewrites[-1] == {"source": "/((?!api/).*)", "destination": "/spa.html"}
+    # Vercel serves a built file before its rewrites, so each prerendered page wins its address.
+    # The plain shell answers (status 200) only the app's own addresses that have no file: a topic
+    # added since the build, and the pages the build does not make. There is no catch-all, so any
+    # other address falls to dist/404.html, which Vercel serves with status 404.
+    shell = [rule["source"] for rule in rewrites if rule["destination"] == "/spa.html"]
+    assert shell == ["/learn/:slug", "/explore/stats", "/trophies", "/privacy"]
+    assert not any(".*" in source and source != "/media/:path(.*)" for source in shell)
     assert 'join(DIST, "spa.html")' in runner and 'join(DIST, "sitemap.xml")' in runner
+    assert 'join(DIST, "404.html")' in runner
     assert int(re.sub(r"\D*(\d+).*", r"\1", package["engines"]["node"])) >= 22  # runs .ts files
