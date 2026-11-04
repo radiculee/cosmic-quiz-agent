@@ -301,6 +301,30 @@ def test_choose_rejects_an_article_already_used_under_another_name(ctx: ToolCont
     assert topic is None and "already used" in notes[0]
 
 
+def test_choose_skips_a_pick_with_the_when_the_bank_has_the_name_without(
+    ctx: ToolContext,
+) -> None:
+    known = TopicRef(name="Cat's Paw Nebula", kind="evergreen")
+    picks = [NewsPick(topic="The Cat's Paw Nebula", link=LINK, why="x")]
+
+    topic, notes = choose(picks, parse_rss(RSS), [known], ctx, NOW)
+
+    assert topic is None
+    assert notes == ['skipped "The Cat\'s Paw Nebula": already in the bank']
+
+
+def test_choose_skips_a_pick_without_the_when_the_bank_has_the_name_with(
+    ctx: ToolContext,
+) -> None:
+    known = TopicRef(name="The Cat's Paw Nebula", kind="evergreen")
+    picks = [NewsPick(topic="Cat's Paw Nebula", link=LINK, why="x")]
+
+    topic, notes = choose(picks, parse_rss(RSS), [known], ctx, NOW)
+
+    assert topic is None
+    assert notes == ['skipped "Cat\'s Paw Nebula": already in the bank']
+
+
 def test_discover_uses_one_structured_call_and_logs_its_cost(
     ctx: ToolContext, settings: Settings
 ) -> None:

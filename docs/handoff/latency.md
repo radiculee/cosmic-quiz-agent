@@ -25,6 +25,10 @@ live since 2026-11-01 21:32 UTC. The reports below replace "Where things stand",
 - "The" alone stays "the". It matches only a topic named "The" or "The The". It never matches an
   empty name or every topic.
 - Both test files hold the same 12 cases for the rule.
+- `choose` in `curator/discover.py` compares with `topic_key` (added on main's word, after its review
+  of `60a7715`). A news pick "The X" is skipped when the bank has "X", and the reverse. The note text
+  is the same. The import adds one module, `agent.bank`, and no new package. `agent.bank` imports
+  nothing from `curator`, so there is no import cycle.
 
 **In progress**
 
@@ -32,29 +36,28 @@ Nothing.
 
 **Left, each on main's word**
 
-1. Fix `curator/discover.py` lines 145 and 158. **This one makes the same duplicate**: a news pick
-   "The X" passes when the bank has "X", and the Curator pays for it. The file is not on my list, so
-   I did not edit it. The fix: compare with `topic_key` from `agent/bank.py` in both lines.
-2. Decide on the rest of the list under "Other places that compare names".
-3. Retire topic 397, after the fix is deployed. See the plan below.
+1. Retire topic 397 soon after the deploy. See the plan below.
+2. The open items under "Other places that compare names". Main said not to change them now.
 
 **Blocked on**
 
-Main's word on item 1, since `curator/discover.py` is not on my list. Nothing else.
+Nothing.
 
 **Needs from Vedant**
 
-His word to retire topic 397, after main runs step 1 of the plan and shows him which topic has more
-items. The instruction assumes 397 is the one to drop. I could not confirm that without a bank read.
+His word to retire topic 397, after main runs step 1 of the plan.
 
 **Files changed**
 
-`agent/bank.py`, `src/topics.ts`, `src/topics.test.ts`, `tests/test_api.py`,
-`docs/handoff/latency.md`.
+`agent/bank.py`, `src/topics.ts`, `src/topics.test.ts`, `tests/test_api.py`, `curator/discover.py`,
+`tests/test_curator.py`, `docs/handoff/latency.md`.
 
 **Checks run**
 
-All on the worktree with the code commits, with no `SUPABASE_*` variable set, so the build made no
+On the `curator/discover.py` change: `pytest -q`, `ruff check .`, `ruff format --check .` and
+`mypy --strict`, all exit 0. It changed no TypeScript, so the `pnpm` checks were not run again.
+
+On `60a7715`, with no `SUPABASE_*` variable set, so the build made no
 bank read. All exit 0: `pnpm install --frozen-lockfile`, `pnpm typecheck`, `pnpm test` (306 tests in
 28 files), `pnpm build` (4 pages, no topic pages), `pytest -q`, `ruff check .`,
 `ruff format --check .`, `mypy --strict` (89 files).
@@ -70,9 +73,8 @@ bank read. All exit 0: `pnpm install --frozen-lockfile`, `pnpm typecheck`, `pnpm
 
 ### Other places that compare names
 
-Fix needed, same duplicate:
+Open, can still make the same duplicate. Main said not to change these now:
 
-- `curator/discover.py:145,158`: see "Left", item 1.
 - A topic with no visible item, only `review` or `discarded` ones. Row-level security hides it from
   `topic_named`, so the other spelling makes a second row. The same spelling reuses the row, by
   `lower(name)`. The fix needs the secret key or the database: `agent/ondemand.py` or a migration.
@@ -96,8 +98,8 @@ No duplicate, left as they are:
 - `agent/topic_check.py`, `scripts/prerender/bank.ts` and `src/closeMatch.ts` do not decide whether a
   topic exists in the bank.
 
-Also found, no duplicate in the bank that I could check: the eval list breaks its held-out rule by
-"The". `evals/topics.py` has "The Andromeda Galaxy" and "The James Webb Space Telescope".
+Open note, no change needed now: Vedant chose to keep the eval overlap on 1 November. The eval list
+overlaps by "The". `evals/topics.py` has "The Andromeda Galaxy" and "The James Webb Space Telescope".
 `FILL_TOPICS` has "Andromeda Galaxy", and the live bank has "James Webb Space Telescope".
 `tests/test_curator.py:135,141` compares by casefold only, so it passes. I did not check whether the
 eval topics are in the bank.
@@ -127,9 +129,15 @@ Stop and ask Vedant if one of these is true:
   is the later search, but that is inferred.
 - 377 has no published item with `report_count` under 2. Then row-level security hides 377 too, and
   a typed search is paid again.
-- 397 has more published levels than 377. Neither name is in `/api/topics` or `/sitemap.xml` today,
-  so neither topic is complete. After the retirement, 377's gaps are filled by paid runs: a typed
-  search or the daily Curator (`missing_slots`, at most 6 jobs a day).
+- 397 has more published levels than 377. After the retirement, 377's gaps are filled by paid runs:
+  a typed search or the daily Curator (`missing_slots`, at most 6 jobs a day).
+
+**Coverage on 4 November, from main's read of the bank.** Both topics have the same coverage: learn
+at easy, medium and hard, and quiz at easy and medium. So the "more published levels" condition does
+not apply today. Step 1 must still run first, because this can change.
+
+**Retire it soon after the deploy.** Both topics lack quiz hard. Until 397 is retired, the daily
+Curator can pay to fill that level on both.
 
 **Step 2, write.** One transaction. Use the name from step 1.
 

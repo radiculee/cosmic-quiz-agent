@@ -15,6 +15,7 @@ from datetime import datetime, timedelta
 
 from pydantic import BaseModel, ConfigDict, ValidationError
 
+from agent.bank import topic_key
 from agent.config import Settings
 from agent.llm import JsonObject, LLMError, LLMProvider, Usage, prompt_tokens_bound
 from agent.store import TopicRef
@@ -142,7 +143,7 @@ def choose(
 ) -> tuple[TopicRef | None, list[str]]:
     """The first pick that passes the code checks, with a note for each pick skipped."""
     links = {item.link for item in items}
-    existing = {topic.name.strip().casefold() for topic in existing_topics}
+    existing = {topic_key(topic.name) for topic in existing_topics}
     used_articles = {topic.lead_url for topic in existing_topics if topic.lead_url}
     notes: list[str] = []
     for pick in picks[:MAX_PICKS]:
@@ -155,7 +156,7 @@ def choose(
             notes.append(f"skipped {name!r}: its link is not on an allowed domain")
         elif pick.link in used_articles:
             notes.append(f"skipped {name!r}: its article was already used for another topic")
-        elif name.casefold() in existing:
+        elif topic_key(name) in existing:
             notes.append(f"skipped {name!r}: already in the bank")
         else:
             topic = TopicRef(
