@@ -3,7 +3,80 @@
 Notes for the ui session (`docs/SESSIONS.md`). They replace `docs/NEXT_SESSION.md` for this
 session. Update them before finishing, and commit them on `session/ui`.
 
-Last update: 2026-11-03 (ui: Learn card fixes on `session/ui`, waiting for main's review)
+Last update: 2026-11-04 (ui: one focus on each landing page, on `session/ui`, waiting for main's review)
+
+## One focus on each landing page (2026-11-04)
+
+Based on `57771af`. Not pushed and not merged. The older notes below are unchanged.
+
+### Done
+
+The rule from main's brief: above the main action, only the title and one short line; status
+lines and small print go below it.
+
+- `d6f36a2` Learn: "N of M read at EASY." is below the grid. With a typed search, "N of M topics match." stays above the grid. One `aria-live` line, in one place at a time.
+- `2add74e` Quiz: the line under the title is "Every question is on a different topic, against the clock." Order: topics notice, START, How the quiz works, Where the questions come from, rank card, length note. The scoring chip is gone and its exact text is the last step in `QUIZ_HOW_STEPS`. "Topics you have not played come first." and "The clock runs only while a question waits for an answer." are two new steps. If no length is available, the note sits directly above START. `describedBy` still points to the note.
+- `f67ffa9` Web: the line under the title is "Research any astronomy or space topic that is not in the bank yet." In the landing state (no search, no log) the topic box is in the page above GO, with no row in the sticky header. The hint is shown only for loading, failed, too long and the states that say what GO will do; nothing for an empty box. SURPRISE ME is an underlined text button, 44 px tall. Then the cap notice (only when the cap is closed), MISSION CONTROL, the quota line and the `scene-note` chip with the how-it-works text. With a search or log on the page, the box and the short quota go back to the sticky header, the quota line goes after the results region, and the chip is hidden. One box exists at a time. It is not focused by itself, and it is 16 px.
+- `b7a9219` Home: cards in the order Quiz, Learn, Web. Quiz is the only main card (`main` prop on `ModeCard`: solid teal, `--bg-void` text, bullet and `>`, void pixel dashes, ink focus ring). The `accent` prop is removed. "N of M read" shows only when N is above 0, "Best streak N" only when N is above 0, "Not played yet" is gone. The Web card has no status. `useQuota` and `quotaShort` are removed from `HomePage.tsx`, so the page makes no quota request. The comment at the top of `HomePage` is updated.
+- `af1fe77` tests, in `src/pages/landing.test.tsx` and `src/quizAbout.test.tsx`.
+
+### In progress
+
+Nothing.
+
+### Left
+
+Main reviews the branch, then lands it.
+
+### Blocked on
+
+Nothing.
+
+### Needs from Vedant
+
+Nothing. Two small points for review:
+
+- The quota line moved from "directly under the buttons" to below MISSION CONTROL on the landing page, as the brief orders it.
+- The disabled SURPRISE ME (quota used up or cap closed) is dimmed and not underlined. It is readable but quiet.
+
+### y position of the main action at 390 px (before, after)
+
+- Home, Quiz card: 363 to 277.
+- Quiz, START: 433 to 311.
+- Learn, first topic card: 376 to 324 (the progress line was at 295 and is now below the grid, at 7555).
+- Web, GO: 532 to 319 (the topic box was in the header at 56 and is now at 237).
+
+At 1280 (after): Home cards 293, Quiz START 293, Learn first card 332, Web GO 301.
+
+### Screenshots
+
+In `C:\Users\vedan\AppData\Local\Temp\claude\C--Users-vedan-cqa-ui\a2572e21-0b13-4e7e-976d-67fbad5a0469\scratchpad\shots\`:
+`new-<page>-<width>.png` for home, quiz, learn, learn-search, explore, explore-typed and explore-log at 1280 and 390; `old-*-390.png` from `57771af`; `cap-explore-390.png` for the closed global cap.
+
+### Files changed
+
+- `src/pages/HomePage.tsx`, `src/pages/QuizPage.tsx`, `src/pages/LearnPage.tsx`, `src/pages/ExplorePage.tsx`
+- `src/components/ModeCard.tsx`
+- `src/quizAbout.ts`, `src/quizAbout.test.tsx`
+- `src/pages/landing.test.tsx` (new)
+- `docs/handoff/ui.md`
+
+`scripts/prerender/render.ts` is not changed, and its test passes.
+
+### Checks run
+
+- `pnpm install --frozen-lockfile`, `pnpm typecheck`, `pnpm test` (293 passed), `pnpm build`: all pass.
+- `pytest -q`, `ruff check .`, `ruff format --check .`, `mypy --strict`, from `.venv`: all pass. I changed no Python.
+- Headless Chrome on the built `dist/`, served with the CSP and other headers of `vercel.json`, at 1280 and 390 px, on Home, Quiz, Learn and Web: no CSP violation, no page error, no console error, no sideways scroll. I looked at the screenshots of every page.
+- The API stub had only `SUPABASE_URL` and `SUPABASE_PUBLISHABLE_KEY`, so bank reads were real and no paid call was possible. `/api/quota` and `/api/research` were answered inside Chrome (DevTools Fetch). The "log on the page" state came from a stubbed `rejected` event. No real search ran.
+
+Not checked:
+
+- The Web box in the "search on the page" state was driven in the browser (the box moves to the header, the typed text stays, the chip is hidden) but has no unit test, because that state is set by a running search and the pages are rendered once on the server in the tests. The landing state has unit tests.
+- A phone with a real keyboard (iOS zoom). The box is 16 px by computed style; `src/header.test.ts` still passes.
+- No trophy pop-up appeared in the drives (fresh profile, no answers). The pop-up clearing code ran but had nothing to clear.
+- The focus ring on the main Quiz card: set to ink, not looked at in a screenshot.
+- The signed-in state, and the Web results (a question card) state.
 
 ## Learn card fixes (2026-11-03)
 
