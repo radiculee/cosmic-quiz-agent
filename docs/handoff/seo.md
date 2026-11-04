@@ -159,3 +159,93 @@ The checks above pass and main's review has no open findings.
 - Committed in `711e193`: `vercel.json`, `tests/test_seo.py`, `tests/test_packaging.py`, `tests/site_files.py`.
 - Committed in `7d2df03`: `scripts/prerender.mjs`, `scripts/prerender/*`, `src/slug.ts`, `src/router.ts`, `tsconfig.json`, `package.json`, `vercel.json`, `vite.config.ts`, `public/robots.txt`, `tests/test_seo.py`.
 - `docs/handoff/seo.md`: this update.
+
+
+---
+
+# Unknown addresses answer 404 (2026-11-04)
+
+## Done
+
+- An address no file or rewrite matches now answers HTTP 404 with `dist/404.html`, which is the
+  page shell with the title "Not found - Curiosity", `<meta name="robots" content="noindex">`, no
+  canonical link and no `og:url`. The app mounts over it and shows its own not-found page.
+- `vercel.json`: the catch-all rewrite `/((?!api/).*)` is gone. Four rewrites to `/spa.html`
+  remain: `/learn/:slug`, `/explore/stats`, `/trophies`, `/privacy`. `/media/*` is unchanged;
+  `/api/*` is untouched (no rewrite ever matched it). Redirects, headers and the CSP are unchanged.
+  Vercel applies the headers rule `/(.*)` to the 404 reply, so the CSP stays on it.
+- `scripts/prerender/render.ts`: `notFoundPage()` and a `noindex` option on `PageSpec`.
+  `scripts/prerender.mjs` writes `dist/404.html`. It is not in the sitemap.
+- `NotFoundPage.tsx`: comment only. Its own `noindex` tag stays, because an unknown topic slug
+  still answers 200.
+- Tests: `render.test.ts` (4 new), `tests/test_seo.py` (the old catch-all assertion rewritten).
+
+## Design and the choice for Vedant
+
+A valid topic and an unknown topic under `/learn/` cannot be told apart by the server without
+new work: the prerender knows only the topics that existed at build time, and
+`VERCEL_DEPLOY_HOOK_URL` is not set. So `/learn/<anything>` stays 200 (served as the app). The app
+shows its not-found page for a slug that matches no topic, with `noindex`. An unknown topic slug is
+therefore still a soft 404. Choices if Vedant wants a real 404 there:
+1. Set `VERCEL_DEPLOY_HOOK_URL` so each new topic gets a page, then give up the `/learn/:slug`
+   rewrite (a topic then always has a file). Recommended long term; needs a secret and the Curator.
+2. A Vercel function that reads the bank and answers 200 or 404. Cost: a function call per hit.
+Today's change is the safe one: a valid topic never gets 404.
+
+Side effect: `/lern` (a typo) now arrives with status 404, and the app then redirects the visitor
+to `/learn` as before. Visitors see no change; a crawler sees 404 for the typo, which is right.
+
+## In progress
+
+None.
+
+## Left
+
+Check on a Vercel preview (below). Main to add the CHANGELOG line.
+
+CHANGELOG line: "An unknown address now answers HTTP 404 with the site's not-found page (noindex, no
+canonical link); topic addresses still answer 200."
+
+## Blocked on
+
+Nothing.
+
+## Needs from Vedant
+
+Decide whether to set `VERCEL_DEPLOY_HOOK_URL` (choice 1) to remove the soft 404 on unknown topic slugs.
+
+## Files changed
+
+`vercel.json`, `scripts/prerender.mjs`, `scripts/prerender/render.ts`,
+`scripts/prerender/render.test.ts`, `src/pages/NotFoundPage.tsx` (comment), `tests/test_seo.py`,
+`docs/handoff/seo.md`.
+
+## Checks run
+
+Passed: `pnpm install --frozen-lockfile`, `pnpm typecheck`, `pnpm test` (287), `pnpm build`,
+`pytest -q --ignore=tests/test_images.py`, `ruff check .`, `ruff format --check .`.
+Not clean, not caused by this change: `tests/test_images.py` and `mypy --strict` fail because the
+Pillow package (`PIL`) is not installed in this worktree's venv (3 mypy errors, all `PIL` related).
+I did not run prettier (not installed in the worktree).
+Local scratch server on port 4191 (outside the repo) applying vercel.json: `/`, `/learn`, `/quiz`,
+`/explore`, `/explore/stats`, `/trophies`, `/privacy`, `/learn/some-new-topic` (with and without a
+trailing slash) answered 200; `/lern`, `/nope`, `/a/b/c` answered 404 with the CSP and
+`X-Frame-Options` present. This server is a model of the rules, not Vercel.
+
+Proved only on a Vercel preview or the live site: that Vercel serves `dist/404.html` with status
+404 under the `vite` framework preset; that the four rewrites match with a trailing slash
+(`/trophies/`); that the `/(.*)` headers rule applies to the 404 reply; that `/api/*` and `/media/*`
+behave as before. The build here had no bank key, so `/learn/<real-topic>` files were not built
+here; a preview build with the key proves a prerendered topic answers 200.
+
+Curl commands after a deploy (replace the topic names):
+
+    H=https://curiosity.vedantgaikwad.ie
+    for u in / /learn /learn/<a-prerendered-topic> /learn/<a-topic-added-after-the-build> /lern /nope /api/topics /media/<a-real-file>.webp; do
+      printf "%s " "$u"; curl -s -o /dev/null -w "%{http_code}
+" "$H$u"; done
+    curl -sI $H/nope | grep -i "^HTTP\|content-security-policy\|x-frame"
+    curl -s $H/nope | grep -i "<title>\|robots\|canonical"
+
+Expected: 200, 200, 200, 200, 404, 404, 200, 200; the 404 reply shows the CSP, a "Not found" title,
+`noindex` and no canonical.
