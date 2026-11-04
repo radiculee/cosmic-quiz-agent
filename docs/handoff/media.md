@@ -34,7 +34,9 @@ Branch `session/media`, rebased on `57771af`. Nothing is pushed or merged. Main 
   work was independent and came later." It is whole but vague.)** One more is borderline: James
   Webb, "To detect the faint infrared glow ..., the telescope must be kept extremely cold, below
   50 K." (the topic name makes "the telescope" clear). None of the 56 returned None.
-- What the caller does with None: `choose_media` returns None when `pick_fact` gives None, and
+- The 55 of 56 was measured on the same 56 topics that the rule was tuned on, by one reader. It
+  is not a measure of new topics.
+- What the caller did with None (before the follow-up below): `choose_media` returns None when `pick_fact` gives None, and
   `fill` then counts the topic as `unreachable` and prints "left as it was: a source could not
   be reached". So the topic keeps its old row (or has none), nothing is written, and the next run
   tries again. That is safe, but the message is wrong for this case. I did not change it, because
@@ -43,6 +45,10 @@ Branch `session/media`, rebased on `57771af`. Nothing is pushed or merged. Main 
   leaning sentences (each must give None, and must lose to a clean sentence next to it), 7 real
   standing sentences, and 4 broken ones. One existing fixture sentence ("... nothing escapes it,
   not even light ...") was reworded because it used "it".
+
+- Follow-up after review: `choose_media` now raises `NoUsableFactError` when no sentence stands
+  alone (it still returns None for an outage). `fill` prints "no picture and no sentence that
+  stands alone" and counts it in `Tally.no_fact`, shown in the summary. Nothing is written.
 
 ### In progress
 
@@ -53,7 +59,6 @@ Nothing.
 - The strict pointer rule also rejects a good sentence that uses "it" for something named in
   the same sentence. This costs choice, not truth. With 5 or more explanations per topic it still
   found a fact for all 56.
-- The "no usable fact" message (see above).
 
 ### Blocked on
 

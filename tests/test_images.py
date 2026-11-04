@@ -718,6 +718,15 @@ def test_a_source_that_cannot_be_reached_leaves_the_topic_alone(
     assert images.choose_media(topic_row(), fetcher_for(web(status=503))) is None
 
 
+def test_a_topic_with_no_picture_and_no_standalone_sentence_is_told_apart_from_an_outage() -> None:
+    row = topic_row().model_dump(mode="json")
+    row["items"][0]["explanation"] = "It is dense. This is hot."
+    topic = images.TopicRow.model_validate(row)
+
+    with pytest.raises(images.NoUsableFactError):
+        images.choose_media(topic, fetcher_for(web(wikipedia=False, nasa=False)))
+
+
 def test_a_rejected_wikipedia_picture_falls_through_to_the_next_source() -> None:
     def small(request: httpx2.Request) -> httpx2.Response:
         if request.url.host == "thumb.wikimedia.org":
@@ -844,6 +853,36 @@ def fill(
         refresh=refresh,
         out=lambda _text: None,
     )
+
+
+def test_fill_reports_an_outage_and_a_missing_fact_differently(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    lines: list[str] = []
+    outcomes: list[object] = [None, images.NoUsableFactError("Black hole")]
+
+    def choose(_topic: object, _fetcher: object) -> object:
+        outcome = outcomes.pop(0)
+        if isinstance(outcome, Exception):
+            raise outcome
+        return outcome
+
+    monkeypatch.setattr(images, "choose_media", choose)
+    recorder = Recorder()
+    for _ in range(2):
+        tally = images.fill(
+            store_for(recorder),
+            fetcher_for(web()),
+            dry_run=False,
+            only=None,
+            refresh=False,
+            out=lines.append,
+        )
+        assert (tally.unreachable, tally.no_fact) in ((1, 0), (0, 1))
+
+    assert "a source could not be reached" in lines[0]
+    assert "no picture and no sentence that stands alone" in lines[1]
+    assert recorder.writes() == []
 
 
 def test_a_dry_run_reads_and_writes_nothing() -> None:

@@ -115,6 +115,11 @@ class ImageRejectedError(Exception):
     """A picture was looked at and turned down; the message says why (kept in `notes`)."""
 
 
+class NoUsableFactError(Exception):
+    """No picture was found and no sentence of the explanations stands alone. Nothing is written
+    and the topic is tried again on the next run; this is not an outage."""
+
+
 class FetchError(Exception):
     """A picture source could not be reached. Unlike a rejection this says nothing about the
     picture, so the topic is left as it was and tried again on the next run."""
@@ -738,7 +743,9 @@ def choose_media(topic: TopicRow, fetcher: Fetcher) -> Chosen | None:
     """A picture for the topic, or a fact card if no source has an acceptable one.
 
     None if a source could not be reached and nothing was found: the topic is then left as it
-    is, because a fact card would hide a picture that an outage kept from us.
+    is, because a fact card would hide a picture that an outage kept from us. Raises
+    NoUsableFactError if every source was reached, none had a picture and no sentence stands
+    alone; the topic is then also left as it is.
     """
     notes: list[str] = []
     unreachable = False
@@ -770,7 +777,7 @@ def choose_media(topic: TopicRow, fetcher: Fetcher) -> Chosen | None:
     texts = topic.explanations()
     fact = pick_fact(topic.name, texts)
     if fact is None:
-        return None
+        raise NoUsableFactError(topic.name)
     media = TopicMedia(
         kind="fact", category=category_of(topic.name, texts), fact=fact, notes="; ".join(notes)
     )
@@ -968,6 +975,7 @@ class Tally:
     facts: int = 0
     skipped: int = 0
     unreachable: int = 0
+    no_fact: int = 0
 
 
 def fill(
@@ -989,7 +997,12 @@ def fill(
         if row is not None and (row.locked or (row.kind == "image" and not refresh)):
             tally.skipped += 1
             continue
-        chosen = choose_media(topic, fetcher)
+        try:
+            chosen = choose_media(topic, fetcher)
+        except NoUsableFactError:
+            tally.no_fact += 1
+            out(f"{topic.name}\n    left as it was: no picture and no sentence that stands alone")
+            continue
         if chosen is None:
             tally.unreachable += 1
             out(f"{topic.name}\n    left as it was: a source could not be reached")
@@ -1051,7 +1064,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     verb = "would be" if args.dry_run else "were"
     print(
         f"\n{tally.images} pictures and {tally.facts} facts {verb} saved; "
-        f"{tally.skipped} left as they are; {tally.unreachable} not reached."
+        f"{tally.skipped} left as they are; {tally.unreachable} not reached; "
+        f"{tally.no_fact} with no picture and no usable fact."
     )
     return 0
 
