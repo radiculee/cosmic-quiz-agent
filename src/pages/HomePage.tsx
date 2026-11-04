@@ -17,11 +17,11 @@ export interface SlideshowControl {
 const PROGRESS_ID = "progress";
 
 /**
- * The front page. The first screen is a hero over the scene slideshow: the title, the tagline and
- * the three ways in (Quiz, Learn and a new topic from the web) sit in the scene's empty sky. Quiz
- * is the one main card; a card shows a status only once there is something to say (a topic read,
- * a streak), and none makes a request of its own, with a link down to the player's progress and the slideshow's pause
- * control at its foot. Just below the fold, one solid card holds the rank, points, trophy shelf
+ * The front page. The first screen is a hero over the scene slideshow. It holds the title, the
+ * tagline and the three ways in (Quiz, Learn and a new topic from the web) in the scene's empty
+ * sky. Quiz is the one main card. A card shows a status only when there is something to say (a
+ * topic read, a streak). A link down to the player's progress and the slideshow's pause control
+ * sit at the hero's foot. Just below the fold, one solid card holds the rank, points, trophy shelf
  * and the bank's size.
  *
  * The hero is as tall as the small viewport (svh: Safari's toolbars shown), not the dynamic one

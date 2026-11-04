@@ -103,6 +103,11 @@ describe("LearnPage", () => {
     expect(html.indexOf("read at EASY")).toBeGreaterThan(html.lastIndexOf("/learn/"));
     expect(html).not.toContain("topics match");
   });
+
+  it("keeps one live region on the page when nothing is typed", () => {
+    const html = render(loaded(3));
+    expect(html).toContain('<div aria-live="polite"></div>');
+  });
 });
 
 describe("QuizPage setup", () => {

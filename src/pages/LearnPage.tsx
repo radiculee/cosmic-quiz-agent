@@ -110,11 +110,15 @@ function LearnIndex({ topicsState, retryTopics, profile, difficulty, setDifficul
         <TopicsNotice state={topicsState} onRetry={retryTopics} />
         {topicsState.kind === "loaded" && (
           <>
-            {searching && (
-              <p aria-live="polite" className="scene-note mb-4 text-sm">
-                {shown.length} of {available.length} topics match.
-              </p>
-            )}
+            {/* The live region is always on the page, so a screen reader is watching it before the
+                first count arrives; empty, it takes no space. */}
+            <div aria-live="polite">
+              {searching && (
+                <p className="scene-note mb-4 text-sm">
+                  {shown.length} of {available.length} topics match.
+                </p>
+              )}
+            </div>
             {shown.length > 0 ? (
               <TopicGrid topics={shown} learned={learned} />
             ) : (
