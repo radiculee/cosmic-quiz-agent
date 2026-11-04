@@ -37,7 +37,9 @@ The bank has 56 picture rows and no facts, 28 locked. All 39 live cards show a p
 is clean at 1280 and 390. The other 17 topics have pictures saved, but Learn lists a topic only when
 it is on every level, so they appear later, including Black holes, The Habitable Zone and Fast radio
 bursts. `TOPIC_IMAGES` is on, from 00:51 UTC, on his word. This file and `docs/SESSIONS.md` are
-committed. Open: his iPhone check, and step 6 (he posts). Scripts and the fill's log:
+committed. His iPhone check passed at 01:06. Open: step 6 (he posts). New, 01:20: ui is building one
+focus on each landing page (brief `brief-ui-landing.md` in the scratchpad below). Review its report
+by commit hash, land with `git merge --ff-only <sha>`, and push on his word. Scripts and the fill's log:
 `C:\Users\vedan\AppData\Local\Temp\claude\49a50dcdfe0361ef\983996c7-8a36-46eb-825a-3a7b5780f729\scratchpad\`.
 
 **Live:** `main` and `origin/main` are at `4ae4b43` on `curiosity.vedantgaikwad.ie`. GitHub Checks

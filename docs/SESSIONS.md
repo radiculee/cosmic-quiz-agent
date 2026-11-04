@@ -329,6 +329,19 @@ entry; record a reversal as a new one.
 - 2026-11-04, Vedant (via main): yes to the 7 picture swaps and to the Black holes credit, "Event
   Horizon Telescope/ESO". Main saved 28 rows as `locked` (the 27 overrides and Black holes), then
   ran the fill for the other 27. Auroras keeps its row. 41 Wormholes stays as it is.
+- 2026-11-04, Vedant (via main): one focus on each landing page. Above the main action, only the
+  title and one short line. Status and small print go below it, unless they explain why the action
+  is off. Home's cards become Quiz (solid teal), Learn, Web, with statuses only once there is
+  progress. On the Web page the topic box sits above GO in the landing state, and returns to the
+  sticky header while a search is on the page: an exception to the 2 November header settings. ui
+  builds it, to be live before the LinkedIn post.
+- 2026-11-04, Vedant (via main), after the audit (`docs/handoff/audit.md`): corrected items 97, 100,
+  116, 154, 165, 309 and 361 in the live bank, and moved 156 and 61 to review, so ISS and Life cycle
+  of a Sun-like star leave Learn and Quiz until those levels are decided. A wider audit runs after
+  all the changes are committed and tested. Also yes to: landing the leading "The" fix and the fact
+  rule, retiring topic 397 after the deploy, sending a contradicted label under 0.5 to review, the
+  404 change after a Vercel preview, and the `docs/DESIGN.md` text. Main read "Run the curator and
+  I'll review them" as the 30-topic fill, which was already approved on 2026-11-01.
 
 ---
 
