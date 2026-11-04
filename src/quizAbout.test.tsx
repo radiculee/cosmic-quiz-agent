@@ -16,10 +16,15 @@ describe("QuizAbout", () => {
     expect(html).toContain(QUIZ_SOURCES_TEXT);
   });
 
-  it("has four steps, the third and fourth as decided", () => {
-    expect(QUIZ_HOW_STEPS).toHaveLength(4);
-    expect(QUIZ_HOW_STEPS[3]).toBe(
+  it("keeps the facts: the sources step and the scoring as the last step", () => {
+    expect(QUIZ_HOW_STEPS).toHaveLength(7);
+    expect(QUIZ_HOW_STEPS[5]).toBe(
       "After each answer you see the explanation and the sources it was checked against.",
     );
+    expect(QUIZ_HOW_STEPS[6]).toBe(
+      "EASY 100, MEDIUM 200, HARD 300 points a correct answer. x1.5 from 3 in a row, x2 from 5, and +25% for answering within 15 seconds.",
+    );
+    expect(QUIZ_HOW_STEPS.join(" ")).toContain("have not played come first");
+    expect(QUIZ_HOW_STEPS.join(" ")).toContain("only while a question waits");
   });
 });

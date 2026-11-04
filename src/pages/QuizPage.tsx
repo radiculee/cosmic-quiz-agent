@@ -205,11 +205,15 @@ export function QuizPage({
   }, [viewKey]);
 
   if (view.kind === "setup" || run === null) {
+    const lengthNoteEl = (
+      <p id={noteId} className="scene-note mt-6 max-w-md text-center text-sm">
+        {note}
+      </p>
+    );
     return (
       <div className="flex flex-col items-center">
         <PageHeading title="Quiz">
-          Every question is on a different topic, unplayed ones first. The clock runs only while a
-          question waits for an answer.
+          Every question is on a different topic, against the clock.
         </PageHeading>
 
         <HeaderSettings>
@@ -232,15 +236,12 @@ export function QuizPage({
             />
           </div>
         </HeaderSettings>
-        {note && (
-          <p id={noteId} className="scene-note mt-10 max-w-md text-center text-sm">
-            {note}
-          </p>
-        )}
-
         <div className="mt-6">
           <TopicsNotice state={topicsState} onRetry={retryTopics} />
         </div>
+        {/* The note explains why START is off, so with no length it sits right above START;
+            otherwise it is the last thing on the page. One element, in one place. */}
+        {note && length === null && lengthNoteEl}
         <button
           type="button"
           onClick={() => length !== null && start(length, difficulty)}
@@ -249,16 +250,13 @@ export function QuizPage({
         >
           Start
         </button>
-        <p className="scene-note mt-4 max-w-md text-center text-xs leading-relaxed">
-          EASY 100, MEDIUM 200, HARD 300 points a correct answer. x1.5 from 3 in a row, x2 from 5,
-          and +25% for answering within 15 seconds.
-        </p>
 
         <QuizAbout />
 
         <div className="pixel-border mt-10 w-full max-w-xl rounded-sm bg-surface px-5 py-5">
           <ProfileStrip profile={profile} />
         </div>
+        {note && length !== null && lengthNoteEl}
       </div>
     );
   }

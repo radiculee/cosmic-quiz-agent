@@ -8,7 +8,10 @@ export const QUIZ_HOW_STEPS: readonly string[] = [
   "Pick a difficulty: easy, medium or hard.",
   "Pick a run of 10, 30 or 60 questions. A length is offered once the question bank has that many topics at your difficulty.",
   "Every question has four options and is on a different topic, played against the clock.",
+  "Topics you have not played come first.",
+  "The clock runs only while a question waits for an answer.",
   "After each answer you see the explanation and the sources it was checked against.",
+  "EASY 100, MEDIUM 200, HARD 300 points a correct answer. x1.5 from 3 in a row, x2 from 5, and +25% for answering within 15 seconds.",
 ];
 
 export const QUIZ_SOURCES_HEADING = "Where the questions come from";
