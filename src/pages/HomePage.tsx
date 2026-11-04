@@ -3,11 +3,9 @@ import type { MouseEvent } from "react";
 import { ASTRONOMY_LINE, NAME, TAGLINE } from "../brand";
 import { ModeCard } from "../components/ModeCard";
 import { ProfileStrip } from "../components/ProfileStrip";
-import { quotaShort } from "../quota";
 import { PATHS, usePageTitle } from "../router";
 import { scrollBehavior } from "../useBrowserState";
 import { loadedTopics } from "../useTopics";
-import { useQuota } from "../useQuota";
 import { type PageProps, SCENE_CHIP } from "./common";
 
 /** The slideshow's pause control, for the hero. Null when it does not rotate (reduced motion). */
@@ -20,8 +18,9 @@ const PROGRESS_ID = "progress";
 
 /**
  * The front page. The first screen is a hero over the scene slideshow: the title, the tagline and
- * the three ways in (Learn, Quiz, and a new topic from the web with the searches left today) sit in
- * the scene's empty sky, with a link down to the player's progress and the slideshow's pause
+ * the three ways in (Quiz, Learn and a new topic from the web) sit in the scene's empty sky. Quiz
+ * is the one main card; a card shows a status only once there is something to say (a topic read,
+ * a streak), and none makes a request of its own, with a link down to the player's progress and the slideshow's pause
  * control at its foot. Just below the fold, one solid card holds the rank, points, trophy shelf
  * and the bank's size.
  *
@@ -34,7 +33,6 @@ export function HomePage({
   slideshow,
 }: Pick<PageProps, "topicsState" | "profile"> & { slideshow: SlideshowControl | null }) {
   usePageTitle(null);
-  const [quota] = useQuota();
   const topics = loadedTopics(topicsState);
   const learnTopics = topics.filter((topic) => topic.learn.length > 0);
   const learned = new Set(profile.learned);
@@ -69,24 +67,19 @@ export function HomePage({
 
         <nav aria-label="Ways in" className="mt-7 grid w-full grid-cols-1 gap-3 sm:grid-cols-3">
           <ModeCard
-            to={PATHS.learn}
-            label="Learn"
-            title="Read a topic"
-            status={loaded ? `${read} of ${learnTopics.length} read` : null}
-          />
-          <ModeCard
             to={PATHS.quiz}
             label="Quiz"
             title="Play a run"
-            status={profile.bestStreak > 0 ? `Best streak ${profile.bestStreak}` : "Not played yet"}
+            status={profile.bestStreak > 0 ? `Best streak ${profile.bestStreak}` : null}
+            main
           />
           <ModeCard
-            to={PATHS.explore}
-            label="Web"
-            title="Try a new topic"
-            status={quota.kind === "loaded" ? quotaShort(quota.quota) : null}
-            accent
+            to={PATHS.learn}
+            label="Learn"
+            title="Read a topic"
+            status={loaded && read > 0 ? `${read} of ${learnTopics.length} read` : null}
           />
+          <ModeCard to={PATHS.explore} label="Web" title="Try a new topic" status={null} />
         </nav>
 
         <div className="absolute inset-x-0 bottom-5 flex items-center justify-between gap-4">
