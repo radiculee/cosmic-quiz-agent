@@ -10,7 +10,7 @@ Persistent context for Claude Code. Read this, then `docs/DESIGN.md` and `docs/P
 was "Cosmic Quiz Agent") by **Vedant Gaikwad**, a Dublin-based Data Analyst and Full-Stack Developer. An autonomous astronomy and space AI agent, surfaced as a Learn / Quiz web game.
 
 - **v1:** a Learn / Quiz web game on separate pages with real URLs. (Changed 2026-10-08 by Vedant; it was one Speedrun-style page.)
-  - Home: a full-screen hero over a slideshow of Vedant's scenes, with the title, the tagline and a compact row of Learn, Quiz and "Try a new topic" (from the web); the rank, points and a trophy shelf in a card below the fold. (Changed 2026-10-10 by Vedant; inner pages show the observatory scene as a still.)
+  - Home: a full-screen hero over a slideshow of Vedant's scenes, with the title, the tagline and a compact row of Quiz (the one solid teal card), Learn and "Try a new topic" (from the web); the rank, points and a trophy shelf in a card below the fold. (Changed 2026-10-10 by Vedant; inner pages show the observatory scene as a still. Changed 2026-11-04 by Vedant: above a landing page's main action, only the title and one short line.)
   - Learn: a searchable grid of bank topics. Each gives a plain-language explanation with cited sources, at its own URL.
   - Quiz: runs of 10, 30 or 60 four-option MCQs, each on a different topic, against the clock. After each answer, the game shows the explanation and cited sources.
   - The web page (`/explore`): a typed topic researched live by the agent, behind guardrails. It also opens "Mission Control", the agent's measured statistics by mode and difficulty (Session 9).

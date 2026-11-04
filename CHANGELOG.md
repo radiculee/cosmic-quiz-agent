@@ -6,11 +6,36 @@ release. Everything before that, session by session with its decisions, checks a
 
 ## 2026-11-04
 
+- **One focus on each landing page.** Above a page's main action there is now only its title and
+  one short line; status and small print sit below the action, unless they explain why it is off.
+  Home's cards are Quiz (the one solid teal card), Learn and Web, and show a status only once there
+  is progress. On the Web page the topic box sits above GO, and returns to the sticky header while a
+  search is on the page. (`c37761d`)
+- **Seven published items corrected.** An audit of published items with failed or doubtful checks
+  found seven sentences that were false or overstated: items 97, 100, 116, 154, 165, 309 and 361.
+  They were corrected in the bank. Items 156 and 61 went back to review, because their marked answers
+  have no real support in the cited pages, so The International Space Station and The life cycle of
+  a Sun-like star are off Learn and Quiz until those levels are decided. Most of the bank has not
+  had this audit yet.
+- **A contradicted sentence always goes to review.** A sentence Jev labels `contradicts` used to
+  pass and publish if its probability was under 0.5. It now goes to review at any probability, and
+  still fails at the threshold of 0.8. This applies to new items. (`949af7c`)
+- **A leading "The" no longer makes a second topic.** Typing a topic with or without a leading "The"
+  finds the same bank topic, so it does not pay for a second one. The Curator's news pick follows
+  the same rule. Stored and shown names are unchanged. (`d23815b`, `d6efcaf`, `cf665df`)
+- **Unknown addresses answer 404.** An address that is no page now answers HTTP 404 with the site's
+  not-found page (`noindex`, no canonical link). A topic address still answers 200, because a new
+  topic has no built page until the next deploy, so an unknown topic is still a soft 404.
+  (`d022577`, `d819d62`)
+- **Fact cards are stricter.** The fact-picking rule rejects a sentence that needs the sentence
+  before it, and gives no fact when none stands alone. On the 56 topics it was tuned on, one reader
+  marked 55 results good, up from 33. No fact card is live today. (`c907993`, `876ed54`)
 - **Every topic has a picture.** The bank holds 56 picture rows, one for each topic, and 28 of them
   are hand-chosen and locked, so a refresh never replaces them. The daily Curator run now fills a
   picture for each new topic, in a step that runs only while the repository variable `TOPIC_IMAGES`
   is `on` (it was set on 4 November, 00:51 UTC). Learn lists a topic only when it is on every
-  level, so 17 of the 56 topics, with pictures already saved, appear later. (`6b5078e`, `57771af`)
+  level, so 37 topics show today and the others, with pictures already saved, appear later.
+  (`6b5078e`, `57771af`)
 
 ## 2026-11-03
 
