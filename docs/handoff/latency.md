@@ -3,9 +3,113 @@
 Notes for the latency session (`docs/SESSIONS.md`). They replace `docs/NEXT_SESSION.md` for
 this session. Update them before finishing, and commit them on `session/latency`.
 
-Last update: 2026-11-04. On `main` at `57771af`. Parallel search is
+Last update: 2026-11-04. On `main` at `e1aa661`. Parallel search is
 live since 2026-11-01 21:32 UTC. The reports below replace "Where things stand", "Next" and
 "Blockers" further down, which are kept as the record of 2026-10-30.
+
+## The gate: a sentence labelled `contradicts` goes to review (2026-11-04)
+
+Vedant approved this change. It affects new items only. No item in the bank was re-gated.
+
+**Done**
+
+`agent/gate.py`, `jev_verdict`, the sentence branch: `contradicts >= JEV_DOUBT` became
+`contradicts >= JEV_DOUBT or check.verdict == "contradicts"`. The threshold and `JEV_DOUBT` do not
+change.
+
+Results for one sentence, at threshold 0.8:
+
+| Label | P(contradicts) | Before | After |
+| --- | --- | --- | --- |
+| `contradicts` | under 0.5, or missing | pass | **borderline** |
+| `contradicts` | 0.5 up to under 0.8 | borderline | borderline |
+| `contradicts` | 0.8 or more | fail | fail |
+| `supports`, `says_nothing` | under 0.5 | pass | pass |
+| `supports`, `says_nothing` | 0.5 up to under 0.8 | borderline | borderline |
+| `supports`, `says_nothing` | 0.8 or more | fail | fail |
+
+- **Only the first row changes.** Of the three values tested for `contradicts`, 0.09 and 0.49 change,
+  and 0.50 does not.
+- **The item:** a Jev layer that was pass becomes borderline. So `published` becomes `review` under
+  `all_must_pass` (the default), `jev_escalates` and `jev_only`. `haiku_only` does not change.
+- **A layer that was already borderline or fail** keeps its verdict and gains one more reason.
+- **`correct_answer` and `distractor` checks** do not change.
+- **With `flag_unsupported_sentences`:** the new branch runs first, so a sentence labelled
+  `contradicts` that also has `says_nothing` at the threshold gets the "possibly contradicted" reason.
+  It was "unsupported". The verdict is borderline in both cases.
+- **Reason text:** it stays "possibly contradicted (0.09) sentence: ...". A player who searched sees
+  this in "Not fully verified" (`doubts_of`, for items in review). I kept one wording, so 0.09 reads
+  a little oddly.
+
+**What still uses the gate on old items.** `python -m curator` re-check (`curator/__main__.py:393`)
+uses the new rule on the items it re-checks, which is a run by hand. `rescore_record` is used only by
+the evals. Nothing re-gates the bank by itself.
+
+**Evals, read only, no re-run.** `evals/__main__.py` and `evals/report.py` score through this gate, so
+a free `report` would use the new rule. Stored results for `20261001T131332Z-full`, in the main
+folder, because `evals/results/` is not committed:
+
+| File | Sentence checks | Labelled `contradicts` | Under 0.5 |
+| --- | --- | --- | --- |
+| `items.jsonl` | 286 | 9 | 0 |
+| `seeded_results.jsonl` | 231 | 22 | 0 |
+| `rejev_astro-1_items.jsonl` | 286 | 6 | 0 |
+| `rejev_astro-1_seeded.jsonl` | 231 | 20 | 0 |
+
+- No stored check reaches the new branch, so the rule changes no stored eval figure. This also means
+  the eval did not measure the new branch: it says nothing about how many new items go to review.
+- The old rule is not stated in `docs/EVALS.md`, `docs/DESIGN.md:81,84`, `README.md:110-112`,
+  `src/data/evals.json` (only `gate_rule: all_must_pass`), or the stored `report.md` (only counts of
+  reasons). None needs a change. I checked by searching these for the rule's words.
+- One check of 490 in `items.jsonl` has a label that is not its highest probability. So a label at a
+  low probability like 0.09 is possible but rare.
+
+**Fill comparison, read only, GET, no model call.** `FILL_TOPICS` (30) against every row in `topics`
+(61, ids 4 to 418), read with the secret key:
+
+- By `topic_key` but not by casefold: **none**.
+- By casefold: 1, "Space oceans" (topic 191, already in the bank).
+- No match: 29.
+- Bank rows that share a `topic_key`: 1 pair, 377 "The Cosmic Microwave Background" and 397 "Cosmic
+  Microwave Background". This confirms the names in the retirement plan below.
+
+**The worktree's Supabase secret key works.** The `.env` here was called dead, but this read returned
+all rows. Main may want to remove it from this worktree.
+
+**In progress**
+
+Nothing.
+
+**Left**
+
+The items under "Left" in the next section.
+
+**Blocked on**
+
+Nothing.
+
+**Needs from Vedant**
+
+Nothing new for this change.
+
+**Files changed**
+
+`agent/gate.py`, `tests/test_verifiers.py`, `docs/handoff/latency.md`.
+
+**Checks run**
+
+`pytest -q`, `ruff check .`, `ruff format --check .`, `mypy --strict`, all exit 0. No TypeScript
+changed, so the `pnpm` checks were not run again.
+
+**Not checked**
+
+- How many items now in the bank have such a sentence. Main did not ask for this, and nothing here
+  re-gates them.
+- How many new items will go to review. See the eval note above.
+- I did not re-run any eval, and I made no paid call.
+
+**CHANGELOG line for main:** A sentence Jev labels as contradicted now sends a new item to human
+review at any confidence. Before, under 0.5 it could publish with no person.
 
 ## A leading "The" made a second, paid topic (2026-11-04)
 
@@ -67,8 +171,9 @@ bank read. All exit 0: `pnpm install --frozen-lockfile`, `pnpm typecheck`, `pnpm
 - The lookup has not run against real PostgREST. The tests use a stand-in for `ilike`. After the
   deploy, type "Cosmic Microwave Background" on Explore: the plan must name the other spelling.
 - I did not measure the extra read's time.
-- I made no bank read, and I did not use a key from `.env`. The only live reads were
-  `/api/topics` and `/sitemap.xml` on the public site.
+- For this fix I made no bank read and used no key from `.env`. The only live reads were
+  `/api/topics` and `/sitemap.xml` on the public site. The later fill comparison is in the section
+  above.
 - I did not drive the pages in a browser.
 
 ### Other places that compare names
@@ -82,9 +187,8 @@ Open, can still make the same duplicate. Main said not to change these now:
   spellings. An index on the new rule would make a duplicate impossible, but it cannot be built
   while topics 377 and 397 both exist, because the retired row stays.
 - `agent/store.py:401` `job_key` and the fill list: a listed name that differs from a bank name by
-  "The" makes a second topic. Today none does: I compared `BUILD_TOPICS` and `FILL_TOPICS` with the
-  39 topics in `/api/topics`. Topics that are not complete are not in that list, so run the same
-  comparison with the secret key before the paid fill.
+  "The" makes a second topic. Today no fill topic does: see the fill comparison in the section above,
+  against every row in `topics`. Repeat it before the paid fill if the bank has changed.
 
 No duplicate, left as they are:
 
@@ -125,8 +229,8 @@ select topic_id, kind, card_path, preview_path, locked from public.topic_images
 
 Stop and ask Vedant if one of these is true:
 
-- The names are not the two spellings. I expect 397 to be "Cosmic Microwave Background", because it
-  is the later search, but that is inferred.
+- The names are not the two spellings. A read on 4 November gave 397 "Cosmic Microwave Background"
+  and 377 "The Cosmic Microwave Background", both `custom`.
 - 377 has no published item with `report_count` under 2. Then row-level security hides 377 too, and
   a typed search is paid again.
 - 397 has more published levels than 377. After the retirement, 377's gaps are filled by paid runs:
