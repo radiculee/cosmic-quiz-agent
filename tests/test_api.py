@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import io
 import json
+import re
 from collections.abc import Iterator
 from wsgiref.types import WSGIApplication
 from wsgiref.util import setup_testing_defaults
@@ -11,7 +12,7 @@ from wsgiref.util import setup_testing_defaults
 import httpx2
 import pytest
 
-from agent.bank import BankReader, BankTopic, _ItemIndexRow, summarize
+from agent.bank import BankReader, BankTopic, _ItemIndexRow, summarize, topic_key
 from agent.limits import LIMITS, REPORTS_MESSAGE, RequestCount
 from agent.rest import PAGE_SIZE, RestClient, StoreError
 from agent.store import SupabaseStore
@@ -91,6 +92,137 @@ def test_topic_names_reads_every_visible_topic_whatever_its_levels() -> None:
     assert names == [("Wormholes", "custom"), ("Auroras", "news")]
     assert seen[0].url.path == "/rest/v1/topics"
     assert seen[0].url.params["select"] == "name,kind"
+
+
+# The same cases as the topicKey test in src/topics.test.ts: the two rules must not drift apart.
+TOPIC_KEYS = [
+    ("The Cosmic Microwave Background", "cosmic microwave background"),
+    ("Cosmic Microwave Background", "cosmic microwave background"),
+    ("THE  big   BANG ", "big bang"),
+    ("the\tSun", "sun"),
+    ("The", "the"),
+    (" the ", "the"),
+    ("The The Who", "the who"),
+    ("Theia", "theia"),
+    ("Theory of relativity", "theory of relativity"),
+    ("Other worlds", "other worlds"),
+    ("", ""),
+    ("   ", ""),
+]
+
+
+@pytest.mark.parametrize(("name", "key"), TOPIC_KEYS)
+def test_topic_key_ignores_case_spaces_and_one_leading_the(name: str, key: str) -> None:
+    assert topic_key(name) == key
+
+
+def bank_with(*stored: str) -> tuple[BankReader, list[str]]:
+    """A reader on a stand-in for PostgREST's `ilike`, where `%`, `_` and `*` are wildcards and
+    case does not count, and the list of filters it was sent."""
+    filters: list[str] = []
+
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        assert request.url.path == "/rest/v1/topics"
+        assert request.url.params["select"] == "name"
+        value = request.url.params["name"]
+        filters.append(value)
+        assert value.startswith("ilike.")
+        pattern = "".join(
+            {"%": ".*", "*": ".*", "_": "."}.get(char, re.escape(char))
+            for char in value.removeprefix("ilike.")
+        )
+        found = [name for name in stored if re.fullmatch(pattern, name, re.IGNORECASE)]
+        return httpx2.Response(200, json=[{"name": name} for name in found[:10]])
+
+    client = httpx2.Client(transport=httpx2.MockTransport(handler))
+    rest = RestClient(BASE, "sb_publishable_test", client=client, retry_backoff_seconds=0.0)
+    return BankReader(rest), filters
+
+
+@pytest.mark.parametrize(
+    ("typed", "stored"),
+    [
+        ("Cosmic Microwave Background", "The Cosmic Microwave Background"),
+        ("cosmic microwave background", "The Cosmic Microwave Background"),
+        ("The Cosmic Microwave Background", "Cosmic Microwave Background"),
+        ("THE cosmic  microwave background", "Cosmic Microwave Background"),
+        ("The Cosmic Microwave Background", "The Cosmic Microwave Background"),
+        ("Cosmic Microwave Background", "cosmic microwave background"),
+    ],
+)
+def test_topic_named_finds_a_topic_with_or_without_the(typed: str, stored: str) -> None:
+    reader, _ = bank_with("Mars", stored)
+
+    assert reader.topic_named(typed) == stored
+
+
+def test_topic_named_reads_once_when_the_name_as_typed_is_found() -> None:
+    reader, filters = bank_with("The Big Bang")
+
+    assert reader.topic_named("the big bang") == "The Big Bang"
+    assert filters == ["ilike.the big bang"]
+
+
+def test_topic_named_tries_the_other_spelling_second() -> None:
+    reader, filters = bank_with("The Big Bang")
+
+    assert reader.topic_named("Big Bang") == "The Big Bang"
+    assert filters == ["ilike.Big Bang", "ilike.The Big Bang"]
+
+
+def test_topic_named_prefers_the_name_as_typed_when_both_exist() -> None:
+    reader, _ = bank_with("The Big Bang", "Big Bang")
+
+    assert reader.topic_named("big bang") == "Big Bang"
+    assert reader.topic_named("the big bang") == "The Big Bang"
+
+
+def test_topic_named_is_none_for_a_new_topic() -> None:
+    reader, filters = bank_with("Mars")
+
+    assert reader.topic_named("Pulsars") is None
+    assert filters == ["ilike.Pulsars", "ilike.The Pulsars"]
+
+
+def test_topic_named_ignores_only_one_leading_the() -> None:
+    reader, _ = bank_with("Big Bang")
+
+    assert reader.topic_named("The The Big Bang") is None
+
+
+def test_topic_named_does_not_let_the_alone_match_a_topic_or_an_empty_name() -> None:
+    reader, filters = bank_with("The Moon", "Mars")
+
+    assert reader.topic_named("The") is None
+    assert reader.topic_named(" the ") is None
+    assert "ilike." not in filters
+
+    only_the, _ = bank_with("The")
+    assert only_the.topic_named("the") == "The"
+
+
+@pytest.mark.parametrize("empty", ["", "   "])
+def test_topic_named_sends_no_read_for_an_empty_name(empty: str) -> None:
+    reader, filters = bank_with("The Moon", "Mars")
+
+    assert reader.topic_named(empty) is None
+    assert filters == []
+
+
+def test_topic_named_does_not_take_a_word_that_only_starts_with_the_for_the() -> None:
+    reader, _ = bank_with("Theia")
+
+    assert reader.topic_named("ia") is None
+    assert reader.topic_named("The ia") is None
+
+
+@pytest.mark.parametrize(
+    "wild", ["%", "_", "*", "The %", "The _", "The *", "M%", "M_rs", "Mar*", "The M%", "The Mo_n"]
+)
+def test_topic_named_compares_candidates_exactly_so_wildcards_match_nothing(wild: str) -> None:
+    reader, _ = bank_with("The Moon", "Mars")
+
+    assert reader.topic_named(wild) is None
 
 
 def test_reader_needs_the_publishable_key(monkeypatch: pytest.MonkeyPatch) -> None:

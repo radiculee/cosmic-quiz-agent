@@ -23,6 +23,27 @@ from agent.store import TopicKind, domain
 
 DIFFICULTY_ORDER: tuple[Difficulty, ...] = ("easy", "medium", "hard")
 
+_THE = "the "
+
+
+def topic_key(name: str) -> str:
+    """What two topic names are compared by: ignoring case, extra spaces and one leading "The",
+    so "The Big Bang" and "Big Bang" are one topic. Stored and shown names keep their "The".
+
+    `topicKey` in src/topics.ts is the same rule, and both test files hold the same cases. "The"
+    alone has nothing after it, so it stays "the": it cannot become empty and match everything.
+    """
+    return " ".join(name.split()).casefold().removeprefix(_THE)
+
+
+def _spellings(name: str) -> tuple[str, str]:
+    """The name as typed, then with its leading "The" dropped or added: the two spellings that
+    can have the same `topic_key`."""
+    typed = " ".join(name.split())
+    if typed.casefold().startswith(_THE):
+        return typed, typed[len(_THE) :]
+    return typed, f"The {typed}"
+
 
 class TopicImage(BaseModel):
     """A topic's picture, with the credit its licence requires (migration 012). `src` and
@@ -377,23 +398,28 @@ class BankReader:
         return question_of((rng or random.Random()).choice(fresh))
 
     def topic_named(self, name: str) -> str | None:
-        """The bank's own spelling of a topic with published items, matched ignoring case, or
+        """The bank's own spelling of a topic with published items, matched by `topic_key`, or
         None if the bank has no such topic.
 
-        One filtered read: `ilike` matches ignoring case (using the index on lower(name)). Topic
-        names cannot contain `%` or `_` (agent/topic_check.py), but PostgREST reads `*` as a
-        wildcard, so candidates are compared exactly here.
+        Up to two filtered reads: the name as typed, which wins if the bank has both spellings,
+        then the name with its leading "The" dropped or added. `ilike` matches ignoring case
+        (using the index on lower(name)). Topic names cannot contain `%` or `_`
+        (agent/topic_check.py), but PostgREST reads `*` as a wildcard, so candidates are compared
+        exactly here.
         """
-        reply = self._rest.send(
-            "GET",
-            "/topics",
-            params={"select": "name", "name": f"ilike.{name}", "limit": "10"},
-            retries=RETRIES,
-        )
-        wanted = name.casefold()
-        for row in parse(_NAME_ROWS, reply, "finding a topic"):
-            if row.name.casefold() == wanted:
-                return row.name
+        wanted = topic_key(name)
+        if not wanted:
+            return None
+        for spelling in _spellings(name):
+            reply = self._rest.send(
+                "GET",
+                "/topics",
+                params={"select": "name", "name": f"ilike.{spelling}", "limit": "10"},
+                retries=RETRIES,
+            )
+            for row in parse(_NAME_ROWS, reply, "finding a topic"):
+                if topic_key(row.name) == wanted:
+                    return row.name
         return None
 
     def topic_names(self) -> list[tuple[str, TopicKind]]:
