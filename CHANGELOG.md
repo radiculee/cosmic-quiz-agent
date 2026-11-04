@@ -20,8 +20,10 @@ release. Everything before that, session by session with its decisions, checks a
   preview, and the not-found page suggests close matches. (`d073f3e`, `1d7f05c`, `c23560f`)
 - **Pages are prerendered.** The home, Learn, each topic, Quiz and web pages are built as HTML at
   build time, so they have real text before any script runs; the Quiz page has its own text and
-  only structured data that its content supports. A Curator run that published anything calls the
-  Vercel deploy hook once, to rebuild them. (`37d919f`, `0b1ca22`, `4624aae`)
+  only structured data that its content supports. The daily Curator workflow has a step
+  that calls a Vercel deploy hook after a run that published anything, to rebuild them, but it
+  needs the secret `VERCEL_DEPLOY_HOOK_URL`. That secret is not set yet, so the step skips, and a
+  new topic gets its page at the next deploy. (`37d919f`, `0b1ca22`, `4624aae`)
 - **The README rewritten again** for the site as it is at launch: new screenshots, a real
   launch-day search in place of the stub picture, and the measured searches below. (`10d9ff7`,
   `18b91e9`, `bd2ee17`, `77133fe`)
@@ -32,12 +34,14 @@ release. Everything before that, session by session with its decisions, checks a
 - **Learn card fixes.** A card shows a topic's whole fact and no longer cuts it mid-word. Links,
   title, WEB tag and alt text were tidied, and a picture's credit names its licence once.
   (`d390f66`, `56e3ffd`, `74ec338`)
-- **The easy-first order, measured.** Two searches since the change on 2 November, each a single
-  search (n=1), on different topics. Search 104: the first question took 21.6 s, the whole search
-  97.0 s and cost $0.1561. Search 115: the first question took 41.2 s, the whole search 76.5 s and
-  cost $0.1511, with 5 of 6 items published. The 61.3 s search of 2 November (first
-  question at 49 s) was also a single search, with every item started together. These are three
-  single searches on different topics, so they show no trend.
+- **The easy-first order, measured.** Two searches since the change, each a single
+  search (n=1). Search 104, on 2 November: the first question took 21.6 s, the whole search
+  97.0 s and cost $0.1561. Search 115, on 3 November: the first question took 41.2 s, the whole search 76.5 s and
+  cost $0.1511, with 5 of 6 items published. The two are the same subject under two names, "The Cosmic
+  Microwave Background" (search 104, topic 377) and "Cosmic Microwave Background" (search 115,
+  topic 397); search 115 was paid only because the names did not match. The 61.3 s search of
+  2 November, "Light speed" (first question at 49 s), was also a single search, with every item
+  started together. Three searches are too few to show a trend.
 
 ## 2026-11-02
 
@@ -45,7 +49,7 @@ release. Everything before that, session by session with its decisions, checks a
   items when it ends. With that question already in the bank, every live item starts together. If the
   first run fails with nothing spent, the model is out of reach, so the others never start and the
   search does not count. Reservations and caps are unchanged. Expect a new topic to take up to about
-  90 s; measured on 3 November (see above).
+  90 s; measured on 2 and 3 November (see above).
 - **Every item at once, measured.** Before the change above, this was the time with every item
   started together. A new topic's six items used to run one after another:
   a median of 145.2 s (118.9 to 171.6 s, 4 searches, 2026-10-28 to 2026-10-30, last run finished

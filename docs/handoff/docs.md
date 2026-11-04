@@ -22,6 +22,12 @@ Nothing.
 
 ## Left
 
+Main's review (4 fixes, new commit): the deploy hook sentence now says `VERCEL_DEPLOY_HOOK_URL` is
+not set; the measured entry gives each search's date and says 104 and 115 are one subject (topics
+377 and 397) and names "Light speed"; "measured on 2 and 3 November"; the Deploying sentence lists
+the six function variables (checked against `api/research.py` and `agent/web.py`).
+
+
 - DESIGN.md line 1 still says "Cosmic Quiz Agent - design plan" (not in main's list; left).
 - The November budget text ($20 live research, $32 Console limit, launch week 14 searches and $3.25
   a day) is not in DESIGN.md decision 9 or CLAUDE.md. It waits for Vedant, as briefed. DESIGN.md

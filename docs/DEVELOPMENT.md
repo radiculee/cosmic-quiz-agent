@@ -91,8 +91,9 @@ tool in `requirements-dev.txt`) and `pnpm audit`.
 - **Vercel** builds the site with `pnpm build` and serves `dist/` and the Python functions in
   `api/`, in the Dublin region. `vercel.json` holds the security headers, caching, the routing
   and the permanent redirects to `curiosity.vedantgaikwad.ie` from `cosmic.vedantgaikwad.ie`, six
-  other subdomains and `cosmic-quiz-agent.vercel.app`. The functions need every variable above except
-  `AGENT_MODEL`.
+  other subdomains and `cosmic-quiz-agent.vercel.app`. The functions need `ANTHROPIC_API_KEY`, `TYPESAFE_API_KEY`, `SUPABASE_URL`,
+  `SUPABASE_SECRET_KEY`, `SUPABASE_PUBLISHABLE_KEY` and `IP_HASH_SALT`; `AGENT_MODEL` is optional,
+  and the `VITE_` variables are read by the site build only.
 - **GitHub Actions** runs the Curator every day (`.github/workflows/curator.yml`). It needs the
   secrets `ANTHROPIC_API_KEY`, `TYPESAFE_API_KEY`, `SUPABASE_URL` and `SUPABASE_SECRET_KEY`.
   After the Curator it fills topic images (`python -m curator.images`, free) when the repository
