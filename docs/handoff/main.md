@@ -50,6 +50,82 @@ error, no sideways scroll on Home, Quiz, Learn and Web.
 - Docs: `CHANGELOG.md`, `docs/DEVELOPMENT.md`, `docs/DESIGN.md` (his "do all the changes" was read as
   covering the exact text; he opened the file first), `CLAUDE.md` line on Home.
 
+**Update, 02:40 UTC: step 1 below is done.** Vedant ran `python -m curator fill` (curator run 10) and
+`python -m curator complete` (run 11) from the main folder, at the same time, before main replied. The
+rate-limit tier was not checked first and no separate key test was made. Both verifiers answered.
+- Fill: 180 jobs, 119 published, 50 review, 11 discarded, $4.7306 Anthropic, $0.0400 Jev, no stop.
+- Complete: 5 jobs, 34 held, 2 published, 2 review, 1 discarded, $0.1342. It overlapped the fill once:
+  Saturn's hard quiz was tried again after the fill's item went to review (item 423 discarded, about $0.03).
+- Review queue: 74 items (22 older, 52 new). Live cards are still 37: no new topic has all six levels.
+  33 topics would be complete if every item in review were published. 18 slots on 16 topics are open,
+  so `complete` can run again after the review. Black holes, Magnetars and others look out of tries.
+- Not on the live site yet: new topic pages (they need a deploy after the review) and the new topics'
+  pictures. `TOPIC_IMAGES` is `off` from 02:41 UTC, on Vedant's word, until Vedant has read a free dry
+  run, so the scheduled run fills no pictures, including the daily news topic's. Set it back to `on` on
+  Vedant's word, after any overrides are saved as `locked`, or the run writes its own choices. The dry
+  run (28 pictures, 3 facts, nothing saved) is `images-dry-run.txt` in
+  `C:\Users\vedan\AppData\Local\Temp\claude\49a50dcdfe0361ef\35bef01a-9db3-437a-b6cb-6213f51adf4e\scratchpad\`.
+- Seen, from before tonight: topic 123 has two published items in three slots. For the wider audit.
+
+**Resumed 16:06 UTC, Wed 4 Nov.** Since the stop: Vedant ran `complete` again at 02:39 UTC (run 12: 10
+jobs, 82 held, 3 published, 6 review, 1 discarded, $0.2740), which main missed when it reported 74 items.
+The daily run (13) spent $0.2329: 3 published, 3 review, 2 discarded, 1 no item. The queue is now 86. Live
+cards are 38, and the new one, The observable universe, has no picture because `TOPIC_IMAGES` is off. Both
+sheets are built, read-only, as `review-sheet.html` and `card-sheet.html` in the scratchpad named above.
+Item 1 below is done. In item 2, `complete` has already run once since the fill.
+
+**16:25 UTC.** On Vedant's "we go with you", main saved 29 cards (26 pictures, 3 facts) with
+`save_cards.py`, each matching the sheet; not locked. All 86 review items were then decided at 16:13:51 to
+16:14:47 UTC (median 0.44 s each): 62 published, 24 discarded, queue 0. Main and the open sessions did not
+do this, and Vedant has not yet said how it was done. Live cards went to 65. 156 and 61 were discarded.
+Published with a contradicted sentence or answer: 417, 428, 429, 481, 565, 567, 568, 570. Main's doubts,
+from its own knowledge and not checked against sources: 429 (tidal heating marked correct, radioactive decay
+marked wrong) is likely false; 568, 567, 565, 417, 481 and 473 need reading. Asked Vedant about hiding them.
+Picture replacements, nothing saved, in `candidates.html` and `candidates.json` in the scratchpad: Bet1, Exo3,
+Dar8, Red1. Check the credits of Bet1 and Dar8 first. Betelgeuse, Dark matter and Exoplanets are live with no
+picture. `TOPIC_IMAGES` stays `off`. Discards reopened slots, so `complete` and a deploy wait on Vedant's word.
+
+**Later on 4 Nov, on Vedant's "yes we go with your decision":** 429 and 568 moved to review, old state in
+`hide-before.json` in the scratchpad; live cards 63. The four pictures are saved and locked. Dar8 is labelled CC
+BY 4.0 because ESA/Hubble's copyright page says so, although Commons says public domain. `TOPIC_IMAGES` is `on`
+again. Every live card has a picture or a fact.
+Checked against sources, proposed and NOT applied: 417 (drop "October 2024", not on the cited page), 481 (drop
+the end of the lithium sentence), 565 (marked answer says the primary panel cannot retract; its source says it
+is retracted), 567 ("billions" against 128 million on the page). Proposed: discard 429 and 568. 473 is fine.
+Vedant has not said how the 86 were decided. 50 Haiku-only published items are unread: for the wider audit.
+**16:32 UTC, on Vedant's "YEs":** 417, 481, 565 and 567 corrected and read back, 429 and 568 discarded; old text
+in `corrections-before.json` in the scratchpad. `complete` did NOT run: Claude Code's permission check refused it
+for main. Its preview: 37 slots missing on 25 topics, 28 can run, 9 held, about $0.80, hard cap $3. Next: Vedant
+runs `python -m curator complete` in a terminal, or allows it. Then Vedant reviews its items, then commit and push.
+Vedant has still not said how the 86 were decided, so the wider audit treats those 62 as not read by a person.
+
+**"Being checked" label, Vedant's choice B:** a small label on the 60 items from that clearing that are still
+published (`being-checked-ids.json` in the scratchpad), until an audit clears them. latency builds it on Sonnet
+(`brief-being-checked.md`). Order: main reviews the branch by hash; Vedant pastes 014; main sets the 60 rows on
+Vedant's word; main lands and pushes on Vedant's word. The code must not deploy before 014 is pasted.
+
+**16:40 UTC:** Vedant ran `complete` (run 14): 28 jobs, 16 published, 8 review, 4 discarded, $0.80. Live cards 70,
+Pluto and Space debris back. Queue 8: `review-sheet.html` (the 86-item snapshot is `review-sheet-86-items.html`).
+Main suggested discarding 621 ("billions of kilometers" for a nebula thousands of light years away). 11 slots are
+out of tries, including Black holes quiz hard, so those topics need a person.
+
+**Paused about 16:45 UTC:** Vedant asked for a commit and a board update, then a review of everything after the
+next prompt. Commit only, not pushed. Open: the 8 review items, latency's report and branch, 014, the 60 rows,
+land and push, the post. Claude Code's permission check refused a paid `curator complete` from main, so Vedant
+runs paid Curator commands in a terminal unless Vedant adds a permission rule.
+
+**Stopped about 02:50 UTC, Wed 4 Nov, on Vedant's word: usage at 95%.** No agent or Curator run was
+started by main. These edits to `docs/handoff/main.md` and `docs/SESSIONS.md` are NOT committed: commit
+them on Vedant's word. **Resume here:**
+1. Ask the two open questions (free, read-only, main recommends yes to both): a contact sheet of the 31
+   cards at the size players see, and a review sheet of the 74 items with their Jev and Haiku reasons.
+2. Vedant reviews (`python -m curator review`). Then `complete` once for the open slots, then a deploy on
+   Vedant's word. Do not run `complete` while another paid run is going.
+3. Picture doubts, from names and credits only: Betelgeuse, Dark matter, Exoplanets, The observable
+   universe, Space debris; also Meteor showers, Supernovae, and two definition-style facts. Save overrides
+   as `locked`, then `TOPIC_IMAGES` back to `on` on Vedant's word.
+4. Then steps 3 and 4 of the list below (wider audit, the post). Still unchecked: the rate-limit tier.
+
 **Next, in this order:**
 1. **Ask him what "Run the curator and I'll review them" means.** Main read it as the 30-topic fill
    (`python -m curator fill`, about $5, capped at $5, approved 2026-11-01), and has NOT run it. Check

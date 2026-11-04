@@ -347,6 +347,21 @@ entry; record a reversal as a new one.
   Topic 397 is retired by latency's plan (`docs/handoff/latency.md`). A `contradicts` label at any
   probability now goes to review. An unknown topic address stays a soft 404, and a trailing slash on
   a rewritten address answers 404, both accepted for now.
+- 2026-11-04, Vedant (recorded by main): ran the 30-topic fill and `curator complete` from the main
+  folder at about 02:17 and 02:20 UTC, which main reads as the answer to "Run the curator and I'll
+  review them". Fill: 180 jobs, 119 published, 50 review, 11 discarded, $4.73. Complete: 5 jobs, 2
+  published, 2 review, 1 discarded, $0.13. The review queue holds 74 items. Live cards stay at 37
+  until the review.
+- 2026-11-04, Vedant (via main): `TOPIC_IMAGES` is `off` from 02:41 UTC, until Vedant has read a dry
+  run of the pictures for the new topics. This pauses the 4 November `TOPIC_IMAGES=on`. While it is
+  off, new topics get no picture, including the daily news topic.
+- 2026-11-04, Vedant (via main): 29 chosen cards saved, and 4 replacement pictures saved as `locked`
+  (Betelgeuse, Exoplanets, Dark matter, Redshift and cosmic expansion). `TOPIC_IMAGES` is `on` again.
+  Items 429 and 568 moved to review after the 86-item queue was cleared in 56 seconds at 16:14 UTC.
+- 2026-11-04, Vedant (via main): corrected items 417, 481, 565 and 567, and discarded 429 and 568. The 60
+  items from that clearing still published get a small "Being checked" label until an audit clears them.
+  This adds a label to items already published and does not change the publish gate. latency builds it,
+  with edits to `QuizCard.tsx`, `LearnCard.tsx` and `WebResults.tsx`, and migration 014 for Vedant to paste.
 
 ---
 
