@@ -1,13 +1,14 @@
 // Runs after `vite build` (package.json "build"): writes a static page for the home page, Learn,
 // each Learn topic, Quiz and the web page, plus sitemap.xml, into dist/. The page shell is kept
-// as dist/spa.html, which vercel.json serves for every other address. With no bank access in
+// as dist/spa.html, which vercel.json serves for a topic address with no page of its own and for
+// the app's other addresses. Any other address gets dist/404.html, with status 404. With no bank access in
 // the environment (CI has no secrets) only the fixed pages are made. The work is in
 // scripts/prerender/ and is type-checked and tested there; this file only reads and writes files.
 import { copyFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
 import { fetchTopics } from "./prerender/bank.ts";
-import { fileFor, pagesFor, renderPage, sitemap } from "./prerender/render.ts";
+import { fileFor, notFoundPage, pagesFor, renderPage, sitemap } from "./prerender/render.ts";
 
 const DIST = "dist";
 const url = (process.env.SUPABASE_URL ?? "").trim();
@@ -30,5 +31,7 @@ for (const page of pages) {
   await mkdir(dirname(file), { recursive: true });
   await writeFile(file, renderPage(shell, page));
 }
+// Vercel serves 404.html, with status 404, for an address no file or rewrite matches.
+await writeFile(join(DIST, "404.html"), renderPage(shell, notFoundPage()));
 await writeFile(join(DIST, "sitemap.xml"), sitemap(pages));
 console.log(`prerender: ${pages.length} pages and sitemap.xml`);
