@@ -4,13 +4,48 @@ What changed on the live site and in the repo since the README was rewritten for
 release. Everything before that, session by session with its decisions, checks and costs, is in
 [`docs/PLAN.md`](docs/PLAN.md).
 
+## 2026-11-04
+
+- **Every topic has a picture.** The bank holds 56 picture rows, one for each topic, and 28 of them
+  are hand-chosen and locked, so a refresh never replaces them. The daily Curator run now fills a
+  picture for each new topic, in a step that runs only while the repository variable `TOPIC_IMAGES`
+  is `on` (it was set on 4 November, 00:51 UTC). Learn lists a topic only when it is on every
+  level, so 17 of the 56 topics, with pictures already saved, appear later. (`6b5078e`, `57771af`)
+
+## 2026-11-03
+
+- **Curiosity is live** on `curiosity.vedantgaikwad.ie`. `cosmic.vedantgaikwad.ie`, six typo and
+  old subdomains and the `cosmic-quiz-agent.vercel.app` address answer a permanent redirect (308)
+  that keeps the path (`vercel.json`). The site has the new title, icons, web manifest and link
+  preview, and the not-found page suggests close matches. (`d073f3e`, `1d7f05c`, `c23560f`)
+- **Pages are prerendered.** The home, Learn, each topic, Quiz and web pages are built as HTML at
+  build time, so they have real text before any script runs; the Quiz page has its own text and
+  only structured data that its content supports. A Curator run that published anything calls the
+  Vercel deploy hook once, to rebuild them. (`37d919f`, `0b1ca22`, `4624aae`)
+- **The README rewritten again** for the site as it is at launch: new screenshots, a real
+  launch-day search in place of the stub picture, and the measured searches below. (`10d9ff7`,
+  `18b91e9`, `bd2ee17`, `77133fe`)
+- **Square topic cards.** Each Learn card is cut directly from the source to a centred
+  320 x 320 WebP, never enlarged (the shorter side must be at least 320 px), instead of being
+  cropped from a wide image. The link preview is still cut from the source. (`319e2ba`,
+  `4ae4b43`)
+- **Learn card fixes.** A card shows a topic's whole fact and no longer cuts it mid-word. Links,
+  title, WEB tag and alt text were tidied, and a picture's credit names its licence once.
+  (`d390f66`, `56e3ffd`, `74ec338`)
+- **The easy-first order, measured.** Two searches since the change on 2 November, each a single
+  search (n=1), on different topics. Search 104: the first question took 21.6 s, the whole search
+  97.0 s and cost $0.1561. Search 115: the first question took 41.2 s, the whole search 76.5 s and
+  cost $0.1511, with 5 of 6 items published. The 61.3 s search of 2 November (first
+  question at 49 s) was also a single search, with every item started together. These are three
+  single searches on different topics, so they show no trend.
+
 ## 2026-11-02
 
 - **The EASY question goes first.** A search now makes the EASY question alone, and starts its other
   items when it ends. With that question already in the bank, every live item starts together. If the
   first run fails with nothing spent, the model is out of reach, so the others never start and the
   search does not count. Reservations and caps are unchanged. Expect a new topic to take up to about
-  90 s; this order has not been measured yet.
+  90 s; measured on 3 November (see above).
 - **Every item at once, measured.** Before the change above, this was the time with every item
   started together. A new topic's six items used to run one after another:
   a median of 145.2 s (118.9 to 171.6 s, 4 searches, 2026-10-28 to 2026-10-30, last run finished

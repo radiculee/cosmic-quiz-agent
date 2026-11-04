@@ -1,6 +1,6 @@
 # Development
 
-How to run Cosmic Quiz on your own machine, run its checks and find your way around the code.
+How to run Curiosity (this repo is `cosmic-quiz-agent`) on your own machine, run its checks and find your way around the code.
 The [README](../README.md) is the overview, and [`DESIGN.md`](DESIGN.md) is the decision record.
 
 ## What you need
@@ -31,6 +31,7 @@ cp .env.example .env                 # then fill in the keys
 | `SUPABASE_SECRET_KEY` | the Curator and the server only | bypasses row-level security; never sent to a browser |
 | `SUPABASE_PUBLISHABLE_KEY` | the API's public reads | can read only published items |
 | `IP_HASH_SALT` | the API | salts the visitor hashes and keys the answer-reveal tokens; long, random and secret |
+| `VITE_ACCOUNTS`, `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY` | the site build | optional sign-in: `VITE_ACCOUNTS=on` with the same URL and publishable key as above; read by the browser build, so never a secret |
 | `AGENT_MODEL` | optional | overrides the model (default `claude-haiku-4-5`); it needs a price in `agent/config.py` |
 
 ## The database
@@ -59,7 +60,7 @@ The command-line tools, and what each one costs:
 | `python -m curator daily` | fills up to 6 missing levels, then one topic from the NASA and ESA news, and retires old items | about $0.17, capped at $0.40 |
 | `python -m curator complete` | every level a listed topic still lacks (3 tries a level) | about $0.03 a level, capped at $3 |
 | `python -m curator fill` | the 30 likely topics visitors will type, each in both modes at three levels; by hand only | about $5, capped at $5 |
-| `python -m curator.images` | a picture (NASA or Wikimedia, credited) or a fact card for each topic; `--dry-run` first | free |
+| `python -m curator.images` | a credited picture (NASA or Wikimedia), cut to a 320 x 320 card, or a fact card for each topic that has none; a `locked` row is never replaced; `--dry-run` first; needs `requirements-media.txt` (Pillow) | free |
 | `python -m curator review` | shows each item in review with its sources; you publish or discard it | free |
 | `python -m curator review --reported` | the same for items that players' reports have hidden | free |
 | `python -m curator upkeep` | stores left-over runs, retires stale items, clears old visitor hashes | free |
@@ -89,11 +90,13 @@ tool in `requirements-dev.txt`) and `pnpm audit`.
 
 - **Vercel** builds the site with `pnpm build` and serves `dist/` and the Python functions in
   `api/`, in the Dublin region. `vercel.json` holds the security headers, caching, the routing
-  and the redirect from the old address. The functions need every variable above except
+  and the permanent redirects to `curiosity.vedantgaikwad.ie` from `cosmic.vedantgaikwad.ie`, six
+  other subdomains and `cosmic-quiz-agent.vercel.app`. The functions need every variable above except
   `AGENT_MODEL`.
 - **GitHub Actions** runs the Curator every day (`.github/workflows/curator.yml`). It needs the
   secrets `ANTHROPIC_API_KEY`, `TYPESAFE_API_KEY`, `SUPABASE_URL` and `SUPABASE_SECRET_KEY`.
-  After the Curator it fills topic images (`python -m curator.images`, free), and when the run
+  After the Curator it fills topic images (`python -m curator.images`, free) when the repository
+  variable `TOPIC_IMAGES` is `on`, and when the run
   published anything it calls the Vercel deploy hook once, so the prerendered pages are rebuilt.
   The hook's URL is the secret `VERCEL_DEPLOY_HOOK_URL`; without it, that step skips.
 
@@ -138,6 +141,7 @@ from Anthropic with the thread's name, so the logs say which item met a rate lim
 | `agent/web.py` | the HTTP layer the functions in `api/` share |
 | `curator/` | the scheduled Curator: build, daily, complete, review, upkeep, rejev, and the topic images |
 | `api/` | the Vercel functions, one file per endpoint |
+| `scripts/` | the build-time prerender of the home, Learn, topic, Quiz and web pages |
 | `src/` | the React and TypeScript site, with its Vitest tests beside the code |
 | `tests/` | the Python tests |
 | `evals/` | the fixed eval set and its scoring |
