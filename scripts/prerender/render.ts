@@ -32,6 +32,9 @@ export interface PageSpec {
   body: string;
   /** Structured data, one script block each. */
   data: object[];
+  /** A page that is not for search results (the not-found page): no canonical link or address
+   * tag, and a robots tag that says "noindex". */
+  noindex?: boolean;
 }
 
 const ROOT_ELEMENT = '<div id="root"></div>';
@@ -77,7 +80,11 @@ export function renderPage(shell: string, page: PageSpec): string {
   html = setMeta(html, "og:type", page.ogType);
   html = setMeta(html, "og:title", page.title);
   html = setMeta(html, "og:description", page.description);
-  html = setMeta(html, "og:url", url);
+  if (page.noindex) {
+    html = html.replace(/\s*<meta property="og:url" content="[^"]*" \/>/, "");
+  } else {
+    html = setMeta(html, "og:url", url);
+  }
   html = setMeta(html, "twitter:title", page.title);
   html = setMeta(html, "twitter:description", page.description);
   const head = [
@@ -216,6 +223,21 @@ function explorePage(): PageSpec {
     ogType: "website",
     body: `<main>${NAV}<h1>Try a new topic</h1><p>${escapeHtml(description)}</p></main>`,
     data: [],
+  };
+}
+
+/** The page Vercel serves, with status 404, for an address that is no page (dist/404.html). The
+ * app mounts over it and shows its own not-found page, or takes a near miss such as "/lern" to
+ * the page it means. */
+export function notFoundPage(): PageSpec {
+  return {
+    path: "/404",
+    title: pageTitle("Not found"),
+    description: "There is nothing at this address.",
+    ogType: "website",
+    body: `<main><h1>Nothing at this address</h1><p><a href="/">Back to the start</a></p></main>`,
+    data: [],
+    noindex: true,
   };
 }
 

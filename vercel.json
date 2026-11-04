@@ -60,7 +60,10 @@
       "source": "/media/:path(.*)",
       "destination": "https://fbwezifjjmmczevgpfiw.supabase.co/storage/v1/object/public/topic-images/:path"
     },
-    { "source": "/((?!api/).*)", "destination": "/spa.html" }
+    { "source": "/learn/:slug", "destination": "/spa.html" },
+    { "source": "/explore/stats", "destination": "/spa.html" },
+    { "source": "/trophies", "destination": "/spa.html" },
+    { "source": "/privacy", "destination": "/spa.html" }
   ],
   "headers": [
     {

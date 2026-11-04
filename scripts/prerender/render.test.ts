@@ -8,6 +8,7 @@ import {
   escapeHtml,
   fileFor,
   jsonLdBlock,
+  notFoundPage,
   pagesFor,
   renderPage,
   sitemap,
@@ -153,5 +154,28 @@ suite("files and escaping", () => {
 
   it("escapes the five characters that matter in HTML", () => {
     expect(escapeHtml(`<a href="x">&</a>`)).toBe("&lt;a href=&quot;x&quot;&gt;&amp;&lt;/a&gt;");
+  });
+});
+
+suite("notFoundPage", () => {
+  const html = renderPage(SHELL, notFoundPage());
+
+  it("has its own title and tells search engines not to index it", () => {
+    expect(html).toContain("<title>Not found");
+    expect(html).toContain('<meta name="robots" content="noindex" />');
+  });
+
+  it("has no canonical link and no address tag that points at the home page", () => {
+    expect(html).not.toContain('rel="canonical"');
+    expect(html).not.toContain('property="og:url"');
+  });
+
+  it("keeps the root element and the app's script, so the app mounts over it", () => {
+    expect(html).toContain('<div id="root"><main>');
+    expect(html).toContain('src="/assets/index.js"');
+  });
+
+  it("is not in the sitemap", () => {
+    expect(sitemap(pagesFor([]))).not.toContain("404");
   });
 });
