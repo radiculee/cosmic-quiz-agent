@@ -10,7 +10,9 @@ An astronomy quiz written by an AI agent that checks every answer against the pa
 
 - **It checks itself.** The agent may cite only pages it fetched in that run, a rule enforced in
   code rather than trusted to the prompt, and everything it writes passes three separate checks
-  before a player sees it. In an eval with 40 planted faults, 38 never reached a player.
+  before a player sees it. In an eval with 40 planted faults, 38 never reached a player. On the
+  live site, wrong answers still got through, and [what went wrong](#what-went-wrong) is recorded
+  below.
 - **It runs on its own.** The model chooses its own tools in a hand-rolled loop, with no agent
   framework, and a scheduled job grows the question bank every day with no one pressing a button.
 - **It is live, at a capped cost.** A visitor can watch it research a new topic, at about $0.17
@@ -30,9 +32,9 @@ The repo keeps the name `cosmic-quiz-agent`.
 ## What you can do
 
 - **Learn:** pick a topic for a plain-language explanation at one of three levels, with the
-  pages it is based on. There are 39 topics today, each at its own address, and the ones you have
-  read are marked.
-- **Quiz:** runs of 10 or 30 questions against the clock, each on a different topic. A run of 60
+  pages it is based on. There are 76 topics on 12 November 2026, each at its own address, and the
+  ones you have read are marked. 73 of the cards show a picture with its credit.
+- **Quiz:** runs of 10, 30 or 60 questions against the clock, each on a different topic. A length
   opens when the bank has that many topics at the level. After each answer you see right or wrong
   at once, then a row of buttons: "Read the explanation", "Sources (n)" (the cited pages and a
   source check: what a second model found in them for every option) and the next question. The
@@ -41,8 +43,8 @@ The repo keeps the name `cosmic-quiz-agent`.
   live. The easy question arrives first and the other items after it. Three bars (Easy, Medium,
   Hard) and an explanations line follow the agent's real steps, and "Show details" opens the
   streamed log, including every claim it checks. A results card follows the last question, and
-  then the explanations open. Two searches a day per visitor (five in the launch week, 3 to 9
-  November 2026).
+  then the explanations open. Two searches a day per visitor (it was five in the launch week, 3 to
+  9 November 2026).
 - **Mission Control:** what the agent costs, how long it takes and how its checks judge it,
   from live data.
 - Ranks named after Mars rovers, from Sojourner to Perseverance, each with one fact and its source
@@ -121,10 +123,26 @@ with 40 planted faults ([`docs/EVALS.md`](docs/EVALS.md)):
 | **All** | **38 of 40** |
 
 The two misses are planted sentences the sources arguably do support. The cost of that
-strictness: on the live site, 163 of 391 runs (42%) published directly by 3 November 2026; 166
-went to review, 34 were discarded and 28 ended with no answer to check. A Jev check that ends in an
+strictness: on the live site, 361 of 712 runs (51%) published directly by 12 November 2026; 262
+went to review, 60 were discarded and 29 ended with no answer to check. A Jev check that ends in an
 error also sends an item to review, and 70 of those runs had one. After human review the bank holds
-295 published items.
+549 published items, with 17 in review.
+
+#### What went wrong
+
+The eval measures the gate. It does not measure the person who reviews what the gate doubts, and
+that step failed on the live site:
+
+- **An audit of published items with failed or doubtful checks (4 November 2026) found 7 false or
+  overstated sentences.** 5 of them had been approved by a person. All 7 are corrected, and two
+  items went back to review.
+- **A review queue of 86 items was decided in 56 seconds on 4 November 2026,** without each item
+  being read. Four of those items were corrected afterwards and two were discarded. The 60 that
+  stayed published show a "Being checked" label until an audit clears each one.
+- **The gate is stricter since then:** a sentence that Jev labels contradicted goes to review at
+  any confidence. It used to publish when the confidence was under 0.5.
+- **Not done yet:** a random sample of 50 published items is drawn for an audit, and the audit has
+  no result. Most of the bank has not been audited, so there is no measured error rate.
 
 What a player sees after answering, with both panels open: the explanation, Jev's verdict on every
 option, and the quote each source was cited for.
@@ -145,10 +163,10 @@ option, and the quote each source was cited for.
   the caps hold even when searches start at the same moment.
 - **November 2026,** the launch month: $20 a month for live research, so the launch cannot use up
   the month in its first days.
-- **Launch week** (the UTC days 3 to 9 November 2026): 5 searches a day per visitor, and 14
-  searches and $3.25 a day for everyone. At about $0.17 a search, the whole week at full use
-  costs about $17, inside November's $20. The dates are in code, so the usual limits come back
-  by themselves, and the $4 month on 1 December.
+- **Launch week** (the UTC days 3 to 9 November 2026) had higher limits: 5 searches a day per
+  visitor, and 14 searches and $3.25 a day for everyone. The dates are in code, so the usual
+  limits came back by themselves on 10 November, and the $4 month comes back on 1 December. By
+  12 November, live research had used $1.48 of November's $20.
 - A search the model never answered is free: when every run of it fails with nothing spent, it
   does not count against the daily limits.
 - Over a limit, the visitor keeps everything the bank already has.
@@ -170,11 +188,16 @@ question in under a minute and the whole topic in a minute or two.
 - `pnpm build` prerenders the home page, `/learn`, `/quiz`, `/explore` and one page for each
   complete Learn topic, each with its own title, description, canonical link, preview tags and
   text, so a crawler can read them with no script (`scripts/prerender/`). React takes over in the
-  browser. The [sitemap](https://curiosity.vedantgaikwad.ie/sitemap.xml) lists 43 addresses today.
+  browser. The [sitemap](https://curiosity.vedantgaikwad.ie/sitemap.xml) lists 76 addresses on
+  12 November 2026. A new topic gets its page at the next deploy.
 - The old address `cosmic.vedantgaikwad.ie`, six typo and short addresses (such as
   `curiousity.vedantgaikwad.ie` and `quiz.vedantgaikwad.ie`) and the `.vercel.app` address redirect
   permanently to the live site and keep the path. A misspelt path such as `/lern` goes to the
-  nearest page (`src/closeMatch.ts`), and the 404 page suggests near matches.
+  nearest page (`src/closeMatch.ts`). Any other unknown address answers HTTP 404 with a page that
+  suggests near matches.
+- Each Learn card shows a square picture from NASA, ESA or Wikimedia Commons with its credit and
+  licence (`curator/images.py`). The files are in Supabase Storage and are served through the
+  site's own address, so a visit reaches no other site.
 
 ## Cost
 
@@ -183,15 +206,16 @@ question in under a minute and the whole topic in a minute or two.
   research, about $5 for the daily Curator, $5 to fill the bank with 30 likely topics, and $2
   spare. Jev runs on a prepaid TypeSafe balance ($0.042 per million input tokens).
   Everything else is on a free tier: Vercel Hobby, Supabase and GitHub Actions.
-- Measured on the live site on 3 November 2026: 391 runs since 2 October for $10.05, all checks
-  included, which is about $0.026 a run and $0.062 for each item published directly. A median run
-  takes 20.1 s (95% within 42.7 s), and prompt caching has saved $2.87, about a quarter of what the
-  agent would otherwise have cost.
+- Measured on the live site on 12 November 2026: 712 runs since 2 October for $18.56, all checks
+  included, which is about $0.026 a run and $0.051 for each item published directly. A median run
+  takes 19.1 s (95% within 37.8 s), and prompt caching has saved about $4.92, about a quarter of
+  what the agent would otherwise have cost. November's Anthropic spend was $9.36 of the $32 limit.
 - A live search of six items costs about $0.17, an estimate from what one item usually costs. The
   one all-at-once search measured above cost $0.20 (n=1), and the three six-item easy-first searches
   cost $0.1561, $0.1511 and $0.1258. The daily Curator, paid from 1 November, about $0.17, capped at
   $0.40.
-- Every model call's tokens and cost are logged, and Mission Control shows them:
+- Every model call's tokens and cost are logged, and Mission Control shows them. This picture is
+  from the launch day:
 
 ![Mission Control on the live site on 3 November 2026: 42% published, 163 of 391 runs; $0.062 per published item; median run 20.1 s; November spend $0.908 of the $32.00 Anthropic limit](docs/images/analytics.webp)
 
@@ -210,13 +234,12 @@ stored; it becomes a salted hash, kept for about a day (30 days with a report). 
 
 ## In the code, not on the site
 
-Two things in this repo are not live, and `CLAUDE.md` and `docs/DESIGN.md` describe them as
-decided work:
+Two things in this repo are not live:
 
-- **Optional sign-in** is off for the launch (the build flag `VITE_ACCOUNTS`), and its migration
-  (011) is not applied.
-- **Pictures on the Learn cards:** the pipeline is written, but its migration (012) is not applied
-  and no image is uploaded, so a card shows the topic's name.
+- **Optional sign-in** is off (the build flag `VITE_ACCOUNTS`), and its migration (011) is not
+  applied. `CLAUDE.md` and `docs/DESIGN.md` describe it as decided work.
+- **A fact on each Learn card:** the rule that picks one sentence for a card is written
+  (`curator/images.py`), and no fact is live.
 
 ## Run it yourself
 
@@ -229,7 +252,8 @@ none of them calls a paid API.
 Planned and built by Vedant Gaikwad in sessions with Claude Code. Each session's decisions,
 checks and costs are recorded in [`docs/PLAN.md`](docs/PLAN.md), and the design record is
 [`docs/DESIGN.md`](docs/DESIGN.md). What changed since the public release is in
-[`CHANGELOG.md`](CHANGELOG.md).
+[`CHANGELOG.md`](CHANGELOG.md). The story of the build is on Substack:
+[I Built an AI That Teaches Astronomy](https://vgaikwad.substack.com/p/i-built-an-ai-that-teaches-astronomy).
 
 ## Contact
 

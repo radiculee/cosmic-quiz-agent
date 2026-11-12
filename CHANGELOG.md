@@ -4,6 +4,15 @@ What changed on the live site and in the repo since the README was rewritten for
 release. Everything before that, session by session with its decisions, checks and costs, is in
 [`docs/PLAN.md`](docs/PLAN.md).
 
+## 2026-11-12
+
+- **The README brought up to date** with the live site's figures on 12 November 2026: 712 runs,
+  549 published items, 76 topics and $18.56 in model costs. It has a new part, "What went wrong",
+  on the 7 false sentences the audit found, the review queue cleared in 56 seconds, the "Being
+  checked" label and the stricter gate. It also says that the audit of a random sample of 50
+  published items has no result yet, that pictures on the Learn cards are live, and that launch
+  week has ended.
+
 ## 2026-11-04
 
 - **A "Being checked" label on items no person has read yet.** On 2026-11-04, a review queue was
